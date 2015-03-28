@@ -1,0 +1,17 @@
+.svn
+build
+dist
+output
+test-bin
+Makefile.in
+aclocal.m4
+install-sh
+configure
+depcomp
+compile
+config.guess
+ltmain.sh
+config.sub
+config.h.in
+autom4te.cache
+missing
