@@ -17,6 +17,8 @@
 
 #include <sys/stat.h>
 #include <sys/types.h>
+#include <sys/syscall.h>
+#include <fcntl.h>
 #include <dirent.h>
 #include <errno.h>
 #include <limits.h>
@@ -24,42 +26,97 @@
 #include <string.h>
 #include <unistd.h>
 
-static int rmdirs_internal(const char *pathname, int leave_dir_along)
+static int rmdirs_internal(const char *path, int leave_dir_along)
 {
-    struct dirent dirent;
-    struct dirent *p;
-    struct stat buf;
-    char *buffer;
-    size_t len;
-    DIR *dir;
+    size_t pathlen = strlen(path);
+    size_t buflen = pathlen + 1 + NAME_MAX + 1;
+    char *buffer = NULL;
+    struct stat sbuf;
     int ret;
 
-    if (lstat(pathname, &buf)) {
+    if (lstat(path, &sbuf)) {
         if (errno == ENOENT) {
             return 0;
         }
         return -1;
     }
 
-    if (!S_ISDIR(buf.st_mode)) {
+    if (!S_ISDIR(sbuf.st_mode)) {
         if (leave_dir_along) {
             return 0;
         }
 
-        return unlink(pathname);
+        return unlink(path);
     }
 
-    len = strlen(pathname);
-    buffer = (char *)malloc(len + 1 + NAME_MAX + 1);
+    buffer = (char *)malloc(buflen);
     if (!buffer) {
         errno = ENOMEM;
         return -1;
     }
 
-    memcpy(buffer, pathname, len);
-    buffer[len++] = '/';
+    memcpy(buffer, path, pathlen);
+    buffer[pathlen++] = '/';
 
-    dir = opendir(pathname);
+#ifdef __linux__
+
+#ifndef O_DIRECTORY
+#define O_DIRECTORY 0200000
+#endif
+
+    // On linux, there is a kernel bug that will lead inode numbers in tmpfs
+    // overflowed to 0, which cause readdir_r() skip that file. And then, rmdirs
+    // will failed since the directory is not empty. So here I use syscall
+    // getdents() to avoid this bug.
+    struct linux_dirent {
+        long           d_ino;
+        off_t          d_off;
+        unsigned short d_reclen;
+        char           d_name[];
+    };
+
+    struct linux_dirent *d = NULL;
+    char dbuf[4096] = {0};
+    int dbuf_used = 0;
+    int dbuf_pos = 0;
+    int dirfd = -1;
+
+    dirfd = open(path, O_RDONLY | O_DIRECTORY);
+    if (dirfd < 0) {
+        free(buffer);
+        return -1;
+    }
+
+    for (ret = -1;;) {
+        dbuf_used = syscall(SYS_getdents, dirfd, dbuf, sizeof dbuf);
+        if (dbuf_used <= 0) {
+            ret = 0;
+            break;
+        }
+
+        for (dbuf_pos = 0; dbuf_pos < dbuf_used;) {
+            d = (struct linux_dirent *) (dbuf + dbuf_pos);
+            dbuf_pos += d->d_reclen;
+
+            if (!strcmp(d->d_name, ".") || !strcmp(d->d_name, "..")){
+                continue;
+            }
+
+            strcpy(buffer + pathlen, d->d_name);
+            if (rmdirs_internal(buffer, 0) < 0) {
+                goto for_end;
+            }
+        }
+    }
+
+for_end:
+    close(dirfd);
+#else
+    struct dirent dirent;
+    struct dirent *p;
+    DIR *dir;
+
+    dir = opendir(path);
     if (!dir) {
         free(buffer);
         return -1;
@@ -81,13 +138,15 @@ static int rmdirs_internal(const char *pathname, int leave_dir_along)
             continue;
         }
 
-        strcpy(buffer + len, dirent.d_name);
+        strcpy(buffer + pathlen, dirent.d_name);
         if (rmdirs_internal(buffer, 0)) {
             break;
         }
     }
 
     closedir(dir);
+#endif
+
     free(buffer);
 
     if (ret) {
@@ -98,7 +157,7 @@ static int rmdirs_internal(const char *pathname, int leave_dir_along)
         return 0;
     }
 
-    return rmdir(pathname);
+    return rmdir(path);
 }
 
 int rmdirs(const char *pathname)
