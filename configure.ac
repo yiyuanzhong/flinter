@@ -140,7 +140,11 @@ AC_SEARCH_LIBS([clock_gettime], [rt])
 AC_SEARCH_LIBS([libiconv], [iconv])
 
 AC_CHECK_FUNCS([ppoll])
+AC_CHECK_FUNCS([openat])
 AC_CHECK_FUNCS([pselect])
+AC_CHECK_FUNCS([mkdirat])
+AC_CHECK_FUNCS([fstatat])
+AC_CHECK_FUNCS([unlinkat])
 AC_CHECK_FUNCS([epoll_pwait])
 
 AC_CHECK_FUNCS([clearenv])

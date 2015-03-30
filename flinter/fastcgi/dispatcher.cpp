@@ -559,7 +559,6 @@ int Dispatcher::EmulatedIterenv(void *context, int i, char **key, char **value)
 
 bool Dispatcher::SpawnFastCGI(size_t threads)
 {
-    assert(pool);
     assert(threads);
 
     // Initialize FastCGI.

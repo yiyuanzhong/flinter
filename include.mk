@@ -164,7 +164,7 @@ CXXFLAGS_REL +=
 CXXFLAGS_DBG +=
 CXXFLAGS_ALL += -Woverloaded-virtual
 
-CFLAGS_DBG += -DDEBUG -D_DEBUG -DDBG -pg
+CFLAGS_DBG += -DDEBUG -D_DEBUG -DDBG
 CFLAGS_REL += -DNDEBUG -O2 -fomit-frame-pointer -Wuninitialized
 CFLAGS_REL += -ffunction-sections -fdata-sections
 CFLAGS_ALL += -Wall -Wextra -Wno-unused-parameter -Winit-self

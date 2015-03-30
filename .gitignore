@@ -1,7 +1,9 @@
 .svn
 build
 dist
+m4/l*
 output
+test/.libs
 test-bin
 Makefile.in
 aclocal.m4
@@ -15,3 +17,4 @@ config.sub
 config.h.in
 autom4te.cache
 missing
+svn-commit.tmp
