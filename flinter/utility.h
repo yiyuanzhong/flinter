@@ -16,6 +16,7 @@
 #ifndef __FLINTER_UTILITY_H__
 #define __FLINTER_UTILITY_H__
 
+#include <sys/select.h>
 #include <sys/types.h>
 #include <stdint.h>
 #include <time.h>

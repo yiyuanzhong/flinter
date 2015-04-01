@@ -15,6 +15,7 @@
 
 #include "flinter/rmdirs.h"
 
+#define _GNU_SOURCE 1
 #include <sys/stat.h>
 #include <sys/syscall.h>
 #include <sys/types.h>
@@ -30,15 +31,11 @@
 
 #include "config.h"
 
-#ifndef O_DIRECTORY
-#define O_DIRECTORY 00200000
-#endif
-
 /*
  * Recent enough Linux kernel supports openat() family methods which are
  * preferred when available, use old school method otherwise.
  */
-#define RMDIRS_COMPAT (!(HAVE_FSTATAT && HAVE_OPENAT && HAVE_UNLINKAT && HAVE_FDOPENDIR))
+#define RMDIRS_COMPAT (!(defined(AT_FDCWD) && HAVE_OPENAT && HAVE_FDOPENDIR))
 
 /*
  * On linux, there is a kernel bug that will lead inode numbers in tmpfs

@@ -16,8 +16,6 @@
 #ifndef __FLINTER_RMDIRS_H__
 #define __FLINTER_RMDIRS_H__
 
-#include <sys/types.h>
-
 #ifdef __cplusplus
 extern "C" {
 #endif /* __cplusplus */

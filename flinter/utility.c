@@ -43,7 +43,6 @@
 #include "flinter/safeio.h"
 #include "config.h"
 
-extern char *environ[];
 #endif /* __unix__ */
 
 static int make_clean_path_stage_one(const char *path, char **stage, int trim)
