@@ -17,11 +17,10 @@
 #define __FLINTER_LINKAGE_EASY_HANDLER_H__
 
 #include <sys/types.h>
-#include <stdint.h>
 
 namespace flinter {
 
-class LinkagePeer;
+class EasyContext;
 
 class EasyHandler {
 public:
@@ -35,7 +34,7 @@ public:
     /// @return >0 message length.
     /// @return  0 message length is yet determined, keep receiving.
     /// @return <0 message is invalid.
-    virtual ssize_t GetMessageLength(uint64_t channel,
+    virtual ssize_t GetMessageLength(const EasyContext &context,
                                      const void *buffer,
                                      size_t length) = 0;
 
@@ -44,20 +43,18 @@ public:
     /// @return >0 keep coming.
     /// @return  0 hang up gracefully.
     /// @return <0 error occurred, hang up immediately.
-    virtual int OnMessage(uint64_t channel,
+    virtual int OnMessage(const EasyContext &context,
                           const void *buffer,
                           size_t length) = 0;
 
     /// Called within I/O threads.
-    virtual void OnDisconnected(uint64_t channel);
+    virtual void OnDisconnected(const EasyContext &context);
 
     /// Called within I/O threads.
-    virtual bool OnConnected(uint64_t channel,
-                             const LinkagePeer *peer,
-                             const LinkagePeer *me);
+    virtual bool OnConnected(const EasyContext &context);
 
     /// Called within I/O threads.
-    virtual void OnError(uint64_t channel,
+    virtual void OnError(const EasyContext &context,
                          bool reading_or_writing,
                          int errnum);
 

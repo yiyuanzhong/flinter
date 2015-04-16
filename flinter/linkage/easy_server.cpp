@@ -17,6 +17,7 @@
 
 #include <assert.h>
 
+#include "flinter/linkage/easy_context.h"
 #include "flinter/linkage/easy_handler.h"
 #include "flinter/linkage/linkage.h"
 #include "flinter/linkage/linkage_handler.h"
@@ -28,6 +29,8 @@
 #include "flinter/thread/mutex.h"
 #include "flinter/thread/mutex_locker.h"
 #include "flinter/thread/fixed_thread_pool.h"
+
+#include "flinter/types/shared_ptr.h"
 
 #include "flinter/logger.h"
 #include "flinter/msleep.h"
@@ -80,22 +83,24 @@ public:
     virtual ~ProxyLinkage() {}
     ProxyLinkage(channel_t channel,
                  LinkageHandler *handler,
-                 const std::string &name) : Linkage(handler, name)
-                                          , _channel(channel) {}
+                 const std::string &name)
+            : Linkage(handler, name)
+            , _context(new EasyContext(channel, this)) {}
 
     ProxyLinkage(channel_t channel,
                  LinkageHandler *handler,
                  const LinkagePeer &peer,
-                 const LinkagePeer &me) : Linkage(handler, peer, me)
-                                        , _channel(channel) {}
+                 const LinkagePeer &me)
+            : Linkage(handler, peer, me)
+            , _context(new EasyContext(channel, this)) {}
 
-    channel_t channel() const
+    shared_ptr<EasyContext> &context()
     {
-        return _channel;
+        return _context;
     }
 
 private:
-    channel_t _channel;
+    shared_ptr<EasyContext> _context;
 
 }; // class ProxyLinkage
 
@@ -142,11 +147,13 @@ private:
 
 class EasyServer::Job {
 public:
-    Job(channel_t channel, const void *buffer, size_t length);
+    /// @param context copied.
+    /// @param buffer copied.
+    Job(shared_ptr<EasyContext> &context, const void *buffer, size_t length);
 
-    channel_t channel() const
+    const EasyContext &context() const
     {
-        return _channel;
+        return *_context;
     }
 
     const void *buffer() const
@@ -160,7 +167,7 @@ public:
     }
 
 private:
-    channel_t _channel;
+    shared_ptr<EasyContext> _context;
     std::string _message;
 
 }; // class EasyServer::Job
@@ -190,8 +197,10 @@ void EasyServer::ProxyLinkageWorker::OnShutdown()
     _handler->OnIoThreadShutdown();
 }
 
-EasyServer::Job::Job(channel_t channel, const void *buffer, size_t length)
-        : _channel(channel)
+EasyServer::Job::Job(shared_ptr<EasyContext> &context,
+                     const void *buffer,
+                     size_t length)
+        : _context(context)
 {
     const char *p = reinterpret_cast<const char *>(buffer);
     _message.assign(p, p + length);
@@ -202,7 +211,7 @@ ssize_t EasyServer::ProxyHandler::GetMessageLength(Linkage *linkage,
                                                    size_t length)
 {
     ProxyLinkage *l = static_cast<ProxyLinkage *>(linkage);
-    return _handler->GetMessageLength(l->channel(), buffer, length);
+    return _handler->GetMessageLength(*l->context(), buffer, length);
 }
 
 int EasyServer::ProxyHandler::OnMessage(Linkage *linkage,
@@ -210,7 +219,7 @@ int EasyServer::ProxyHandler::OnMessage(Linkage *linkage,
                                         size_t length)
 {
     ProxyLinkage *l = static_cast<ProxyLinkage *>(linkage);
-    Job *job = new Job(l->channel(), buffer, length);
+    Job *job = new Job(l->context(), buffer, length);
     _parent->QueueOrExecuteJob(job);
     return 1;
 }
@@ -218,14 +227,14 @@ int EasyServer::ProxyHandler::OnMessage(Linkage *linkage,
 void EasyServer::ProxyHandler::OnDisconnected(Linkage *linkage)
 {
     ProxyLinkage *l = static_cast<ProxyLinkage *>(linkage);
-    _handler->OnDisconnected(l->channel());
-    _parent->ReleaseChannel(l->channel());
+    _handler->OnDisconnected(*l->context());
+    _parent->ReleaseChannel(l->context()->channel());
 }
 
 bool EasyServer::ProxyHandler::OnConnected(Linkage *linkage)
 {
     ProxyLinkage *l = static_cast<ProxyLinkage *>(linkage);
-    return _handler->OnConnected(l->channel(), l->peer(), l->me());
+    return _handler->OnConnected(*l->context());
 }
 
 void EasyServer::ProxyHandler::OnError(Linkage *linkage,
@@ -233,7 +242,7 @@ void EasyServer::ProxyHandler::OnError(Linkage *linkage,
                                        int errnum)
 {
     ProxyLinkage *l = static_cast<ProxyLinkage *>(linkage);
-    return _handler->OnError(l->channel(), reading_or_writing, errnum);
+    return _handler->OnError(*l->context(), reading_or_writing, errnum);
 }
 
 LinkageBase *EasyServer::ProxyListener::CreateLinkage(const LinkagePeer &peer,
@@ -263,12 +272,12 @@ bool EasyServer::JobWorker::Run()
 void EasyServer::JobWorker::Execute(Job *job)
 {
     LOG(VERBOSE) << "JobWorker: executing [" << job << "]";
-    int ret = _handler->OnMessage(job->channel(), job->buffer(), job->length());
+    int ret = _handler->OnMessage(job->context(), job->buffer(), job->length());
     if (ret < 0) {
-        _handler->OnError(job->channel(), true, errno);
-        _parent->Disconnect(job->channel(), false);
+        _handler->OnError(job->context(), true, errno);
+        _parent->Disconnect(job->context().channel(), false);
     } else if (ret == 0) {
-        _parent->Disconnect(job->channel(), true);
+        _parent->Disconnect(job->context().channel(), true);
     }
 }
 

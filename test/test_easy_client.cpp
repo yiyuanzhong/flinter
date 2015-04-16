@@ -1,6 +1,7 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include <flinter/linkage/easy_context.h>
 #include <flinter/linkage/easy_handler.h>
 #include <flinter/linkage/easy_server.h>
 
@@ -11,17 +12,20 @@
 class Handler : public flinter::EasyHandler {
 public:
     virtual ~Handler() {}
-    virtual ssize_t GetMessageLength(uint64_t flow,
+    virtual ssize_t GetMessageLength(const flinter::EasyContext &context,
                                      const void *buffer,
                                      size_t length)
     {
-        LOG(INFO) << "Handler: GetMessageLength(" << flow << ")";
+        LOG(INFO) << "Handler: GetMessageLength(" << context.channel() << ")";
         return length;
     }
 
-    virtual int OnMessage(uint64_t flow, const void *buffer, size_t length)
+    virtual int OnMessage(const flinter::EasyContext &context,
+                          const void *buffer, size_t length)
     {
-        LOG(INFO) << "Handler: OnMessage(" << flow << ", " << length << ")";
+        LOG(INFO) << "Handler: OnMessage(" << context.channel() << ", "
+                  << length << ")";
+
         return 1;
     }
 

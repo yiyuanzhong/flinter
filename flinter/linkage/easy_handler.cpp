@@ -15,36 +15,37 @@
 
 #include "flinter/linkage/easy_handler.h"
 
+#include "flinter/linkage/easy_context.h"
 #include "flinter/linkage/linkage_peer.h"
 #include "flinter/logger.h"
 
 namespace flinter {
 
-void EasyHandler::OnError(uint64_t channel,
+void EasyHandler::OnError(const EasyContext &context,
                           bool reading_or_writing,
                           int errnum)
 {
-    CLOG.Trace("Linkage: ERROR %d when %s for channel = %lu",
+    CLOG.Trace("Linkage: ERROR %d when %s for channel = %llu [%s:%u]",
                errnum, reading_or_writing ? "reading" : "writing",
-               channel);
+               static_cast<unsigned long long>(context.channel()),
+               context.peer().ip_str().c_str(),
+               context.peer().port());
 }
 
-void EasyHandler::OnDisconnected(uint64_t channel)
+void EasyHandler::OnDisconnected(const EasyContext &context)
 {
-    CLOG.Trace("Linkage: DISCONNECT for channel = %lu", channel);
+    CLOG.Trace("Linkage: CONNECT channel = %llu [%s:%u]",
+               static_cast<unsigned long long>(context.channel()),
+               context.peer().ip_str().c_str(),
+               context.peer().port());
 }
 
-bool EasyHandler::OnConnected(uint64_t channel,
-                              const LinkagePeer *peer,
-                              const LinkagePeer *me)
+bool EasyHandler::OnConnected(const EasyContext &context)
 {
-    if (peer) {
-        CLOG.Trace("Linkage: CONNECT channel = %lu [%s:%u]",
-                   channel, peer->ip_str().c_str(), peer->port());
-
-    } else {
-        CLOG.Trace("Linkage: CONNECT channel = %lu", channel);
-    }
+    CLOG.Trace("Linkage: CONNECT channel = %llu [%s:%u]",
+               static_cast<unsigned long long>(context.channel()),
+               context.peer().ip_str().c_str(),
+               context.peer().port());
 
     return true;
 }

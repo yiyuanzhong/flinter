@@ -60,6 +60,8 @@ include_flinter_HEADERS = babysitter.h \
 include_types_HEADERS = types/atomic.h \
                         types/auto_buffer.h \
                         types/read_only_map.h \
+                        types/scoped_ptr.h \
+                        types/shared_ptr.h \
                         types/tree.h \
                         types/unordered_hash.h \
                         types/unordered_map.h \
@@ -80,7 +82,8 @@ include_thread_HEADERS = thread/abstract_thread_pool.h \
                          thread/tls.h \
                          thread/write_locker.h
 
-include_linkage_HEADERS = linkage/easy_handler.h \
+include_linkage_HEADERS = linkage/easy_context.h \
+                          linkage/easy_handler.h \
                           linkage/easy_server.h \
                           linkage/interface.h \
                           linkage/linkage.h \
@@ -126,6 +129,7 @@ libflinter_la_SOURCES = $(libflinter_core_la_SOURCES) \
                         types/tree_json.cpp \
                         types/tree_xml.cpp \
                         types/uint128_t.cpp \
+                        linkage/easy_context.cpp \
                         linkage/easy_handler.cpp \
                         linkage/easy_server.cpp \
                         linkage/interface.cpp \
