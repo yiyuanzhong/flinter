@@ -97,7 +97,11 @@ bool Crawler::Request(std::string *result)
         return false;
     }
 
-    _content_type = raw;
+    if (raw) {
+        _content_type = raw;
+    } else {
+        _content_type.clear();
+    }
 
     result->assign(_result.begin(), _result.end());
     _result.clear();

@@ -34,7 +34,7 @@ void EasyHandler::OnError(const EasyContext &context,
 
 void EasyHandler::OnDisconnected(const EasyContext &context)
 {
-    CLOG.Trace("Linkage: CONNECT channel = %llu [%s:%u]",
+    CLOG.Trace("Linkage: DISCONNECTED channel = %llu [%s:%u]",
                static_cast<unsigned long long>(context.channel()),
                context.peer().ip_str().c_str(),
                context.peer().port());
@@ -42,7 +42,7 @@ void EasyHandler::OnDisconnected(const EasyContext &context)
 
 bool EasyHandler::OnConnected(const EasyContext &context)
 {
-    CLOG.Trace("Linkage: CONNECT channel = %llu [%s:%u]",
+    CLOG.Trace("Linkage: CONNECTED channel = %llu [%s:%u]",
                static_cast<unsigned long long>(context.channel()),
                context.peer().ip_str().c_str(),
                context.peer().port());

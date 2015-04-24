@@ -132,12 +132,12 @@ private:
 
 class EasyServer::JobWorker : public Runnable {
 public:
-    virtual ~JobWorker() {}
     JobWorker(EasyServer *parent, EasyHandler *handler)
             : _handler(handler), _parent(parent) {}
 
-    void Execute(Job *job);
+    virtual ~JobWorker() {}
     virtual bool Run();
+    class Job;
 
 private:
     EasyHandler *_handler;
@@ -145,32 +145,25 @@ private:
 
 }; // class EasyServer::JobWorker
 
-class EasyServer::Job {
+class EasyServer::JobWorker::Job : public Runnable {
 public:
     /// @param context copied.
     /// @param buffer copied.
-    Job(shared_ptr<EasyContext> &context, const void *buffer, size_t length);
+    Job(EasyServer *server,
+        EasyHandler *handler,
+        shared_ptr<EasyContext> &context,
+        const void *buffer, size_t length);
 
-    const EasyContext &context() const
-    {
-        return *_context;
-    }
-
-    const void *buffer() const
-    {
-        return _message.data();
-    }
-
-    size_t length() const
-    {
-        return _message.length();
-    }
+    virtual ~Job() {}
+    virtual bool Run();
 
 private:
     shared_ptr<EasyContext> _context;
+    EasyHandler *_handler;
     std::string _message;
+    EasyServer *_server;
 
-}; // class EasyServer::Job
+}; // class EasyServer::JobWorker::Job
 
 EasyServer::ProxyLinkage *EasyServer::ProxyLinkage::ConnectTcp4(
         channel_t channel,
@@ -197,10 +190,12 @@ void EasyServer::ProxyLinkageWorker::OnShutdown()
     _handler->OnIoThreadShutdown();
 }
 
-EasyServer::Job::Job(shared_ptr<EasyContext> &context,
-                     const void *buffer,
-                     size_t length)
-        : _context(context)
+EasyServer::JobWorker::Job::Job(EasyServer *server,
+                                EasyHandler *handler,
+                                shared_ptr<EasyContext> &context,
+                                const void *buffer,
+                                size_t length)
+        : _context(context), _handler(handler), _server(server)
 {
     const char *p = reinterpret_cast<const char *>(buffer);
     _message.assign(p, p + length);
@@ -219,8 +214,7 @@ int EasyServer::ProxyHandler::OnMessage(Linkage *linkage,
                                         size_t length)
 {
     ProxyLinkage *l = static_cast<ProxyLinkage *>(linkage);
-    Job *job = new Job(l->context(), buffer, length);
-    _parent->QueueOrExecuteJob(job);
+    _parent->QueueOrExecuteJob(l, buffer, length);
     return 1;
 }
 
@@ -256,12 +250,12 @@ bool EasyServer::JobWorker::Run()
     _handler->OnJobThreadInitialize();
 
     while (true) {
-        Job *job = _parent->GetJob();
+        Runnable *job = _parent->GetJob();
         if (!job) {
             break;
         }
 
-        Execute(job);
+        job->Run();
         delete job;
     }
 
@@ -269,16 +263,19 @@ bool EasyServer::JobWorker::Run()
     return true;
 }
 
-void EasyServer::JobWorker::Execute(Job *job)
+bool EasyServer::JobWorker::Job::Run()
 {
-    LOG(VERBOSE) << "JobWorker: executing [" << job << "]";
-    int ret = _handler->OnMessage(job->context(), job->buffer(), job->length());
+    LOG(VERBOSE) << "JobWorker: executing [" << this << "]";
+    int ret = _handler->OnMessage(*_context, _message.data(), _message.length());
     if (ret < 0) {
-        _handler->OnError(job->context(), true, errno);
-        _parent->Disconnect(job->context().channel(), false);
+        _handler->OnError(*_context, true, errno);
+        _server->Disconnect(_context->channel(), false);
+
     } else if (ret == 0) {
-        _parent->Disconnect(job->context().channel(), true);
+        _server->Disconnect(_context->channel(), true);
     }
+
+    return true;
 }
 
 EasyServer::EasyServer(EasyHandler *handler)
@@ -317,12 +314,36 @@ bool EasyServer::Listen(uint16_t port)
     }
 
     MutexLocker locker(_mutex);
+    if (!_io_workers.empty()) {
+        delete l;
+        return false;
+    }
+
     _listeners.push_back(l);
+    return true;
+}
+
+bool EasyServer::RegisterTimer(int64_t interval, Runnable *timer)
+{
+    if (interval <= 0 || !timer) {
+        return false;
+    }
+
+    MutexLocker locker(_mutex);
+    if (!_io_workers.empty()) {
+        return false;
+    }
+
+    _timers.push_back(std::make_pair(timer, interval));
     return true;
 }
 
 bool EasyServer::Initialize(size_t slots, size_t workers)
 {
+    if (!slots) {
+        return false;
+    }
+
     MutexLocker locker(_mutex);
     size_t total = slots + workers;
     if (!_pool->Initialize(total)) {
@@ -349,6 +370,17 @@ bool EasyServer::Initialize(size_t slots, size_t workers)
 
         if (!_pool->AppendJob(worker, true)) {
             LOG(ERROR) << "EasyServer: failed to append job workers.";
+            DoShutdown(&locker);
+            return false;
+        }
+    }
+
+    for (std::list<std::pair<Runnable *, int64_t> >::iterator
+         p = _timers.begin(); p != _timers.end(); ++p) {
+
+        LinkageWorker *worker = GetRandomIoWorker();
+        if (!worker->RegisterTimer(p->second, p->first, true)) {
+            LOG(ERROR) << "EasyServer: failed to initialize timers.";
             DoShutdown(&locker);
             return false;
         }
@@ -402,20 +434,11 @@ bool EasyServer::DoShutdown(MutexLocker *locker)
     _job_workers.clear();
     _io_workers.clear();
     _listeners.clear();
+    _timers.clear();
     _workers = 0;
     _slots = 0;
 
     return true;
-}
-
-bool EasyServer::Run()
-{
-    ProxyLinkageWorker worker(_easy_handler);
-    if (!AttachListeners(&worker)) {
-        return false;
-    }
-
-    return worker.Run();
 }
 
 bool EasyServer::AttachListeners(LinkageWorker *worker)
@@ -432,25 +455,25 @@ bool EasyServer::AttachListeners(LinkageWorker *worker)
     return true;
 }
 
-EasyServer::Job *EasyServer::GetJob()
+Runnable *EasyServer::GetJob()
 {
     MutexLocker locker(_mutex);
     while (_jobs.empty()) {
         _incoming->Wait(_mutex);
     }
 
-    Job *job = _jobs.front();
+    Runnable *job = _jobs.front();
     _jobs.pop();
     return job;
 }
 
-void EasyServer::AppendJob(Job *job)
+void EasyServer::AppendJob(Runnable *job)
 {
     MutexLocker locker(_mutex);
     DoAppendJob(job);
 }
 
-void EasyServer::DoAppendJob(Job *job)
+void EasyServer::DoAppendJob(Runnable *job)
 {
     _jobs.push(job);
     _incoming->WakeOne();
@@ -479,7 +502,18 @@ void EasyServer::ReleaseChannel(channel_t channel)
     _channel_linkages.erase(channel);
 }
 
-void EasyServer::QueueOrExecuteJob(Job *job)
+void EasyServer::QueueOrExecuteJob(ProxyLinkage *linkage,
+                                   const void *buffer,
+                                   size_t length)
+{
+    JobWorker::Job *job = new JobWorker::Job(this, _easy_handler,
+                                             linkage->context(),
+                                             buffer, length);
+
+    QueueOrExecuteJob(job);
+}
+
+void EasyServer::QueueOrExecuteJob(Runnable *job)
 {
     MutexLocker locker(_mutex);
     if (_workers) {
@@ -488,9 +522,8 @@ void EasyServer::QueueOrExecuteJob(Job *job)
     }
 
     locker.Unlock();
-
-    JobWorker worker(this, _easy_handler);
-    worker.Execute(job);
+    job->Run();
+    delete job;
 }
 
 void EasyServer::Forget(channel_t channel)
@@ -539,6 +572,17 @@ bool EasyServer::Send(channel_t channel, const void *buffer, size_t length)
     return linkage->Send(buffer, length);
 }
 
+LinkageWorker *EasyServer::GetRandomIoWorker() const
+{
+    std::list<LinkageWorker *>::const_iterator p = _io_workers.begin();
+    int r = rand() % _io_workers.size();
+    if (r) {
+        std::advance(p, r);
+    }
+
+    return *p;
+}
+
 EasyServer::ProxyLinkage *EasyServer::DoReconnect(
         channel_t channel,
         const std::string &host,
@@ -551,13 +595,10 @@ EasyServer::ProxyLinkage *EasyServer::DoReconnect(
         return NULL;
     }
 
-    // TODO(yiyuanzhong): no I/O workers? Random workers?
-    if (!_io_workers.empty()) {
-        LinkageWorker *worker = *_io_workers.begin();
-        if (!linkage->Attach(worker)) {
-            delete linkage;
-            return NULL;
-        }
+    LinkageWorker *worker = GetRandomIoWorker();
+    if (!linkage->Attach(worker)) {
+        delete linkage;
+        return NULL;
     }
 
     linkage->set_receive_timeout(_configure.incoming_receive_timeout);

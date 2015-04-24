@@ -45,7 +45,6 @@ public:
 
     // Methods below can be called from another thread.
 
-    /// @warning call before Run().
     /// @param interval in nanoseconds.
     bool RegisterTimer(int64_t interval, Runnable *runnable, bool auto_release);
 

@@ -30,15 +30,15 @@ namespace flinter {
 
 class Condition;
 class EasyHandler;
+class FixedThreadPool;
 class Linkage;
 class LinkagePeer;
 class LinkageWorker;
 class Listener;
 class Mutex;
 class MutexLocker;
-class FixedThreadPool;
 
-class EasyServer : public Runnable {
+class EasyServer {
 public:
     typedef uint64_t channel_t;
 
@@ -58,15 +58,17 @@ public:
     virtual ~EasyServer();
 
     /// Call before Initialize().
+    /// @param interval nanoseconds.
+    /// @param timer will be released after executed.
+    bool RegisterTimer(int64_t interval, Runnable *timer);
+
+    /// Call before Initialize().
     bool Listen(uint16_t port);
 
     /// Call before Initialize(), change content directly.
     Configure *configure();
 
-    /// @param slots how many additional I/O threads, typically 0~4. For 0, no
-    ///              additional thread is spawned and the thread calling Run()
-    ///              is used. For 1~4, there's no need to call Run() (but you
-    ///              still can).
+    /// @param slots how many additional I/O threads, typically 1~4.
     /// @param workers how many job threads, 0 to share I/O threads.
     bool Initialize(size_t slots, size_t workers);
 
@@ -86,9 +88,11 @@ public:
     /// Remove outgoing connection information after disconnected.
     void Forget(channel_t channel);
 
+    /// @param job will be released after executed.
+    void QueueOrExecuteJob(Runnable *job);
+
     /// Thread safe.
-    virtual bool Shutdown();
-    virtual bool Run();
+    bool Shutdown();
 
 private:
     class ProxyLinkageWorker;
@@ -96,7 +100,6 @@ private:
     class ProxyLinkage;
     class ProxyHandler;
     class JobWorker;
-    class Job;
 
     static bool IsOutgoingChannel(channel_t channel)
     {
@@ -107,10 +110,12 @@ private:
     void ReleaseChannel(channel_t channel);
 
     // Called by LinkageWorker thread.
-    void QueueOrExecuteJob(Job *job);
+    void QueueOrExecuteJob(ProxyLinkage *linkage,
+                           const void *buffer,
+                           size_t length);
 
     // Called by JobWorker thread.
-    Job *GetJob();
+    Runnable *GetJob();
 
     // Called by ProxyListener.
     Linkage *AllocateChannel(const LinkagePeer &peer, const LinkagePeer &me);
@@ -119,9 +124,11 @@ private:
     channel_t AllocateChannel(bool incoming_or_outgoing);
     bool AttachListeners(LinkageWorker *worker);
     bool DoShutdown(MutexLocker *locker);
-    void DoAppendJob(Job *job); // No lock.
-    void AppendJob(Job *job); // Locked.
+    void DoAppendJob(Runnable *job); // No lock.
+    void AppendJob(Runnable *job); // Locked.
     void DoDumpJobs();
+
+    LinkageWorker *GetRandomIoWorker() const;
 
     ProxyLinkage *DoReconnect(channel_t channel,
                               const std::string &host,
@@ -129,12 +136,13 @@ private:
 
     static const Configure kDefaultConfigure;
 
+    std::list<std::pair<Runnable *, int64_t> > _timers;
     std::list<LinkageWorker *> _io_workers;
     std::list<JobWorker *> _job_workers;
     std::list<Listener *> _listeners;
+    std::queue<Runnable *> _jobs;
     ProxyHandler *_proxy_handler;
     EasyHandler *_easy_handler;
-    std::queue<Job *> _jobs;
     FixedThreadPool *_pool;
     size_t _workers;
     size_t _slots;

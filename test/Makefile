@@ -29,7 +29,7 @@ SUBDIRS = .
 # "d" will be appended for each STATICS, ABC will become -lABCd eventually
 STATICS =
 LIBRARIES = crypto dl ev flinter iconv jsoncpp neo_cgi neo_cs neo_utl \
-            pthread rt ssl xml2 z gtest gmock gmock_main
+            pthread rt ssl xml2 z zookeeper_mt gtest gmock gmock_main
 PKGCONFIGS =
 
 BINPATH =

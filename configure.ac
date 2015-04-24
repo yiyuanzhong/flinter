@@ -84,6 +84,16 @@ AS_IF([test x"${with_libcurl}" != x"no"],
       [PKG_CHECK_MODULES([libcurl], [libcurl])
        AC_CHECK_HEADERS([curl/curl.h])])
 
+# libzookeeper
+AC_ARG_WITH([zookeeper],
+            [AC_HELP_STRING([--without-zookeeper],
+                            [enable ZooKeeper libraries [default=yes]])])
+
+AM_CONDITIONAL([WITH_ZOOKEEPER], [test x"${with_zookeeper}" != x"no"])
+AS_IF([test x"${with_zookeeper}" != x"no"],
+      [AC_CHECK_HEADERS([zookeeper/zookeeper.h], [],
+      [AC_MSG_ERROR([ZooKeeper is missing, try --without-zookeeper])])])
+
 # And fastcgi related
 AC_ARG_WITH([fastcgi],
             [AC_HELP_STRING([--without-fastcgi],

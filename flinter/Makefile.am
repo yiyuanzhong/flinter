@@ -21,7 +21,7 @@ include_typesdir = $(includedir)/flinter/types
 include_threaddir = $(includedir)/flinter/thread
 include_fastcgidir = $(includedir)/flinter/fastcgi
 include_linkagedir = $(includedir)/flinter/linkage
-include_passportdir = $(includedir)/flinter/fastcgi/passport
+include_zookeeperdir = $(includedir)/flinter/zookeeper
 
 SUBDIRS = .
 
@@ -171,6 +171,22 @@ endif
 if WITH_LIBUUID
 libflinter_la_SOURCES += types/uuid.cpp
 libflinter_la_LIBADD += ${libuuid_LIBS}
+endif
+
+if WITH_ZOOKEEPER
+include_zookeeper_HEADERS = zookeeper/council.h \
+                            zookeeper/zookeeper.h \
+                            zookeeper/zookeeper_callback.h \
+                            zookeeper/zookeeper_tracker.h \
+                            zookeeper/zookeeper_watcher.h
+
+libflinter_la_SOURCES += zookeeper/council.cpp \
+                         zookeeper/zookeeper.cpp \
+                         zookeeper/zookeeper_callback.cpp \
+                         zookeeper/zookeeper_tracker.cpp \
+                         zookeeper/zookeeper_watcher.cpp
+
+libflinter_la_LIBADD += -lzookeeper_mt
 endif
 
 if WITH_FASTCGI

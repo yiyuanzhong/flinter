@@ -11,8 +11,9 @@ PATH := $(STAGING)/bin:$(TOOLS)/bin:$(PATH)
 LDFLAGS := -L$(STAGING)/lib $(LDFLAGS)
 LC_ALL = C
 
+CONFIGURE_FLAGS = --with-pic
 ifeq ($(debug), 1)
-CONFIGURE_FLAGS = --enable-debug
+CONFIGURE_FLAGS = ${CONFIGURE_FLAGS} --enable-debug
 STRIP = true
 else
 STRIP = strip
