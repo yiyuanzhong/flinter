@@ -5,17 +5,17 @@ STAGING := $(THIRDPARTY)/staging
 TOOLS := $(THIRDPARTY)/tools
 
 PKG_CONFIG_PATH := $(STAGING)/lib/pkgconfig:$(PKG_CONFIG_PATH)
-LD_LIBRARY_PATH := $(STAGING)/lib:$(LD_LIBRARY_PATH)
 CPPFLAGS := -I$(STAGING)/include $(CPPFLAGS)
 PATH := $(STAGING)/bin:$(TOOLS)/bin:$(PATH)
 LDFLAGS := -L$(STAGING)/lib $(LDFLAGS)
 LC_ALL = C
 
-CONFIGURE_FLAGS = --with-pic
+CONFIGURE_FLAGS := --with-pic
 ifeq ($(debug), 1)
-CONFIGURE_FLAGS = ${CONFIGURE_FLAGS} --enable-debug
+CONFIGURE_FLAGS := ${CONFIGURE_FLAGS} --enable-debug
 STRIP = true
 else
+CONFIGURE_FLAGS := ${CONFIGURE_FLAGS} --enable-silent-rules
 STRIP = strip
 endif
 
@@ -26,7 +26,7 @@ else
 SO := so
 endif
 
-export CFLAGS CPPFLAGS CXXFLAGS LC_ALL LDFLAGS LD_LIBRARY_PATH PATH PKG_CONFIG_PATH
+export CFLAGS CPPFLAGS CXXFLAGS LC_ALL LDFLAGS PATH PKG_CONFIG_PATH
 
 MKFILES = configure.ac Makefile.am \
           flinter/Makefile.am \
@@ -52,7 +52,9 @@ output: build
 	cd output/lib && ln -s libflinter_fastcgi_main.a  libflinter_fastcgi_main_debug.a
 	cd output/lib && ln -s libflinter_fastcgi_main.la libflinter_fastcgi_main_debug.la
 	cd output/lib && ln -s libflinter_fastcgi_main.$(SO) libflinter_fastcgi_main_debug.$(SO)
-	chrpath -d output/lib/lib*.$(SO)
+	cd output/lib && ../../fixpath.sh libflinter.$(SO) '$$ORIGIN'
+	cd output/lib && ../../fixpath.sh libflinter_core.$(SO) '$$ORIGIN'
+	cd output/lib && ../../fixpath.sh libflinter_fastcgi_main.$(SO) '$$ORIGIN'
 
 build: mrproper
 	$(MAKE) -C build

@@ -110,6 +110,7 @@ int Listener::OnReadable(LinkageWorker *worker)
     if (!linkage->OnConnected()) {
         CLOG.Warn("Listener: client failed to initialize for fd = %d", peer.fd());
         linkage->OnDisconnected();
+        linkage->Detach(worker);
         delete linkage;
         return 1;
     }
@@ -119,23 +120,53 @@ int Listener::OnReadable(LinkageWorker *worker)
 
 bool Listener::ListenTcp6(uint16_t port, bool loopback)
 {
-    return _listener->ListenTcp6(port, loopback);
+    if (!_listener->ListenTcp6(port, loopback)) {
+        CLOG.Warn("Listener: failed to listen on TCPv6 %s:%u",
+                  loopback ? "loopback" : "any", port);
+
+        return false;
+    }
+
+    return true;
 }
 
 bool Listener::ListenTcp4(uint16_t port, bool loopback)
 {
-    return _listener->ListenTcp4(port, loopback);
+    if (!_listener->ListenTcp4(port, loopback)) {
+        CLOG.Warn("Listener: failed to listen on TCPv4 %s:%u",
+                  loopback ? "loopback" : "any", port);
+
+        return false;
+    }
+
+    return true;
 }
 
 bool Listener::ListenTcp(uint16_t port, bool loopback)
 {
-    return _listener->ListenTcp(port, loopback);
+    if (!_listener->ListenTcp(port, loopback)) {
+        CLOG.Warn("Listener: failed to listen on TCP %s:%u",
+                  loopback ? "loopback" : "any", port);
+
+        return false;
+    }
+
+    return true;
 }
 
 bool Listener::ListenUnix(const std::string &sockname,
                           bool file_based, bool privileged)
 {
-    return _listener->ListenUnix(sockname, file_based, privileged);
+    if (!_listener->ListenUnix(sockname, file_based, privileged)) {
+        CLOG.Warn("Listener: failed to listen on %s%s [%s]",
+                  privileged ? "privileged " : "",
+                  file_based ? "file" : "namespace",
+                  sockname.c_str());
+
+        return false;
+    }
+
+    return true;
 }
 
 int Listener::Shutdown()

@@ -24,7 +24,7 @@ class EasyContext;
 
 class EasyHandler {
 public:
-    virtual ~EasyHandler() {};
+    virtual ~EasyHandler() {}
 
     /// Called within I/O threads.
     ///
@@ -57,18 +57,6 @@ public:
     virtual void OnError(const EasyContext &context,
                          bool reading_or_writing,
                          int errnum);
-
-    /// Called within job threads right after they start.
-    virtual bool OnJobThreadInitialize();
-
-    /// Called within job threads right before they terminate.
-    virtual void OnJobThreadShutdown();
-
-    /// Called within I/O threads right after they start.
-    virtual bool OnIoThreadInitialize();
-
-    /// Called within I/O threads right before they terminate.
-    virtual void OnIoThreadShutdown();
 
 }; // class EasyHandler
 

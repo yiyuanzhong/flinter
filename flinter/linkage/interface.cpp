@@ -230,8 +230,10 @@ bool Interface::ListenUnix(const std::string &sockname, bool file_based, bool pr
     _client = false;
     _domain = AF_UNIX;
 
-    CLOG.Trace("Interface: listening on %s [%s]...", file_based ? "file" : "namespace",
-                                                     sockname.c_str());
+    CLOG.Trace("Interface: listening on %s%s [%s]...",
+               privileged ? "privileged " : "",
+               file_based ? "file" : "namespace",
+               sockname.c_str());
 
     return true;
 }

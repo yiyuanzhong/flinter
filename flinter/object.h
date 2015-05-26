@@ -13,25 +13,21 @@
  * limitations under the License.
  */
 
-#include "flinter/linkage/easy_context.h"
-
-#include "flinter/linkage/linkage.h"
-#include "flinter/object.h"
+#ifndef __FLINTER_OBJECT_H__
+#define __FLINTER_OBJECT_H__
 
 namespace flinter {
 
-EasyContext::EasyContext(uint64_t channel, Linkage *linkage)
-        : _channel(channel)
-        , _me(*linkage->me())
-        , _peer(*linkage->peer())
-        , _context(NULL)
-{
-    // Intended left blank.
-}
+/// This class has no use at all.
+/// It's just a super root class like java.lang.object so that you can safely
+///     delete the pointer without supplying a destructing callback.
+class Object {
+public:
+    /// Destructor.
+    virtual ~Object() {}
 
-EasyContext::~EasyContext()
-{
-    delete _context;
-}
+}; // class Object
 
 } // namespace flinter
+
+#endif // __FLINTER_OBJECT_H__

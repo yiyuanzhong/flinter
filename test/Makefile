@@ -26,7 +26,7 @@ MODULEPATH = flinter
 
 SUBDIRS = .
 
-# "d" will be appended for each STATICS, ABC will become -lABCd eventually
+# "d" will be appended for each STATICS, ABC will become -lABC_debug eventually
 STATICS =
 LIBRARIES = crypto dl ev flinter iconv jsoncpp neo_cgi neo_cs neo_utl \
             pthread rt ssl xml2 z zookeeper_mt gtest gmock gmock_main
@@ -54,4 +54,4 @@ CROSS_COMPILE =
 GOAL = $(TEST)
 GOALd = $(TESTd)
 
-include ../include.mk
+include ../../flinter/include.mk

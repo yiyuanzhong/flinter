@@ -43,8 +43,8 @@ int main()
         return EXIT_FAILURE;
     }
 
-    uint64_t channel;
-    if (!s.ConnectTcp4("127.0.0.1", 5577, &channel)) {
+    uint64_t channel = s.ConnectTcp4("127.0.0.1", 5577);
+    if (!channel) {
         return EXIT_FAILURE;
     }
 

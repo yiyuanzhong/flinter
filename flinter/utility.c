@@ -255,6 +255,62 @@ int32_t atoi32(const char *value)
     return (int32_t)i;
 }
 
+int ranged_rand(int range)
+{
+    int bad;
+    int r;
+    int n;
+
+    if (range < 0 || range > RAND_MAX) {
+        return -1;
+    } else if (range == 0) {
+        return 0;
+    } else if (range == RAND_MAX) {
+        return rand();
+    }
+
+    /* Now use [0,N-1] algorithm. */
+    n = range + 1;
+    if ((n & -n) == n) {
+        return rand() % n;
+    }
+
+    bad = RAND_MAX - RAND_MAX % n;
+    do {
+        r = rand();
+    } while (r > bad);
+
+    return r % n;
+}
+
+int ranged_rand_r(int range, unsigned int *seedp)
+{
+    int bad;
+    int r;
+    int n;
+
+    if (range < 0 || range > RAND_MAX) {
+        return -1;
+    } else if (range == 0) {
+        return 0;
+    } else if (range == RAND_MAX) {
+        return rand_r(seedp);
+    }
+
+    /* Now use [0,N-1] algorithm. */
+    n = range + 1;
+    if ((n & -n) == n) {
+        return rand_r(seedp) % n;
+    }
+
+    bad = RAND_MAX - RAND_MAX % n;
+    do {
+        r = rand_r(seedp);
+    } while (r > bad);
+
+    return r % n;
+}
+
 #if defined(WIN32)
 void randomize(void)
 {

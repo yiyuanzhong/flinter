@@ -50,24 +50,4 @@ bool EasyHandler::OnConnected(const EasyContext &context)
     return true;
 }
 
-bool EasyHandler::OnJobThreadInitialize()
-{
-    return true;
-}
-
-void EasyHandler::OnJobThreadShutdown()
-{
-    // Intended left blank.
-}
-
-bool EasyHandler::OnIoThreadInitialize()
-{
-    return true;
-}
-
-void EasyHandler::OnIoThreadShutdown()
-{
-    // Intended left blank.
-}
-
 } // namespace flinter

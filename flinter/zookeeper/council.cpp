@@ -64,7 +64,6 @@ Council::~Council()
 {
     Resign();
     delete _zkt;
-    _zkt = NULL;
 }
 
 long Council::id() const
@@ -285,13 +284,6 @@ bool Council::Initialize(ZooKeeper *zk, const std::string &election_path, Callba
         return false;
     }
 
-    _zk = zk;
-    _cb = cb;
-    _election_path = election_path;
-
-    ResetState(false);
-    _id = -1;
-
     if (!_zkt->Initialize(zk)) {
         return false;
     }
@@ -301,6 +293,12 @@ bool Council::Initialize(ZooKeeper *zk, const std::string &election_path, Callba
         return false;
     }
 
+    _zk = zk;
+    _cb = cb;
+    _election_path = election_path;
+
+    ResetState(false);
+    _id = -1;
     return true;
 }
 
@@ -386,7 +384,7 @@ bool Council::GetCandidates(std::map<int32_t, std::string> *candidates)
     for (std::list<std::string>::const_iterator p = children.begin(); p != children.end(); ++p) {
         const std::string &s = *p;
         size_t pos = s.find_last_of("_");
-        if (pos == std::string::npos || pos + 11 != s.length()) {
+        if (pos == std::string::npos || pos == 0 || pos + 11 != s.length()) {
             continue;
         }
 

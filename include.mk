@@ -17,6 +17,7 @@
 #
 # ReleaseAsDebug        : release builds are simply symlinks to debug builds.
 # EnableProfiling       : debug builds with profiling enabled.
+# HardcodeRunPath       : (string) rpath, only if you know what it means.
 # StaticLinkLibraries   : try to link static libraries (without glibc).
 # DisableStackProtector : don't engage stack protectors.
 
@@ -128,6 +129,7 @@ PKGCONFIG = pkg-config
 INSTALL = install
 DIRNAME = dirname
 MKDIR = mkdir -p
+UNAME = uname
 CHMOD = chmod
 TOUCH = touch
 EGREP = egrep
@@ -170,11 +172,12 @@ CFLAGS_REL += -ffunction-sections -fdata-sections
 CFLAGS_ALL += -Wall -Wextra -Wno-unused-parameter -Winit-self
 CFLAGS_ALL += -g
 CFLAGS_ALL += -pipe
-CFLAGS_ALL += -fPIC
+CFLAGS_ALL += -fPIC -DPIC
 CFLAGS_ALL += -fno-strict-aliasing
 CFLAGS_ALL += -DPREFIX=\"$(prefix)\"
 CFLAGS_ALL += $(foreach path,$(SEARCHPATH),-I$(MODULEROOT)/$(path))
 
+SYSTEM := $(shell $(UNAME) -s)
 GCC_VER_MAJOR := $(shell $(CC) -dumpversion | $(AWK) -F. '{ print ($$1 >= 4) }')
 GCC_VER_MINOR := $(shell $(CC) -dumpversion | $(AWK) -F. '{ print ($$1 >= 4 && $$2 >= 3) }')
 
@@ -207,12 +210,29 @@ CFLAGS_DBG += -pg
 LDFLAGS_DBG += -pg
 endif
 
-ifeq ($(strip $(StaticLinkLibraries)),1)
-LDFLAGS_LIB_S = $(foreach lib,$(LIBRARIES),$(foreach path,$(LIBRARYPATH),$(wildcard $(MODULEROOT)/$(path)/lib$(lib).a)))
-LDFLAGS_LIB_F = $(filter-out $(patsubst lib%.a,%,$(foreach lib,$(LDFLAGS_LIB_S),$(notdir $(lib)))),$(LIBRARIES))
-LDFLAGS_LIB = $(LDFLAGS_LIB_S) $(foreach lib,$(LDFLAGS_LIB_F),-l$(lib))
+LDFLAGS_LIB_INPUT := $(LIBRARIES)
+ifeq ($(filter pthread,$(LIBRARIES)),pthread)
+ifneq ($(SYSTEM),Darwin)
+LDFLAGS_ALL += -pthread
+endif
+CFLAGS_ALL += -pthread
+LDFLAGS_LIB_INPUT := $(filter-out pthread,$(LDFLAGS_LIB_INPUT))
+endif
+
+ifeq ($(SYSTEM),Darwin)
+LDFLAGS_LIB_INPUT := $(filter-out rt,$(LDFLAGS_LIB_INPUT))
 else
-LDFLAGS_LIB = $(foreach lib,$(LIBRARIES),-l$(lib))
+ifneq ($(HardcodeRunPath),)
+LDFLAGS_ALL += -Wl,-rpath -Wl,'$$ORIGIN/$(HardcodeRunPath)'
+endif
+endif
+
+ifeq ($(strip $(StaticLinkLibraries)),1)
+LDFLAGS_LIB_S := $(foreach lib,$(LDFLAGS_LIB_INPUT),$(foreach path,$(LIBRARYPATH),$(wildcard $(MODULEROOT)/$(path)/lib$(lib).a)))
+LDFLAGS_LIB_F := $(filter-out $(patsubst lib%.a,%,$(foreach lib,$(LDFLAGS_LIB_S),$(notdir $(lib)))),$(LDFLAGS_LIB_INPUT))
+LDFLAGS_LIB := $(LDFLAGS_LIB_S) $(foreach lib,$(LDFLAGS_LIB_F),-l$(lib))
+else
+LDFLAGS_LIB = $(foreach lib,$(LDFLAGS_LIB_INPUT),-l$(lib))
 endif
 
 OBJS_REL = $(sort $(call make_release_objects,$(SOURCES) $(PROTOS) $(THRIFTS)))
@@ -276,7 +296,7 @@ ECHO_PBC = $(ECHO) '   [;35mPROTOC[0m  '
 ECHO_TFT = $(ECHO) '   [;35mTHRIFT[0m  '
 endif
 
-.PHONY: mrproper release debug all clean debug-clean release-clean headers check shell
+.PHONY: mrproper release debug all clean debug-clean release-clean headers check
 .PHONY: release-submakes debug-submakes
 
 release: mrproper release-submakes $(GOAL)

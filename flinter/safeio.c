@@ -51,7 +51,8 @@ static int safe_calculate_timeout(int64_t start, int milliseconds)
     return milliseconds - timeout;
 }
 
-static ssize_t safe_timed_read_ex(int fd, void *buf, size_t count,
+static ssize_t safe_timed_read_ex(int fd, void *buf, size_t count, int flags,
+                                  struct sockaddr *addr, socklen_t *addrlen,
                                   int milliseconds, int all)
 {
     struct pollfd fds;
@@ -115,7 +116,14 @@ static ssize_t safe_timed_read_ex(int fd, void *buf, size_t count,
             return result;
         }
 
-        len = safe_read(fd, ptr, remain);
+        if (addr && addrlen) {
+            len = recvfrom(fd, ptr, remain, flags, addr, addrlen);
+        } else if (flags) {
+            len = recv(fd, ptr, remain, flags);
+        } else {
+            len = read(fd, ptr, remain);
+        }
+
         if (len < 0) {
             if (errno == EINTR || errno == EAGAIN || errno == EWOULDBLOCK) {
                 timeout = safe_calculate_timeout(start, milliseconds);
@@ -157,7 +165,8 @@ static ssize_t safe_timed_read_ex(int fd, void *buf, size_t count,
     return result;
 }
 
-static ssize_t safe_timed_write_ex(int fd, const void *buf, size_t count,
+static ssize_t safe_timed_write_ex(int fd, const void *buf, size_t count, int flags,
+                                   const struct sockaddr *addr, socklen_t addrlen,
                                    int milliseconds, int all)
 {
     struct pollfd fds;
@@ -219,7 +228,14 @@ static ssize_t safe_timed_write_ex(int fd, const void *buf, size_t count,
             return result;
         }
 
-        len = safe_write(fd, ptr, remain);
+        if (addr && addrlen) {
+            len = sendto(fd, ptr, remain, flags, addr, addrlen);
+        } else if (flags) {
+            len = send(fd, ptr, remain, flags);
+        } else {
+            len = write(fd, ptr, remain);
+        }
+
         if (len < 0) {
             if (errno == EINTR || errno == EAGAIN || errno == EWOULDBLOCK) {
                 timeout = safe_calculate_timeout(start, milliseconds);
@@ -335,22 +351,38 @@ int safe_connect(int sockfd, const struct sockaddr *addr, socklen_t addrlen)
 
 ssize_t safe_timed_read(int fd, void *buf, size_t count, int milliseconds)
 {
-    return safe_timed_read_ex(fd, buf, count, milliseconds, 0);
+    return safe_timed_read_ex(fd, buf, count, 0, NULL, NULL, milliseconds, 0);
 }
 
 ssize_t safe_timed_read_all(int fd, void *buf, size_t count, int milliseconds)
 {
-    return safe_timed_read_ex(fd, buf, count, milliseconds, 1);
+    return safe_timed_read_ex(fd, buf, count, 0, NULL, NULL, milliseconds, 1);
+}
+
+ssize_t safe_timed_recvfrom(int fd, void *buf, size_t count, int flags,
+                            struct sockaddr *addr,
+                            socklen_t *addrlen,
+                            int milliseconds)
+{
+    return safe_timed_read_ex(fd, buf, count, flags, addr, addrlen, milliseconds, 0);
 }
 
 ssize_t safe_timed_write(int fd, const void *buf, size_t count, int milliseconds)
 {
-    return safe_timed_write_ex(fd, buf, count, milliseconds, 0);
+    return safe_timed_write_ex(fd, buf, count, 0, NULL, 0, milliseconds, 0);
 }
 
 ssize_t safe_timed_write_all(int fd, const void *buf, size_t count, int milliseconds)
 {
-    return safe_timed_write_ex(fd, buf, count, milliseconds, 1);
+    return safe_timed_write_ex(fd, buf, count, 0, NULL, 0, milliseconds, 1);
+}
+
+ssize_t safe_timed_sendto(int fd, const void *buf, size_t count, int flags,
+                          const struct sockaddr *addr,
+                          socklen_t addrlen,
+                          int milliseconds)
+{
+    return safe_timed_write_ex(fd, buf, count, flags, addr, addrlen, milliseconds, 0);
 }
 
 int safe_timed_accept(int sockfd, struct sockaddr *addr, socklen_t *addrlen, int milliseconds)

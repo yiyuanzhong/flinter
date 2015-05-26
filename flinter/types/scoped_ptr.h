@@ -60,7 +60,7 @@ public:
 private:
     scoped_ptr<T> &operator = (const scoped_ptr<T> &);
     explicit scoped_ptr(const scoped_ptr<T> &);
-    T *_t;
+    T *const _t;
 
 }; // class scoped_ptr
 

@@ -17,6 +17,17 @@
 #define __FLINTER_HASH_H__
 
 #ifdef __cplusplus
+
+#include <stdint.h>
+#include <string>
+
+/**
+ * seed is calculated as (uint32_t)(length * 0xdeadbeef)
+ */
+extern uint32_t hash_murmurhash3(const void *buffer, size_t length);
+extern uint32_t hash_murmurhash3(const std::string &buffer);
+extern uint32_t hash_murmurhash3(const char *buffer);
+
 extern "C" {
 #endif
 

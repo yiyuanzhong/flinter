@@ -13,21 +13,35 @@
  * limitations under the License.
  */
 
-#ifndef __FLINTER_RUNNABLE_H__
-#define __FLINTER_RUNNABLE_H__
+#ifndef __FLINTER_LINKAGE_EASY_TUNER_H__
+#define __FLINTER_LINKAGE_EASY_TUNER_H__
 
 namespace flinter {
 
-class Runnable {
+class EasyTuner {
 public:
-    /// Destructor.
-    virtual ~Runnable() {}
+    virtual ~EasyTuner() {}
 
-    /// Run this runnable, must be implemented.
-    virtual bool Run() = 0;
+    /// Called within job threads right after they start.
+    virtual bool OnJobThreadInitialize()
+    {
+        return true;
+    }
 
-}; // class Runnable
+    /// Called within job threads right before they terminate.
+    virtual void OnJobThreadShutdown() {}
+
+    /// Called within I/O threads right after they start.
+    virtual bool OnIoThreadInitialize()
+    {
+        return true;
+    }
+
+    /// Called within I/O threads right before they terminate.
+    virtual void OnIoThreadShutdown() {}
+
+}; // class EasyTuner
 
 } // namespace flinter
 
-#endif // __FLINTER_RUNNABLE_H__
+#endif // __FLINTER_LINKAGE_EASY_TUNER_H__

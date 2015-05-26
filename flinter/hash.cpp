@@ -13,25 +13,26 @@
  * limitations under the License.
  */
 
-#include "flinter/linkage/easy_context.h"
+#include "flinter/hash.h"
 
-#include "flinter/linkage/linkage.h"
-#include "flinter/object.h"
+#include <string.h>
 
-namespace flinter {
+#include "flinter/MurmurHash3.h"
 
-EasyContext::EasyContext(uint64_t channel, Linkage *linkage)
-        : _channel(channel)
-        , _me(*linkage->me())
-        , _peer(*linkage->peer())
-        , _context(NULL)
+uint32_t hash_murmurhash3(const void *buffer, size_t length)
 {
-    // Intended left blank.
+    const uint32_t seed = static_cast<uint32_t>(length * 0xdeadbeef);
+    uint32_t hash;
+    MurmurHash3_x86_32(buffer, length, seed, &hash);
+    return hash;
 }
 
-EasyContext::~EasyContext()
+uint32_t hash_murmurhash3(const std::string &buffer)
 {
-    delete _context;
+    return hash_murmurhash3(buffer.data(), buffer.length());
 }
 
-} // namespace flinter
+uint32_t hash_murmurhash3(const char *buffer)
+{
+    return hash_murmurhash3(buffer, strlen(buffer));
+}

@@ -24,12 +24,14 @@ namespace flinter {
 
 class Linkage;
 class LinkagePeer;
+class Object;
 
 class EasyContext {
 public:
     typedef uint64_t channel_t;
 
     EasyContext(channel_t channel, Linkage *linkage);
+    ~EasyContext();
 
     channel_t channel() const
     {
@@ -46,10 +48,28 @@ public:
         return _peer;
     }
 
+    Object *context() const
+    {
+        return _context;
+    }
+
+    /// Associate an object to this context which can later be retrieved.
+    /// Object associated will be deleted when this EasyContext is destroyed.
+    /// @param context life span TAKEN, you can use but don't delete it.
+    /// @return pointer of original context.
+    /// @warning not thread safe, think before you use.
+    Object *set_context(Object *context) const
+    {
+        Object *old = _context;
+        _context = context;
+        return old;
+    }
+
 private:
     channel_t _channel;
     LinkagePeer _me;
     LinkagePeer _peer;
+    mutable Object *_context;
 
 }; // class EasyContext
 

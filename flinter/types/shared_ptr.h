@@ -73,8 +73,8 @@ public:
 
 private:
     shared_ptr<T> &operator = (const shared_ptr<T> &);
-    atomic64_t *_c;
-    T *_t;
+    atomic64_t *const _c;
+    T *const _t;
 
 }; // class shared_ptr
 

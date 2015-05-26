@@ -145,7 +145,7 @@ AC_CHECK_HEADERS([sched.h])
 AC_CHECK_HEADERS([unistd.h])
 AC_CHECK_HEADERS([utmp.h])
 
-AC_SEARCH_LIBS([pthread_mutex_lock], [pthread])
+AC_SEARCH_LIBS([pthread_create], [pthread])
 AC_SEARCH_LIBS([clock_gettime], [rt])
 AC_SEARCH_LIBS([libiconv], [iconv])
 

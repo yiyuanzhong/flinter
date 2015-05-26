@@ -32,6 +32,20 @@ extern int32_t atoi32(const char *value);
 extern void randomize(void);
 
 /**
+ * rand() % range can cause slightly unequal distribution.
+ * @return equally distributed integer from [0,range]
+ * @warning range must be lesser or equal to RAND_MAX.
+ */
+extern int ranged_rand(int range);
+
+/**
+ * rand_r() % range can cause slightly unequal distribution.
+ * @return equally distributed integer from [0,range]
+ * @warning range must be lesser or equal to RAND_MAX.
+ */
+extern int ranged_rand_r(int range, unsigned int *seedp);
+
+/**
  * Get wall clock timestamp in nanoseconds since epoch.
  * Don't worry, it won't overflow.
  */

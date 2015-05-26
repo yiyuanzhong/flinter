@@ -43,6 +43,7 @@ include_flinter_HEADERS = babysitter.h \
                           logger.h \
                           mkdirs.h \
                           msleep.h \
+                          object.h \
                           object_pool.h \
                           pidfile.h \
                           pkcs7.h \
@@ -84,6 +85,7 @@ include_thread_HEADERS = thread/abstract_thread_pool.h \
 
 include_linkage_HEADERS = linkage/easy_context.h \
                           linkage/easy_handler.h \
+                          linkage/easy_tuner.h \
                           linkage/easy_server.h \
                           linkage/interface.h \
                           linkage/linkage.h \
@@ -142,10 +144,13 @@ libflinter_la_SOURCES = $(libflinter_core_la_SOURCES) \
                         linkage/resolver.cpp \
                         linkage/ssl_context.cpp \
                         linkage/ssl_linkage.cpp \
+                        MurmurHash3.cpp \
+                        MurmurHash3.h \
                         charset.cpp \
                         convert.cpp \
                         encode.cpp \
                         explode.cpp \
+                        hash.cpp \
                         logger.cpp \
                         trim.cpp
 
@@ -153,7 +158,7 @@ libflinter_la_LIBADD += @JSONCPP_LIBS@
 libflinter_la_LIBADD += @EV_LIBS@
 
 if WITH_OPENSSL
-libflinter_core_la_SOURCES += hash.c pkcs7.c
+libflinter_core_la_SOURCES += hash_c.c pkcs7.c
 libflinter_core_la_LIBADD += ${openssl_LIBS}
 libflinter_la_LIBADD += ${openssl_LIBS}
 endif
@@ -175,12 +180,14 @@ endif
 
 if WITH_ZOOKEEPER
 include_zookeeper_HEADERS = zookeeper/council.h \
+                            zookeeper/naming.h \
                             zookeeper/zookeeper.h \
                             zookeeper/zookeeper_callback.h \
                             zookeeper/zookeeper_tracker.h \
                             zookeeper/zookeeper_watcher.h
 
 libflinter_la_SOURCES += zookeeper/council.cpp \
+                         zookeeper/naming.cpp \
                          zookeeper/zookeeper.cpp \
                          zookeeper/zookeeper_callback.cpp \
                          zookeeper/zookeeper_tracker.cpp \

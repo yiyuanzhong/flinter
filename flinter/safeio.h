@@ -59,6 +59,17 @@ extern int safe_connect(int sockfd, const struct sockaddr *addr, socklen_t addrl
 extern ssize_t safe_timed_read(int fd, void *buf, size_t count, int milliseconds);
 
 /**
+ * read(once) without interrupted by EINTR
+ * @return bytes read. On error (including timed out), -1 is returned, and errno is set
+ *         appropriately.
+ * @warning use with caution: EINTR will be swallowed whether sockfd is blocking or not.
+ */
+extern ssize_t safe_timed_recvfrom(int fd, void *buf, size_t count, int flags,
+                                   struct sockaddr *addr,
+                                   socklen_t *addrlen,
+                                   int milliseconds);
+
+/**
  * write(once) without interrupted by EINTR
  * @return bytes written. On error (including timed out), -1 is returned, and errno is set
  *         appropriately.
@@ -66,6 +77,18 @@ extern ssize_t safe_timed_read(int fd, void *buf, size_t count, int milliseconds
  * @warning use with caution: EINTR will be swallowed whether sockfd is blocking or not.
  */
 extern ssize_t safe_timed_write(int fd, const void *buf, size_t count, int milliseconds);
+
+/**
+ * write(once) without interrupted by EINTR
+ * @return bytes written. On error (including timed out), -1 is returned, and errno is set
+ *         appropriately.
+ * @warning SIGPIPE should be ignored or blocked before calling.
+ * @warning use with caution: EINTR will be swallowed whether sockfd is blocking or not.
+ */
+extern ssize_t safe_timed_sendto(int fd, const void *buf, size_t count, int flags,
+                                 const struct sockaddr *addr,
+                                 socklen_t addrlen,
+                                 int milliseconds);
 
 /**
  * read(all the buffer) without interrupted by EINTR
