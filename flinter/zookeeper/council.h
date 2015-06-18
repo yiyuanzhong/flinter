@@ -79,8 +79,8 @@ public:
     /// @retval Council size.
     long size() const;
 
-    /// After Resign(), the ZooKeeper object can be released.
-    bool Resign();
+    /// After Shutdown(), the ZooKeeper object can be released.
+    bool Shutdown();
 
     // Don't call below explicitly, used internally.
 

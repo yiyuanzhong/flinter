@@ -78,7 +78,11 @@ int Listener::OnReadable(LinkageWorker *worker)
     LinkagePeer me;
     LinkagePeer peer;
     if (!_listener->Accept(&peer, &me)) {
-        if (errno == EAGAIN || errno == EWOULDBLOCK) {
+        if (errno == EINTR          ||
+            errno == EAGAIN         ||
+            errno == EWOULDBLOCK    ||
+            errno == ECONNABORTED   ){
+
             return 1;
         }
 

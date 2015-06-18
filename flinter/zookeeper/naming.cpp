@@ -51,8 +51,8 @@ bool Naming::RemoveNode()
         return false;
     }
 
-    _actual_path.clear();
     LOG(TRACE) << "Naming: removed node [" << _actual_path << "]";
+    _actual_path.clear();
     return true;
 }
 

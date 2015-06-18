@@ -62,7 +62,7 @@ Council::Council() : _zk(NULL)
 
 Council::~Council()
 {
-    Resign();
+    Shutdown();
     delete _zkt;
 }
 
@@ -470,7 +470,7 @@ void Council::Attend()
     }
 }
 
-bool Council::Resign()
+bool Council::Shutdown()
 {
     MutexLocker locker(&_mutex);
 
