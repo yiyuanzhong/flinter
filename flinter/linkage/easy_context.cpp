@@ -15,23 +15,32 @@
 
 #include "flinter/linkage/easy_context.h"
 
+#include "flinter/linkage/easy_handler.h"
 #include "flinter/linkage/linkage.h"
-#include "flinter/object.h"
 
 namespace flinter {
 
-EasyContext::EasyContext(uint64_t channel, Linkage *linkage)
-        : _channel(channel)
-        , _me(*linkage->me())
-        , _peer(*linkage->peer())
-        , _context(NULL)
+EasyContext::EasyContext(EasyServer *easy_server,
+                         EasyHandler *easy_handler,
+                         bool auto_release_handler,
+                         uint64_t channel,
+                         const LinkagePeer &peer,
+                         const LinkagePeer &me)
+        : _easy_server(easy_server)
+        , _easy_handler(easy_handler)
+        , _auto_release_handler(auto_release_handler)
+        , _channel(channel)
+        , _peer(peer)
+        , _me(me)
 {
     // Intended left blank.
 }
 
 EasyContext::~EasyContext()
 {
-    delete _context;
+    if (_auto_release_handler) {
+        delete _easy_handler;
+    }
 }
 
 } // namespace flinter

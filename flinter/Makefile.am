@@ -43,7 +43,7 @@ include_flinter_HEADERS = babysitter.h \
                           logger.h \
                           mkdirs.h \
                           msleep.h \
-                          object.h \
+                          object_map.h \
                           object_pool.h \
                           pidfile.h \
                           pkcs7.h \
@@ -54,6 +54,7 @@ include_flinter_HEADERS = babysitter.h \
                           signals.h \
                           singleton.h \
                           system.h \
+                          timeout_pool.h \
                           trim.h \
                           utility.h \
                           xml.h

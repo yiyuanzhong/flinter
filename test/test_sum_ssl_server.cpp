@@ -70,7 +70,7 @@ public:
                 return s;
             } else if (*p == '\r') {
                 if (s == length) {
-                    return 1;
+                    return 0;
                 }
 
                 if (*(p + 1) == '\n') {

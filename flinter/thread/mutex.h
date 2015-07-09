@@ -31,7 +31,7 @@ public:
     void Lock();                        ///< Lock, not recursive.
     void Unlock();                      ///< Unlock, must be locked.
 
-    bool TryLock();                    ///< Immediately returns.
+    bool TryLock();                     ///< Immediately returns.
 
 private:
     class Context;                      ///< Internally used.

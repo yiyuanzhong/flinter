@@ -219,8 +219,8 @@ int Linkage::OnReceived(const void *buffer, size_t length)
                 return -1;
 
             } else if (ret == 0) {
-                CLOG.Verbose("Linkage: getting message length but instructed "
-                             "to shutdown for fd = %d", _peer->fd());
+                CLOG.Verbose("Linkage: message incomplete, keep receiving "
+                             "for fd = %d", _peer->fd());
 
                 break;
             }

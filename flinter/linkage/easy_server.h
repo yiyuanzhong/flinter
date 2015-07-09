@@ -24,6 +24,7 @@
 #include <string>
 
 #include <flinter/types/unordered_map.h>
+#include <flinter/factory.h>
 #include <flinter/runnable.h>
 
 namespace flinter {
@@ -57,9 +58,7 @@ public:
 
     }; // struct Configure
 
-    /// @param easy_handler life span NOT taken, keep it valid. Can be NULL.
-    /// @param easy_tuner life span NOT taken, keep it valid.
-    explicit EasyServer(EasyHandler *easy_handler, EasyTuner *easy_tuner = NULL);
+    EasyServer();
     virtual ~EasyServer();
 
     /// Call before Initialize().
@@ -69,7 +68,11 @@ public:
 
     /// Call before Initialize().
     /// @param easy_handler life span NOT taken, keep it valid.
-    bool Listen(uint16_t port, EasyHandler *easy_handler = NULL);
+    bool Listen(uint16_t port, EasyHandler *easy_handler);
+
+    /// Call before Initialize().
+    /// @param easy_factory life span NOT taken, keep it valid.
+    bool Listen(uint16_t port, Factory<EasyHandler> *easy_factory);
 
     /// Call before Initialize(), change content directly.
     Configure *configure()
@@ -79,7 +82,10 @@ public:
 
     /// @param slots how many additional I/O threads, typically 1~4.
     /// @param workers how many job threads, 0 to share I/O threads.
-    bool Initialize(size_t slots, size_t workers);
+    /// @param easy_tuner life span NOT taken, keep it valid.
+    bool Initialize(size_t slots,
+                    size_t workers,
+                    EasyTuner *easy_tuner = NULL);
 
     void Disconnect(channel_t channel, bool finish_write = true);
     void Disconnect(const EasyContext &context, bool finish_write = true);
@@ -94,7 +100,14 @@ public:
     /// @sa Forget()
     channel_t ConnectTcp4(const std::string &host,
                           uint16_t port,
-                          EasyHandler *easy_handler = NULL);
+                          EasyHandler *easy_handler);
+
+    /// Allocate channel for outgoing connection.
+    /// Call after Initialize().
+    /// @sa Forget()
+    channel_t ConnectTcp4(const std::string &host,
+                          uint16_t port,
+                          Factory<EasyHandler> *easy_factory);
 
     /// Remove outgoing connection information after disconnected.
     void Forget(channel_t channel);
@@ -162,6 +175,17 @@ private:
     void AppendJob(Runnable *job); // Locked.
     void DoDumpJobs();
 
+    // Locked.
+    bool DoListen(uint16_t port,
+                  EasyHandler *easy_handler,
+                  Factory<EasyHandler> *easy_factory);
+
+    // Locked.
+    channel_t DoConnectTcp4(const std::string &host,
+                            uint16_t port,
+                            EasyHandler *easy_handler,
+                            Factory<EasyHandler> *easy_factory);
+
     LinkageWorker *GetRandomIoWorker() const;
 
     ProxyLinkage *DoReconnect(channel_t channel,
@@ -175,12 +199,9 @@ private:
     std::list<JobWorker *> _job_workers;
     std::list<Listener *> _listeners;
     std::queue<Runnable *> _jobs;
-    ProxyHandler *_proxy_handler;
     size_t _workers;
     size_t _slots;
 
-    EasyHandler *const _easy_handler;
-    EasyTuner *const _easy_tuner;
     FixedThreadPool *const _pool;
     Condition *const _incoming;
     Mutex *const _mutex;
@@ -190,7 +211,6 @@ private:
 
     outgoing_map_t _outgoing_informations;
     channel_map_t _channel_linkages;
-    Mutex *const _channel_mutex;
     Configure _configure;
     channel_t _channel;
 

@@ -50,31 +50,6 @@ const EasyServer::Configure EasyServer::kDefaultConfigure = {
 
 const EasyServer::channel_t EasyServer::kInvalidChannel = 0;
 
-static class DummyHandler : public EasyHandler {
-public:
-    virtual ~DummyHandler() {}
-    virtual ssize_t GetMessageLength(const EasyContext &context,
-                                     const void *buffer,
-                                     size_t length)
-    {
-        return -1;
-    }
-
-    virtual int OnMessage(const EasyContext &context,
-                          const void *buffer,
-                          size_t length)
-    {
-        return -1;
-    }
-
-    virtual bool OnConnected(const EasyContext &context)
-    {
-        LOG(FATAL) << "EasyServer: BUG: no global handler configured.";
-        return false;
-    }
-
-} kStaticDummyHandler; // class DummyHandler
-
 class EasyServer::ProxyLinkageWorker : public LinkageWorker {
 public:
     explicit ProxyLinkageWorker(EasyTuner *tuner) : _tuner(tuner) {}
@@ -104,42 +79,13 @@ private:
 
 }; // class EasyServer::ProxyListener
 
-class EasyServer::ProxyLinkage : public Linkage {
-public:
-    static ProxyLinkage *ConnectTcp4(channel_t channel,
-                                     ProxyHandler *handler,
-                                     const std::string &host,
-                                     uint16_t port);
-
-    virtual ~ProxyLinkage() {}
-    ProxyLinkage(channel_t channel,
-                 LinkageHandler *handler,
-                 const std::string &name)
-            : Linkage(handler, name)
-            , _context(new EasyContext(channel, this)) {}
-
-    ProxyLinkage(channel_t channel,
-                 LinkageHandler *handler,
-                 const LinkagePeer &peer,
-                 const LinkagePeer &me)
-            : Linkage(handler, peer, me)
-            , _context(new EasyContext(channel, this)) {}
-
-    const shared_ptr<EasyContext> &context()
-    {
-        return _context;
-    }
-
-private:
-    const shared_ptr<EasyContext> _context;
-
-}; // class EasyServer::ProxyLinkage
-
 class EasyServer::ProxyHandler : public LinkageHandler {
 public:
     virtual ~ProxyHandler() {}
-    ProxyHandler(EasyServer *easy_server, EasyHandler *easy_handler)
-            : _easy_server(easy_server), _easy_handler(easy_handler) {}
+    ProxyHandler(EasyHandler *easy_handler,
+                 Factory<EasyHandler> *easy_factory)
+            : _easy_handler(easy_handler)
+            , _easy_factory(easy_factory) {}
 
     virtual ssize_t GetMessageLength(Linkage *linkage,
                                      const void *buffer,
@@ -155,11 +101,52 @@ public:
                          bool reading_or_writing,
                          int errnum);
 
+    EasyHandler *easy_handler() const
+    {
+        return _easy_handler;
+    }
+
+    Factory<EasyHandler> *easy_factory() const
+    {
+        return _easy_factory;
+    }
+
 private:
-    EasyServer *const _easy_server;
     EasyHandler *const _easy_handler;
+    Factory<EasyHandler> *const _easy_factory;
 
 }; // class EasyServer::ProxyHandler
+
+class EasyServer::ProxyLinkage : public Linkage {
+public:
+    static ProxyLinkage *ConnectTcp4(EasyContext *context,
+                                     ProxyHandler *handler,
+                                     const std::string &host,
+                                     uint16_t port);
+
+    virtual ~ProxyLinkage() {}
+    ProxyLinkage(EasyContext *context,
+                 ProxyHandler *handler,
+                 const std::string &name)
+            : Linkage(handler, name)
+            , _context(context) {}
+
+    ProxyLinkage(EasyContext *context,
+                 ProxyHandler *handler,
+                 const LinkagePeer &peer,
+                 const LinkagePeer &me)
+            : Linkage(handler, peer, me)
+            , _context(context) {}
+
+    const shared_ptr<EasyContext> &context()
+    {
+        return _context;
+    }
+
+private:
+    const shared_ptr<EasyContext> _context;
+
+}; // class EasyServer::ProxyLinkage
 
 class EasyServer::JobWorker : public Runnable {
 public:
@@ -180,9 +167,7 @@ class EasyServer::JobWorker::Job : public Runnable {
 public:
     /// @param context COWed.
     /// @param buffer copied.
-    Job(EasyServer *server,
-        EasyHandler *handler,
-        const shared_ptr<EasyContext> &context,
+    Job(const shared_ptr<EasyContext> &context,
         const void *buffer, size_t length);
 
     virtual ~Job() {}
@@ -190,19 +175,17 @@ public:
 
 private:
     const shared_ptr<EasyContext> _context;
-    EasyHandler *const _easy_handler;
     const std::string _message;
-    EasyServer *const _server;
 
 }; // class EasyServer::JobWorker::Job
 
 EasyServer::ProxyLinkage *EasyServer::ProxyLinkage::ConnectTcp4(
-        channel_t channel,
+        EasyContext *context,
         ProxyHandler *handler,
         const std::string &host,
         uint16_t port)
 {
-    ProxyLinkage *linkage = new ProxyLinkage(channel, handler, host);
+    ProxyLinkage *linkage = new ProxyLinkage(context, handler, host);
     if (!linkage->DoConnectTcp4(host, port)) {
         delete linkage;
         return NULL;
@@ -229,16 +212,12 @@ void EasyServer::ProxyLinkageWorker::OnShutdown()
     _tuner->OnIoThreadShutdown();
 }
 
-EasyServer::JobWorker::Job::Job(EasyServer *server,
-                                EasyHandler *easy_handler,
-                                const shared_ptr<EasyContext> &context,
+EasyServer::JobWorker::Job::Job(const shared_ptr<EasyContext> &context,
                                 const void *buffer,
                                 size_t length)
         : _context(context)
-        , _easy_handler(easy_handler)
         , _message(reinterpret_cast<const char *>(buffer),
                    reinterpret_cast<const char *>(buffer) + length)
-        , _server(server)
 {
     // Intended left blank.
 }
@@ -248,7 +227,8 @@ ssize_t EasyServer::ProxyHandler::GetMessageLength(Linkage *linkage,
                                                    size_t length)
 {
     ProxyLinkage *l = static_cast<ProxyLinkage *>(linkage);
-    return _easy_handler->GetMessageLength(*l->context(), buffer, length);
+    EasyHandler *h = l->context()->easy_handler();
+    return h->GetMessageLength(*l->context(), buffer, length);
 }
 
 int EasyServer::ProxyHandler::OnMessage(Linkage *linkage,
@@ -256,24 +236,28 @@ int EasyServer::ProxyHandler::OnMessage(Linkage *linkage,
                                         size_t length)
 {
     ProxyLinkage *l = static_cast<ProxyLinkage *>(linkage);
-    JobWorker::Job *job = new JobWorker::Job(_easy_server, _easy_handler,
-                                             l->context(), buffer, length);
+    EasyServer *s = l->context()->easy_server();
 
-    _easy_server->QueueOrExecuteJob(job);
+    JobWorker::Job *job = new JobWorker::Job(l->context(), buffer, length);
+    s->QueueOrExecuteJob(job);
     return 1;
 }
 
 void EasyServer::ProxyHandler::OnDisconnected(Linkage *linkage)
 {
     ProxyLinkage *l = static_cast<ProxyLinkage *>(linkage);
-    _easy_handler->OnDisconnected(*l->context());
-    _easy_server->ReleaseChannel(l->context()->channel());
+    EasyHandler *h = l->context()->easy_handler();
+    EasyServer *s = l->context()->easy_server();
+
+    h->OnDisconnected(*l->context());
+    s->ReleaseChannel(l->context()->channel());
 }
 
 bool EasyServer::ProxyHandler::OnConnected(Linkage *linkage)
 {
     ProxyLinkage *l = static_cast<ProxyLinkage *>(linkage);
-    return _easy_handler->OnConnected(*l->context());
+    EasyHandler *h = l->context()->easy_handler();
+    return h->OnConnected(*l->context());
 }
 
 void EasyServer::ProxyHandler::OnError(Linkage *linkage,
@@ -281,7 +265,8 @@ void EasyServer::ProxyHandler::OnError(Linkage *linkage,
                                        int errnum)
 {
     ProxyLinkage *l = static_cast<ProxyLinkage *>(linkage);
-    return _easy_handler->OnError(*l->context(), reading_or_writing, errnum);
+    EasyHandler *h = l->context()->easy_handler();
+    return h->OnError(*l->context(), reading_or_writing, errnum);
 }
 
 LinkageBase *EasyServer::ProxyListener::CreateLinkage(const LinkagePeer &peer,
@@ -321,64 +306,53 @@ bool EasyServer::JobWorker::Run()
 bool EasyServer::JobWorker::Job::Run()
 {
     LOG(VERBOSE) << "JobWorker: executing [" << this << "]";
-    int ret = _easy_handler->OnMessage(*_context, _message.data(), _message.length());
+    EasyHandler *h = _context->easy_handler();
+    EasyServer *s = _context->easy_server();
+
+    int ret = h->OnMessage(*_context, _message.data(), _message.length());
     if (ret < 0) {
-        _easy_handler->OnError(*_context, true, errno);
-        _server->Disconnect(_context->channel(), false);
+        h->OnError(*_context, true, errno);
+        s->Disconnect(_context->channel(), false);
 
     } else if (ret == 0) {
-        _server->Disconnect(_context->channel(), true);
+        s->Disconnect(_context->channel(), true);
     }
 
     return true;
 }
 
-EasyServer::EasyServer(EasyHandler *easy_handler, EasyTuner *easy_tuner)
-        : _proxy_handler(NULL)
-        , _workers(0)
+EasyServer::EasyServer()
+        : _workers(0)
         , _slots(0)
-        , _easy_handler(easy_handler ? easy_handler : &kStaticDummyHandler)
-        , _easy_tuner(easy_tuner)
         , _pool(new FixedThreadPool)
         , _incoming(new Condition)
         , _mutex(new Mutex)
-        , _channel_mutex(new Mutex)
         , _configure(kDefaultConfigure)
         , _channel(0)
         , _incoming_connections(0)
         , _outgoing_connections(0)
 {
-    assert(_easy_handler);
-    _proxy_handler = new ProxyHandler(this, _easy_handler);
+    // Intended left blank.
 }
 
 EasyServer::~EasyServer()
 {
     Shutdown();
 
-    delete _proxy_handler;
     delete _pool;
-
-    delete _incoming;
-    delete _channel_mutex;
     delete _mutex;
+    delete _incoming;
 }
 
-bool EasyServer::Listen(uint16_t port, EasyHandler *easy_handler)
+bool EasyServer::DoListen(uint16_t port,
+                          EasyHandler *easy_handler,
+                          Factory<EasyHandler> *easy_factory)
 {
     MutexLocker locker(_mutex);
-    if (!easy_handler && _easy_handler == &kStaticDummyHandler) {
-        LOG(FATAL) << "EasyServer: BUG: no global handler configured.";
-        return false;
-    }
+    ProxyHandler *proxy_handler = new ProxyHandler(easy_handler,
+                                                   easy_factory);
 
-    ProxyHandler *proxy_handler = NULL;
-    if (easy_handler) {
-        proxy_handler = new ProxyHandler(this, easy_handler);
-    }
-
-    Listener *listener = new ProxyListener(this, proxy_handler ? proxy_handler
-                                                               : _proxy_handler);
+    Listener *listener = new ProxyListener(this, proxy_handler);
 
     if (!listener->ListenTcp4(port, false)) {
         delete proxy_handler;
@@ -386,12 +360,29 @@ bool EasyServer::Listen(uint16_t port, EasyHandler *easy_handler)
         return false;
     }
 
-    if (proxy_handler) {
-        _proxy_handlers.push_back(proxy_handler);
-    }
-
+    _proxy_handlers.push_back(proxy_handler);
     _listeners.push_back(listener);
     return true;
+}
+
+bool EasyServer::Listen(uint16_t port, EasyHandler *easy_handler)
+{
+    if (!easy_handler) {
+        LOG(FATAL) << "EasyServer: BUG: no handler configured.";
+        return false;
+    }
+
+    return DoListen(port, easy_handler, NULL);
+}
+
+bool EasyServer::Listen(uint16_t port, Factory<EasyHandler> *easy_factory)
+{
+    if (!easy_factory) {
+        LOG(FATAL) << "EasyServer: BUG: no handler factory configured.";
+        return false;
+    }
+
+    return DoListen(port, NULL, easy_factory);
 }
 
 bool EasyServer::RegisterTimer(int64_t interval, Runnable *timer)
@@ -405,7 +396,9 @@ bool EasyServer::RegisterTimer(int64_t interval, Runnable *timer)
     return true;
 }
 
-bool EasyServer::Initialize(size_t slots, size_t workers)
+bool EasyServer::Initialize(size_t slots,
+                            size_t workers,
+                            EasyTuner *easy_tuner)
 {
     if (!slots) {
         return false;
@@ -419,7 +412,7 @@ bool EasyServer::Initialize(size_t slots, size_t workers)
     }
 
     for (size_t i = 0; i < slots; ++i) {
-        LinkageWorker *worker = new ProxyLinkageWorker(_easy_tuner);
+        LinkageWorker *worker = new ProxyLinkageWorker(easy_tuner);
         _io_workers.push_back(worker);
 
         if (!AttachListeners(worker)        ||
@@ -432,7 +425,7 @@ bool EasyServer::Initialize(size_t slots, size_t workers)
     }
 
     for (size_t i = 0; i < workers; ++i) {
-        JobWorker *worker = new JobWorker(this, _easy_tuner);
+        JobWorker *worker = new JobWorker(this, easy_tuner);
         _job_workers.push_back(worker);
 
         if (!_pool->AppendJob(worker, true)) {
@@ -558,7 +551,7 @@ Linkage *EasyServer::AllocateChannel(const LinkagePeer &peer,
                                      const LinkagePeer &me,
                                      ProxyHandler *proxy_handler)
 {
-    MutexLocker locker(_channel_mutex);
+    MutexLocker locker(_mutex);
     if (_incoming_connections >= _configure.maximum_incoming_connections) {
         LOG(VERBOSE) << "EasyServer: incoming connections over limit: "
                      << _configure.maximum_incoming_connections;
@@ -569,7 +562,16 @@ Linkage *EasyServer::AllocateChannel(const LinkagePeer &peer,
     channel_t channel = AllocateChannel(true);
     ++_incoming_connections;
 
-    ProxyLinkage *linkage = new ProxyLinkage(channel, proxy_handler, peer, me);
+    EasyHandler *h = proxy_handler->easy_handler();
+    Factory<EasyHandler> *f = proxy_handler->easy_factory();
+    if (f) {
+        h = f->Create();
+    }
+
+    EasyContext *context = new EasyContext(this, h, f ? true : false,
+                                           channel, peer, me);
+
+    ProxyLinkage *linkage = new ProxyLinkage(context, proxy_handler, peer, me);
     linkage->set_receive_timeout(_configure.incoming_receive_timeout);
     linkage->set_send_timeout(_configure.incoming_send_timeout);
     linkage->set_idle_timeout(_configure.incoming_idle_timeout);
@@ -581,7 +583,7 @@ Linkage *EasyServer::AllocateChannel(const LinkagePeer &peer,
 
 void EasyServer::ReleaseChannel(channel_t channel)
 {
-    MutexLocker locker(_channel_mutex);
+    MutexLocker locker(_mutex);
     _channel_linkages.erase(channel);
     if (IsOutgoingChannel(channel)) {
         --_outgoing_connections;
@@ -605,7 +607,7 @@ void EasyServer::QueueOrExecuteJob(Runnable *job)
 
 void EasyServer::Forget(channel_t channel)
 {
-    MutexLocker locker(_channel_mutex);
+    MutexLocker locker(_mutex);
     _outgoing_informations.erase(channel);
 }
 
@@ -622,6 +624,7 @@ void EasyServer::Disconnect(channel_t channel, bool finish_write)
         return;
     }
 
+    // TODO(yiyuanzhong): incorrect, should pass the signal to I/O threads.
     ProxyLinkage *linkage = p->second;
     linkage->Disconnect(finish_write);
 }
@@ -679,12 +682,25 @@ EasyServer::ProxyLinkage *EasyServer::DoReconnect(
         channel_t channel,
         const OutgoingInformation &info)
 {
-    ProxyLinkage *linkage = ProxyLinkage::ConnectTcp4(
-            channel, info.proxy_handler(), info.host(), info.port());
+    EasyHandler *h = info.proxy_handler()->easy_handler();
+    Factory<EasyHandler> *f = info.proxy_handler()->easy_factory();
+    if (f) {
+        h = f->Create();
+    }
+
+    EasyContext *context = new EasyContext(this, h, f ? true : false, channel);
+    ProxyLinkage *linkage = ProxyLinkage::ConnectTcp4(context,
+                                                      info.proxy_handler(),
+                                                      info.host(),
+                                                      info.port());
 
     if (!linkage) {
+        delete context;
         return NULL;
     }
+
+    context->set_peer(*linkage->peer());
+    context->set_me(*linkage->me());
 
     LinkageWorker *worker = GetRandomIoWorker();
     if (!linkage->Attach(worker)) {
@@ -701,24 +717,17 @@ EasyServer::ProxyLinkage *EasyServer::DoReconnect(
     return linkage;
 }
 
-EasyServer::channel_t EasyServer::ConnectTcp4(const std::string &host,
-                                              uint16_t port,
-                                              EasyHandler *easy_handler)
+EasyServer::channel_t EasyServer::DoConnectTcp4(
+        const std::string &host,
+        uint16_t port,
+        EasyHandler *easy_handler,
+        Factory<EasyHandler> *easy_factory)
 {
-    assert(channel);
     MutexLocker locker(_mutex);
-    if (!easy_handler && _easy_handler == &kStaticDummyHandler) {
-        LOG(FATAL) << "EasyServer: BUG: no global handler configured.";
-        return kInvalidChannel;
-    }
+    ProxyHandler *proxy_handler = new ProxyHandler(easy_handler,
+                                                   easy_factory);
 
-    ProxyHandler *proxy_handler = NULL;
-    if (easy_handler) {
-        proxy_handler = new ProxyHandler(this, easy_handler);
-    }
-
-    OutgoingInformation info(proxy_handler ? proxy_handler : _proxy_handler,
-                             host, port);
+    OutgoingInformation info(proxy_handler, host, port);
 
     channel_t c = AllocateChannel(false);
     ProxyLinkage *linkage = DoReconnect(c, info);
@@ -727,12 +736,35 @@ EasyServer::channel_t EasyServer::ConnectTcp4(const std::string &host,
         return kInvalidChannel;
     }
 
-    if (proxy_handler) {
-        _proxy_handlers.push_back(proxy_handler);
+    _outgoing_informations.insert(std::make_pair(c, info));
+    _proxy_handlers.push_back(proxy_handler);
+    return c;
+}
+
+EasyServer::channel_t EasyServer::ConnectTcp4(
+        const std::string &host,
+        uint16_t port,
+        EasyHandler *easy_handler)
+{
+    if (!easy_handler) {
+        LOG(FATAL) << "EasyServer: BUG: no handler configured.";
+        return kInvalidChannel;
     }
 
-    _outgoing_informations.insert(std::make_pair(c, info));
-    return c;
+    return DoConnectTcp4(host, port, easy_handler, NULL);
+}
+
+EasyServer::channel_t EasyServer::ConnectTcp4(
+        const std::string &host,
+        uint16_t port,
+        Factory<EasyHandler> *easy_factory)
+{
+    if (!easy_factory) {
+        LOG(FATAL) << "EasyServer: BUG: no handler factory configured.";
+        return kInvalidChannel;
+    }
+
+    return DoConnectTcp4(host, port, NULL, easy_factory);
 }
 
 EasyServer::channel_t EasyServer::AllocateChannel(bool incoming_or_outgoing)

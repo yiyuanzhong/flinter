@@ -48,10 +48,10 @@ int main()
 
     Handler handler1("1");
     Handler handler2("2");
-    flinter::EasyServer s(&handler1);
+    flinter::EasyServer s;
     g_server = &s;
 
-    if (!s.Listen(5566)) {
+    if (!s.Listen(5566, &handler1)) {
         return EXIT_FAILURE;
     }
 

@@ -27,7 +27,7 @@ public:
 
 }; // class Factory
 
-template <class T, class Impl>
+template <class T, class Impl = T>
 class FactoryDirect : public Factory<T> {
 public:
     FactoryDirect() {}
@@ -39,7 +39,7 @@ public:
 
 }; // class FactoryDirect
 
-template <class T, class Impl>
+template <class T, class Impl = T>
 class FactoryIndirect : public Factory<T> {
 public:
     FactoryIndirect() {}

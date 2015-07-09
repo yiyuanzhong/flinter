@@ -336,8 +336,8 @@ void LinkageWorker::DoRelease(struct client_t *client, bool erase_container)
         _events.erase(p);
     }
 
+    client->linkage->OnDisconnected();
     if (client->auto_release) {
-        client->linkage->OnDisconnected();
         CLOG.Verbose("Linkage: closed linkage [%p], auto released.", client->linkage);
         delete client->linkage;
     } else {

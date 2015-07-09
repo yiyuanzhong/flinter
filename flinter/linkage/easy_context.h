@@ -22,16 +22,31 @@
 
 namespace flinter {
 
-class Linkage;
-class LinkagePeer;
-class Object;
+class EasyHandler;
+class EasyServer;
 
 class EasyContext {
 public:
     typedef uint64_t channel_t;
 
-    EasyContext(channel_t channel, Linkage *linkage);
+    EasyContext(EasyServer *easy_server,
+                EasyHandler *easy_handler,
+                bool auto_release_handler,
+                channel_t channel,
+                const LinkagePeer &peer = LinkagePeer(),
+                const LinkagePeer &me = LinkagePeer());
+
     ~EasyContext();
+
+    EasyServer *easy_server() const
+    {
+        return _easy_server;
+    }
+
+    EasyHandler *easy_handler() const
+    {
+        return _easy_handler;
+    }
 
     channel_t channel() const
     {
@@ -48,28 +63,23 @@ public:
         return _peer;
     }
 
-    Object *context() const
+    void set_peer(const LinkagePeer &peer)
     {
-        return _context;
+        _peer = peer;
     }
 
-    /// Associate an object to this context which can later be retrieved.
-    /// Object associated will be deleted when this EasyContext is destroyed.
-    /// @param context life span TAKEN, you can use but don't delete it.
-    /// @return pointer of original context.
-    /// @warning not thread safe, think before you use.
-    Object *set_context(Object *context) const
+    void set_me(const LinkagePeer &me)
     {
-        Object *old = _context;
-        _context = context;
-        return old;
+        _me = me;
     }
 
 private:
+    EasyServer *_easy_server;
+    EasyHandler *_easy_handler;
+    bool _auto_release_handler;
     channel_t _channel;
-    LinkagePeer _me;
     LinkagePeer _peer;
-    mutable Object *_context;
+    LinkagePeer _me;
 
 }; // class EasyContext
 

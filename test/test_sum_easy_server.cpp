@@ -5,31 +5,25 @@
 #include <flinter/linkage/easy_handler.h>
 #include <flinter/linkage/easy_server.h>
 
+#include <flinter/thread/mutex.h>
+#include <flinter/thread/mutex_locker.h>
+
 #include <flinter/logger.h>
 #include <flinter/msleep.h>
-#include <flinter/object.h>
 #include <flinter/signals.h>
-
-static flinter::EasyServer *g_server;
-
-class I : public flinter::Object {
-public:
-    I() : _i(0) {}
-    int Add(int i)
-    {
-        _i += i;
-        return _i;
-    }
-
-private:
-    int _i;
-
-}; // class Add
 
 class Handler : public flinter::EasyHandler {
 public:
-    explicit Handler(const std::string &id) : _id(id) {}
-    virtual ~Handler() {}
+    explicit Handler(const std::string &id) : _id(id), _i(0)
+    {
+        LOG(INFO) << "Handler::Handler(" << _id << "): " << this;
+    }
+
+    virtual ~Handler()
+    {
+        LOG(INFO) << "Handler::~Handler(" << _id << "): " << this;
+    }
+
     virtual ssize_t GetMessageLength(const flinter::EasyContext &context,
                                      const void *buffer,
                                      size_t length)
@@ -50,7 +44,7 @@ public:
                 return s;
             } else if (*p == '\r') {
                 if (s == length) {
-                    return 1;
+                    return 0;
                 }
 
                 if (*(p + 1) == '\n') {
@@ -68,6 +62,7 @@ public:
                           const void *buffer, size_t length)
     {
         const char *buf = reinterpret_cast<const char *>(buffer);
+        flinter::EasyServer *server = context.easy_server();
 
         printf("MSG ");
         for (size_t i = 0; i < length; ++i) {
@@ -77,55 +72,80 @@ public:
 
         int n = atoi(buf);
         if (n == 0) {
-            if (!g_server->Send(context, "QUIT\r\n", 6)) {
+            if (!server->Send(context, "QUIT\r\n", 6)) {
                 return -1;
             }
 
-            g_server->Disconnect(context);
+            server->Disconnect(context);
             return 1;
         }
 
-        I *i = static_cast<I *>(context.context());
-        int total = i->Add(n);
+        int total = Add(n);
+
         std::ostringstream s;
-        s << total << "\n";
+        s << "Sum: " << total << "\n";
         std::string str = s.str();
-        if (!g_server->Send(context, str.data(), str.length())) {
+        if (!server->Send(context, str.data(), str.length())) {
             return -1;
         }
 
         return 1;
     }
 
-    virtual bool OnConnected(const flinter::EasyContext &context)
+    int Add(int n)
     {
-        context.set_context(new I);
-        return true;
+        // If all connections share a single Handler, we lock.
+        //
+        // If each connection has its own Handler, we still lock, because two
+        // job threads might process two messages belonging to one connection
+        // simutaneously.
+        //
+        flinter::MutexLocker locker(&_mutex);
+        _i += n;
+        return _i;
+    }
+
+private:
+    flinter::Mutex _mutex;
+    std::string _id;
+    int _i;
+
+}; // class Handler
+
+class Factory : public flinter::Factory<flinter::EasyHandler> {
+public:
+    explicit Factory(const std::string &id) : _id(id) {}
+    virtual ~Factory() {}
+
+    virtual flinter::EasyHandler *Create() const
+    {
+        return new Handler(_id);
     }
 
 private:
     std::string _id;
 
-}; // class Handler
+}; // class Factory
 
 int main()
 {
     flinter::Logger::SetFilter(flinter::Logger::kLevelVerbose);
     signals_ignore(SIGPIPE);
 
-    Handler handler1("1");
-    Handler handler2("2");
-    flinter::EasyServer s(&handler1);
-    g_server = &s;
+    Factory factory("1");
+    Handler handler("2");
+    flinter::EasyServer s;
 
     flinter::EasyServer::Configure *c = s.configure();
     c->maximum_incoming_connections = 10;
 
-    if (!s.Listen(5566)) {
+    // Factory mode, each connection has its own Handler.
+    if (!s.Listen(5566, &factory)) {
         return EXIT_FAILURE;
     }
 
-    if (!s.Listen(5567, &handler2)) {
+    // Handler mode, all connections share a single Handler.
+    if (!s.Listen(5567, &handler)) {
         return EXIT_FAILURE;
     }
 

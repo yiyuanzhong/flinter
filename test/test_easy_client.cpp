@@ -37,13 +37,13 @@ int main()
     signals_ignore(SIGPIPE);
 
     Handler handler;
-    flinter::EasyServer s(&handler);
+    flinter::EasyServer s;
 
     if (!s.Initialize(3, 7)) {
         return EXIT_FAILURE;
     }
 
-    uint64_t channel = s.ConnectTcp4("127.0.0.1", 5577);
+    uint64_t channel = s.ConnectTcp4("127.0.0.1", 5577, &handler);
     if (!channel) {
         return EXIT_FAILURE;
     }
