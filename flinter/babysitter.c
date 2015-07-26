@@ -53,17 +53,19 @@ static int babysitter_suck_fd(int fd)
 {
     char buffer[128];
     ssize_t ret;
+    int r;
 
+    r = 0;
     for (;;) {
         ret = safe_read(fd, buffer, sizeof(buffer));
         if (ret < 0) {
-            return errno == EAGAIN ? 0 : -1;
+            return errno == EAGAIN ? r : -1;
         } else if (ret == 0) {
             return -1;
         }
-    }
 
-    return 1;
+        r = 1;
+    }
 }
 
 static void babysitter_dump_signals(void)
@@ -367,7 +369,8 @@ int babysitter_spawn(const babysitter_configure_t *configure)
 
         if (configure->restart_times) {
             ++times;
-            if (times >= configure->restart_times) {
+            /* The first spawn is not counted as "restart" so add 1 here. */
+            if (times > configure->restart_times) {
                 _exit(EXIT_FAILURE);
             }
         }

@@ -15,8 +15,10 @@
 
 #include "flinter/types/tree.h"
 
+#include <stdio.h>
 #include <string.h>
 
+#include <algorithm>
 #include <ostream>
 #include <sstream>
 
@@ -50,6 +52,37 @@ DEFINE_AS(unsigned short      , ushort );
 DEFINE_AS(unsigned int        , uint   );
 DEFINE_AS(unsigned long       , ulong  );
 DEFINE_AS(unsigned long long  , ullong );
+
+template <>
+bool Tree::as<bool>(const bool &defval) const
+{
+    return ParseBool(_value, defval);
+}
+
+template <>
+bool Tree::key_as<bool>(const bool &defval) const
+{
+    return ParseBool(_key, defval);
+}
+
+bool Tree::ParseBool(const std::string &value, bool defval)
+{
+    std::string v(value);
+    std::transform(v.begin(), v.end(), v.begin(), ::tolower);
+    if (v.compare("true") == 0 ||
+        v.compare("1")    == 0 ){
+
+        return true;
+
+    } else if (v.compare("false") == 0 ||
+               v.compare("0")     == 0 ){
+
+        return false;
+
+    } else {
+        return defval;
+    }
+}
 
 const char *Tree::as(const char *defval) const
 {

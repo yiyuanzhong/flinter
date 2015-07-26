@@ -39,3 +39,11 @@ TEST(AtomicTest, TestIncrease)
     EXPECT_EQ(adder._a.Get(), 10000000u);
     printf("%lu: %lu\n", adder._a.Get(), adder._b);
 }
+
+TEST(AtomicTest, TestCAS)
+{
+    flinter::atomic64_t a;
+    ASSERT_EQ(a.CompareAndSwap(0, 1), 0);
+    ASSERT_EQ(a.CompareAndSwap(0, 1), 1);
+    ASSERT_EQ(a.CompareAndSwap(0, 1), 1);
+}

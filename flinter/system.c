@@ -402,13 +402,13 @@ int pclose_timed(struct __popen_t *handle, int timeout)
     return wait_for_child_or_kill(pid, 0, deadline);
 }
 
-pid_t waitpid_timed(pid_t pid, int *start_loc, int options, int timeout)
+pid_t waitpid_timed(pid_t pid, int *status, int options, int timeout)
 {
     int64_t deadline;
     int ret;
 
     if (timeout < 0) {
-        return waitpid(pid, start_loc, options);
+        return waitpid(pid, status, options);
     }
 
     deadline = get_deadline(timeout);
@@ -421,7 +421,10 @@ pid_t waitpid_timed(pid_t pid, int *start_loc, int options, int timeout)
         return -1;
     }
 
-    *start_loc = ret;
+    if (status) {
+        *status = ret;
+    }
+
     return pid;
 }
 

@@ -67,12 +67,14 @@ extern int pclose_timed(popen_t handle, int timeout);
 
 /**
  * If you fork(2) or clone(2) a child, you can wait for or to kill it.
- * @param string command to executor
+ * @param pid to wait for.
+ * @param status store exit status, can be NULL.
+ * @param options for waiting.
  * @param timeout in milliseconds, <0 for infinite.
  * @return same as waitpid(2), but you'll see SIGKILL returned if timed out.
  * @warning don't set SIGCHLD to SIG_IGN since SIGKILL might be sent to wrong process.
  */
-extern pid_t waitpid_timed(pid_t pid, int *start_loc, int options, int timeout);
+extern pid_t waitpid_timed(pid_t pid, int *status, int options, int timeout);
 
 #ifdef __cplusplus
 }

@@ -61,7 +61,6 @@ public:
     EasyServer();
     virtual ~EasyServer();
 
-    /// Call before Initialize().
     /// @param interval nanoseconds.
     /// @param timer will be released after executed.
     bool RegisterTimer(int64_t interval, Runnable *timer);
@@ -96,14 +95,12 @@ public:
     bool Send(const EasyContext &context, const void *buffer, size_t length);
 
     /// Allocate channel for outgoing connection.
-    /// Call after Initialize().
     /// @sa Forget()
     channel_t ConnectTcp4(const std::string &host,
                           uint16_t port,
                           EasyHandler *easy_handler);
 
     /// Allocate channel for outgoing connection.
-    /// Call after Initialize().
     /// @sa Forget()
     channel_t ConnectTcp4(const std::string &host,
                           uint16_t port,
@@ -124,37 +121,20 @@ public:
         return !!(channel & 0x8000000000000000ull);
     }
 
-    static bool IsInvalidChannel(channel_t channel)
+    static bool IsValidChannel(channel_t channel)
     {
-        return channel == 0;
+        return channel != kInvalidChannel;
     }
 
     static const channel_t kInvalidChannel;
 
 private:
+    class OutgoingInformation;
     class ProxyLinkageWorker;
     class ProxyListener;
     class ProxyLinkage;
     class ProxyHandler;
     class JobWorker;
-
-    class OutgoingInformation {
-    public:
-        OutgoingInformation(ProxyHandler *proxy_handler,
-                            const std::string &host,
-                            uint16_t port) : _proxy_handler(proxy_handler)
-                                           , _host(host), _port(port) {}
-
-        ProxyHandler *proxy_handler() const { return _proxy_handler; }
-        const std::string &host() const     { return _host;          }
-        uint16_t port() const               { return _port;          }
-
-    private:
-        ProxyHandler *_proxy_handler;
-        std::string _host;
-        uint16_t _port;
-
-    }; // class OutgoingInformation
 
     // Locked.
     void ReleaseChannel(channel_t channel);
@@ -189,7 +169,7 @@ private:
     LinkageWorker *GetRandomIoWorker() const;
 
     ProxyLinkage *DoReconnect(channel_t channel,
-                              const OutgoingInformation &info);
+                              const OutgoingInformation *info);
 
     static const Configure kDefaultConfigure;
 
@@ -206,7 +186,7 @@ private:
     Condition *const _incoming;
     Mutex *const _mutex;
 
-    typedef std::unordered_map<channel_t, OutgoingInformation> outgoing_map_t;
+    typedef std::unordered_map<channel_t, OutgoingInformation *> outgoing_map_t;
     typedef std::unordered_map<channel_t, ProxyLinkage *> channel_map_t;
 
     outgoing_map_t _outgoing_informations;

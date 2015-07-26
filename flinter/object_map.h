@@ -16,12 +16,15 @@
 #ifndef __FLINTER_OBJECT_MAP_H__
 #define __FLINTER_OBJECT_MAP_H__
 
+#include <assert.h>
+
 #include <algorithm>
 #include <map>
 #include <set>
 #include <vector>
 
-#include <flinter/factory.h>
+#include <flinter/thread/mutex.h>
+#include <flinter/thread/mutex_locker.h>
 #include <flinter/utility.h>
 
 namespace flinter {
@@ -29,43 +32,67 @@ namespace flinter {
 template <class K, class T>
 class ObjectMap {
 public:
-    /// @param object_factory life span taken, don't use it any more.
-    explicit ObjectMap(Factory<T> *object_factory);
     virtual ~ObjectMap();
 
     /// Might rewind GetNext().
     void SetAll(const std::set<K> &keys);
+    void EraseAll();
 
     /// Might rewind GetNext().
     void Erase(const K &key);
 
     /// Might rewind GetNext().
+    /// Subclasses must call this in their deconstructors.
     void Clear();
 
     /// Create or get object.
+    /// Increases reference count.
     /// Might rewind GetNext().
+    /// @warning might return NULL.
     T *Add(const K &key);
 
     /// Get object specified by key.
-    T *Get(const K &key) const;
+    /// Increases reference count.
+    /// @warning might return NULL.
+    T *Get(const K &key);
 
     /// Get a random object.
-    /// This method is of low efficiency, avoid it.
-    T *GetRandom() const;
+    /// Increases reference count.
+    /// @warning might return NULL.
+    /// @warning low efficiency.
+    T *GetRandom();
 
     /// Get objects in order.
+    /// Increases reference count.
+    /// @warning might return NULL.
     T *GetNext();
 
+    /// Decreases reference count.
+    /// Objects no longer in the map with 0 reference count will be released.
+    void Release(const K &key);
+
+    size_t size() const;
+
+protected:
+    virtual void Destroy(T *object) = 0;
+    virtual T *Create(const K &key) = 0;
+    ObjectMap();
+
 private:
-    typename std::map<K, T *>::const_iterator _ptr;
-    std::map<K, T *> _map;
-    Factory<T> *_factory;
+    void DoErase(const K &key);
+    T *DoAdd(const K &key);
+
+    mutable Mutex _mutex;
+    typedef std::pair<T *, size_t> V;
+    typename std::map<K, V>::iterator _ptr;
+    std::map<K, V> _drop;
+    std::map<K, V> _map;
 
 }; // class ObjectMap
 
 template <class K, class T>
-inline ObjectMap<K, T>::ObjectMap(Factory<T> *object_factory)
-        : _ptr(_map.end()), _factory(object_factory)
+inline ObjectMap<K, T>::ObjectMap()
+        : _ptr(_map.end())
 {
     // Intended left blank.
 }
@@ -73,32 +100,59 @@ inline ObjectMap<K, T>::ObjectMap(Factory<T> *object_factory)
 template <class K, class T>
 inline ObjectMap<K, T>::~ObjectMap()
 {
-    Clear();
+    assert(_map.empty());
+}
+
+template <class K, class T>
+inline size_t ObjectMap<K, T>::size() const
+{
+    MutexLocker locker(&_mutex);
+    return _map.size() + _drop.size();
 }
 
 template <class K, class T>
 inline void ObjectMap<K, T>::Clear()
 {
-    for (typename std::map<K, T *>::iterator
+    MutexLocker locker(&_mutex);
+    for (typename std::map<K, V>::iterator
+         p = _drop.begin(); p != _drop.end(); ++p) {
+
+        Destroy(p->second.first);
+    }
+
+    for (typename std::map<K, V>::iterator
          p = _map.begin(); p != _map.end(); ++p) {
 
-        delete p->second;
+        Destroy(p->second.first);
     }
 
     _map.clear();
+    _drop.clear();
     _ptr = _map.end();
 }
 
 template <class K, class T>
 inline T *ObjectMap<K, T>::Add(const K &key)
 {
-    typename std::map<K, T *>::iterator p = _map.find(key);
+    MutexLocker locker(&_mutex);
+    return DoAdd(key);
+}
+
+template <class K, class T>
+inline T *ObjectMap<K, T>::DoAdd(const K &key)
+{
+    typename std::map<K, V>::iterator p = _map.find(key);
     if (p != _map.end()) {
-        return p->second;
+        ++p->second.second;
+        return p->second.first;
     }
 
-    T *object = _factory->Create();
-    _map.insert(std::make_pair(key, object));
+    T *object = Create(key);
+    if (!object) {
+        return NULL;
+    }
+
+    _map.insert(std::make_pair(key, V(object, 1)));
     _ptr = _map.end();
     return object;
 }
@@ -106,28 +160,83 @@ inline T *ObjectMap<K, T>::Add(const K &key)
 template <class K, class T>
 inline void ObjectMap<K, T>::Erase(const K &key)
 {
-    typename std::map<K, T *>::iterator p = _map.find(key);
+    MutexLocker locker(&_mutex);
+    DoErase(key);
+}
+
+template <class K, class T>
+inline void ObjectMap<K, T>::DoErase(const K &key)
+{
+    typename std::map<K, V>::iterator p = _map.find(key);
+    if (p == _map.end()) {
+        return;
+    }
+
+    if (!p->second.second) {
+        Destroy(p->second.first);
+    } else {
+        _drop.insert(*p);
+    }
+
+    _map.erase(p);
+    _ptr = _map.end();
+}
+
+template <class K, class T>
+inline void ObjectMap<K, T>::EraseAll()
+{
+    MutexLocker locker(&_mutex);
+    for (typename std::map<K, V>::iterator p = _map.begin();
+         p != _map.end(); ++p) {
+
+        if (!p->second.second) {
+            Destroy(p->second.first);
+        } else {
+            _drop.insert(*p);
+        }
+    }
+
+    _map.clear();
+    _ptr = _map.end();
+}
+
+template <class K, class T>
+inline void ObjectMap<K, T>::Release(const K &key)
+{
+    MutexLocker locker(&_mutex);
+    typename std::map<K, V>::iterator p = _map.find(key);
     if (p != _map.end()) {
-        delete p->second;
-        _map.erase(p);
-        _ptr = _map.end();
+        --p->second.second;
+        return;
+    }
+
+    p = _drop.find(key);
+    if (p != _drop.end()) {
+        --p->second.second;
+        if (!p->second.second) {
+            Destroy(p->second.first);
+            _drop.erase(p);
+        }
     }
 }
 
 template <class K, class T>
-inline T *ObjectMap<K, T>::Get(const K &key) const
+inline T *ObjectMap<K, T>::Get(const K &key)
 {
-    typename std::map<K, T *>::const_iterator p = _map.find(key);
+    MutexLocker locker(&_mutex);
+    typename std::map<K, V>::iterator p = _map.find(key);
     if (p == _map.end()) {
         return NULL;
     }
 
-    return p->second;
+    ++p->second.second;
+    return p->second.first;
 }
 
 template <class K, class T>
 inline T *ObjectMap<K, T>::GetNext()
 {
+    MutexLocker locker(&_mutex);
     if (_map.empty()) {
         return NULL;
     }
@@ -140,13 +249,15 @@ inline T *ObjectMap<K, T>::GetNext()
         _ptr = _map.begin();
     }
 
-    return _ptr->second;
+    ++_ptr->second.second;
+    return _ptr->second.first;
 }
 
 template <class K, class T>
-inline T *ObjectMap<K, T>::GetRandom() const
+inline T *ObjectMap<K, T>::GetRandom()
 {
-    typename std::map<K, T *>::const_iterator p = _map.begin();
+    MutexLocker locker(&_mutex);
+    typename std::map<K, T *>::iterator p = _map.begin();
     if (p == _map.end()) {
         return NULL;
     }
@@ -156,22 +267,24 @@ inline T *ObjectMap<K, T>::GetRandom() const
         std::advance(p, index);
     }
 
-    return p->second;
+    ++p->second.second;
+    return p->second.first;
 }
 
 template <class K, class T>
 inline void ObjectMap<K, T>::SetAll(const std::set<K> &keys)
 {
+    MutexLocker locker(&_mutex);
     for (typename std::set<K>::const_iterator
          p = keys.begin(); p != keys.end(); ++p) {
 
         if (_map.find(*p) == _map.end()) {
-            Add(*p);
+            DoAdd(*p);
         }
     }
 
     std::vector<K> gone;
-    for (typename std::map<K, T *>::const_iterator
+    for (typename std::map<K, V>::iterator
          p = _map.begin(); p != _map.end(); ++p) {
 
         if (keys.find(p->first) == keys.end()) {
@@ -182,7 +295,7 @@ inline void ObjectMap<K, T>::SetAll(const std::set<K> &keys)
     for (typename std::vector<K>::const_iterator
          p = gone.begin(); p != gone.end(); ++p) {
 
-        Erase(*p);
+        DoErase(*p);
     }
 }
 

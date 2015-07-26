@@ -94,7 +94,8 @@ Linkage::connect_t *Linkage::PrepareToConnect(const std::string &name)
 bool Linkage::DoConnectTcp4(const std::string &host, uint16_t port)
 {
     Interface *i = _connect->interface;
-    if (!i->ConnectTcp4(host, port, _peer, _me)) {
+    int ret = i->ConnectTcp4(host, port, _peer, _me);
+    if (ret < 0) {
         CLOG.Warn("Linkage: failed to initiate connection to [%s]: %d: %s",
                   host.c_str(), errno, strerror(errno));
 
@@ -107,7 +108,8 @@ bool Linkage::DoConnectTcp4(const std::string &host, uint16_t port)
 bool Linkage::DoConnectUnix(const std::string &sockname, bool file_based)
 {
     Interface *i = _connect->interface;
-    if (!i->ConnectUnix(sockname, file_based, _peer)) {
+    int ret = i->ConnectUnix(sockname, file_based, _peer);
+    if (ret < 0) {
         CLOG.Warn("Linkage: failed to initiate connection to [%s]: %d: %s",
                   sockname.c_str(), errno, strerror(errno));
 

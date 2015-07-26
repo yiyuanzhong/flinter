@@ -75,13 +75,13 @@ public:
 
     template <class T>
     T key_as(const T &defval = T()) const;
-    const char *key_as(const char *defval) const;
-    const std::string &key_as(const std::string &defval) const;
+    const char *key_as(const char *defval = NULL) const;
+    const std::string &key_as(const std::string &defval = std::string()) const;
 
     template <class T>
     T as(const T &defval = T()) const;
-    const char *as(const char *defval) const;
-    const std::string &as(const std::string &defval) const;
+    const char *as(const char *defval = NULL) const;
+    const std::string &as(const std::string &defval = std::string()) const;
 
     const Tree &operator [](const std::string &path) const
     {
@@ -196,6 +196,7 @@ protected:
     }
 
 private:
+    static bool ParseBool(const std::string &value, bool defval);
     std::string GetFullPath(const std::string &child) const;
     bool RenderTemplateInternal(const std::string &tmpl,
                                 bool file_or_string,
@@ -224,6 +225,12 @@ Tree::Tree(const std::map<K, V, C, A> &m)
         Set(p->first, p->second);
     }
 }
+
+template <>
+bool Tree::as<bool>(const bool &defval) const;
+
+template <>
+bool Tree::key_as<bool>(const bool &defval) const;
 
 template <class T>
 T Tree::as(const T &defval) const

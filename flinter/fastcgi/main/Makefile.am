@@ -20,4 +20,4 @@ include_maindir = $(includedir)/flinter/fastcgi/main
 include_main_HEADERS = fastcgi_main.h
 
 libflinter_fastcgi_main_la_SOURCES = fastcgi_main.cpp main.cpp
-libflinter_fastcgi_main_la_LIBADD = ../../libflinter.la
+libflinter_fastcgi_main_la_LIBADD = ../../libflinter.la -lprotobuf

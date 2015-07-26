@@ -71,6 +71,11 @@ public:
         return _t;
     }
 
+    operator bool() const
+    {
+        return !!_t;
+    }
+
 private:
     shared_ptr<T> &operator = (const shared_ptr<T> &);
     atomic64_t *const _c;

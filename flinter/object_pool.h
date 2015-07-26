@@ -37,12 +37,15 @@ public:
     void Release(T *object);
     void Shrink();
 
+    size_t size() const;
+
 protected:
     // Nanoseconds.
     virtual int64_t max_idle_time() = 0;
     virtual void Destroy(T *object) = 0;
     virtual T *Create() = 0;
 
+    /// Subclasses must call this in their deconstructors.
     void Clear(bool all = true);
 
 private:
@@ -53,18 +56,25 @@ private:
     } object_t;
 
     std::list<object_t> _pool;
-    Mutex _mutex;
+    mutable Mutex _mutex;
 
 }; // class ObjectPool
 
 template <class T>
-ObjectPool<T>::~ObjectPool()
+inline ObjectPool<T>::~ObjectPool()
 {
     assert(_pool.empty());
 }
 
 template <class T>
-T *ObjectPool<T>::Grab()
+inline size_t ObjectPool<T>::size() const
+{
+    MutexLocker locker(&_mutex);
+    return _pool.size();
+}
+
+template <class T>
+inline T *ObjectPool<T>::Grab()
 {
     MutexLocker locker(&_mutex);
     for (typename std::list<object_t>::iterator p = _pool.begin();
@@ -80,6 +90,10 @@ T *ObjectPool<T>::Grab()
 
     object_t n;
     n.object = Create();
+    if (!n.object) {
+        return NULL;
+    }
+
     n.in_use = true;
     n.timestamp = -1;
 
@@ -89,14 +103,14 @@ T *ObjectPool<T>::Grab()
 }
 
 template <class T>
-T *ObjectPool<T>::Exchange(T *object)
+inline T *ObjectPool<T>::Exchange(T *object)
 {
     Remove(object);
     return Grab();
 }
 
 template <class T>
-void ObjectPool<T>::Remove(T *object)
+inline void ObjectPool<T>::Remove(T *object)
 {
     MutexLocker locker(&_mutex);
     for (typename std::list<object_t>::iterator p = _pool.begin();
@@ -113,7 +127,7 @@ void ObjectPool<T>::Remove(T *object)
 }
 
 template <class T>
-void ObjectPool<T>::Release(T *object)
+inline void ObjectPool<T>::Release(T *object)
 {
     MutexLocker locker(&_mutex);
     for (typename std::list<object_t>::iterator p = _pool.begin();
@@ -128,13 +142,13 @@ void ObjectPool<T>::Release(T *object)
 }
 
 template <class T>
-void ObjectPool<T>::Shrink()
+inline void ObjectPool<T>::Shrink()
 {
     Clear(false);
 }
 
 template <class T>
-void ObjectPool<T>::Clear(bool all)
+inline void ObjectPool<T>::Clear(bool all)
 {
     typename std::list<T *> gone;
     MutexLocker locker(&_mutex);

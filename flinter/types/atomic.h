@@ -51,7 +51,12 @@ public:
     __ATOMIC_IMPL( XorAndFetch, __sync_xor_and_fetch );
     __ATOMIC_IMPL(NandAndFetch, __sync_nand_and_fetch);
 
-    __ATOMIC_IMPL(CompareAndSwap, __sync_val_compare_and_swap);
+    /// If the current value is oldval, then write newval into it.
+    /// @return value before writing.
+    T CompareAndSwap(const T &oldval, const T &newval)
+    {
+        return __sync_val_compare_and_swap(&_t, oldval, newval);
+    }
 
     void Lock()
     {

@@ -34,7 +34,6 @@
 #include "flinter/types/shared_ptr.h"
 
 #include "flinter/logger.h"
-#include "flinter/msleep.h"
 
 namespace flinter {
 
@@ -49,6 +48,24 @@ const EasyServer::Configure EasyServer::kDefaultConfigure = {
 };
 
 const EasyServer::channel_t EasyServer::kInvalidChannel = 0;
+
+class EasyServer::OutgoingInformation {
+public:
+    OutgoingInformation(ProxyHandler *proxy_handler,
+                        const std::string &host,
+                        uint16_t port) : _proxy_handler(proxy_handler)
+                                       , _host(host), _port(port) {}
+
+    ProxyHandler *proxy_handler() const { return _proxy_handler; }
+    const std::string &host() const     { return _host;          }
+    uint16_t port() const               { return _port;          }
+
+private:
+    ProxyHandler *_proxy_handler;
+    std::string _host;
+    uint16_t _port;
+
+}; // class OutgoingInformation
 
 class EasyServer::ProxyLinkageWorker : public LinkageWorker {
 public:
@@ -392,7 +409,17 @@ bool EasyServer::RegisterTimer(int64_t interval, Runnable *timer)
     }
 
     MutexLocker locker(_mutex);
-    _timers.push_back(std::make_pair(timer, interval));
+    if (_io_workers.empty()) {
+        _timers.push_back(std::make_pair(timer, interval));
+        return true;
+    }
+
+    LinkageWorker *worker = GetRandomIoWorker();
+    if (!worker->RegisterTimer(interval, timer, true)) {
+        LOG(ERROR) << "EasyServer: failed to register timer.";
+        return false;
+    }
+
     return true;
 }
 
@@ -436,7 +463,7 @@ bool EasyServer::Initialize(size_t slots,
     }
 
     for (std::list<std::pair<Runnable *, int64_t> >::iterator
-         p = _timers.begin(); p != _timers.end(); ++p) {
+         p = _timers.begin(); p != _timers.end();) {
 
         LinkageWorker *worker = GetRandomIoWorker();
         if (!worker->RegisterTimer(p->second, p->first, true)) {
@@ -444,6 +471,8 @@ bool EasyServer::Initialize(size_t slots,
             DoShutdown(&locker);
             return false;
         }
+
+        p = _timers.erase(p);
     }
 
     _workers = workers;
@@ -495,8 +524,21 @@ bool EasyServer::DoShutdown(MutexLocker *locker)
         delete *p;
     }
 
+    for (outgoing_map_t::iterator p = _outgoing_informations.begin();
+         p != _outgoing_informations.end(); ++p) {
+
+        delete p->second;
+    }
+
+    for (std::list<std::pair<Runnable *, int64_t> >::iterator
+         p = _timers.begin(); p != _timers.end(); ++p) {
+
+        delete p->first;
+    }
+
     DoDumpJobs();
 
+    _outgoing_informations.clear();
     _proxy_handlers.clear();
     _job_workers.clear();
     _io_workers.clear();
@@ -505,6 +547,7 @@ bool EasyServer::DoShutdown(MutexLocker *locker)
     _workers = 0;
     _slots = 0;
 
+    // Preserve _channel.
     return true;
 }
 
@@ -608,7 +651,11 @@ void EasyServer::QueueOrExecuteJob(Runnable *job)
 void EasyServer::Forget(channel_t channel)
 {
     MutexLocker locker(_mutex);
-    _outgoing_informations.erase(channel);
+    outgoing_map_t::iterator p = _outgoing_informations.find(channel);
+    if (p != _outgoing_informations.end()) {
+        delete p->second;
+        _outgoing_informations.erase(p);
+    }
 }
 
 void EasyServer::Forget(const EasyContext &context)
@@ -680,22 +727,22 @@ LinkageWorker *EasyServer::GetRandomIoWorker() const
 
 EasyServer::ProxyLinkage *EasyServer::DoReconnect(
         channel_t channel,
-        const OutgoingInformation &info)
+        const OutgoingInformation *info)
 {
-    EasyHandler *h = info.proxy_handler()->easy_handler();
-    Factory<EasyHandler> *f = info.proxy_handler()->easy_factory();
+    EasyHandler *h = info->proxy_handler()->easy_handler();
+    Factory<EasyHandler> *f = info->proxy_handler()->easy_factory();
     if (f) {
         h = f->Create();
     }
 
     EasyContext *context = new EasyContext(this, h, f ? true : false, channel);
     ProxyLinkage *linkage = ProxyLinkage::ConnectTcp4(context,
-                                                      info.proxy_handler(),
-                                                      info.host(),
-                                                      info.port());
+                                                      info->proxy_handler(),
+                                                      info->host(),
+                                                      info->port());
 
     if (!linkage) {
-        delete context;
+        // Don't delete context, embedded into linkage even if it's NULL.
         return NULL;
     }
 
@@ -727,13 +774,17 @@ EasyServer::channel_t EasyServer::DoConnectTcp4(
     ProxyHandler *proxy_handler = new ProxyHandler(easy_handler,
                                                    easy_factory);
 
-    OutgoingInformation info(proxy_handler, host, port);
+    OutgoingInformation *info =
+            new OutgoingInformation(proxy_handler, host, port);
 
     channel_t c = AllocateChannel(false);
-    ProxyLinkage *linkage = DoReconnect(c, info);
-    if (!linkage) {
-        delete proxy_handler;
-        return kInvalidChannel;
+    if (!_io_workers.empty()) {
+        ProxyLinkage *linkage = DoReconnect(c, info);
+        if (!linkage) {
+            delete info;
+            delete proxy_handler;
+            return kInvalidChannel;
+        }
     }
 
     _outgoing_informations.insert(std::make_pair(c, info));
