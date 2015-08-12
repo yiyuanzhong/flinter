@@ -64,11 +64,11 @@ TEST(ObjectMapTest, TestAllocation)
 
     p->Erase(4);
     EXPECT_EQ(i, 2);
-    EXPECT_TRUE(p->Get(3));
+    EXPECT_TRUE((c3 = p->Get(3)));
 
-    p->Add(7);
+    c1 = p->Add(7);
     EXPECT_EQ(i, 3);
-    p->Release(7);
+    p->Release(7, c1);
     EXPECT_EQ(i, 3);
     p->Erase(7);
     EXPECT_EQ(i, 2);
@@ -77,15 +77,15 @@ TEST(ObjectMapTest, TestAllocation)
     EXPECT_EQ(i, 2);
     EXPECT_FALSE(p->Get(3));
 
-    p->Release(3);
+    p->Release(3, c3);
     EXPECT_EQ(i, 2);
-    p->Release(3);
+    p->Release(3, c3);
     EXPECT_EQ(i, 2);
-    p->Release(3);
+    p->Release(3, c3);
     EXPECT_EQ(i, 2);
-    p->Release(3);
+    p->Release(3, c3);
     EXPECT_EQ(i, 1);
-    p->Release(3);
+    p->Release(3, c3);
     EXPECT_EQ(i, 1);
 
     delete p;
@@ -146,10 +146,11 @@ TEST(ObjectMapTest, TestSetAll)
     int i = 0;
     C::_c = &i;
 
+    C *c1, *c2;
     O p;
     p.Add(3);
-    p.Add(7);
-    p.Add(4);
+    c1 = p.Add(7);
+    c2 = p.Add(4);
     p.Add(6);
     EXPECT_EQ(i, 4);
 
@@ -167,8 +168,64 @@ TEST(ObjectMapTest, TestSetAll)
     EXPECT_FALSE(p.Get(4));
     EXPECT_FALSE(p.Get(7));
 
-    p.Release(7);
+    p.Release(7, c1);
     EXPECT_EQ(i, 4);
-    p.Release(4);
+    p.Release(4, c2);
     EXPECT_EQ(i, 3);
+}
+
+TEST(ObjectMapTest, TestDuplicatedDrop)
+{
+    int i = 0;
+    C::_c = &i;
+
+    C *c1, *c2, *c3;
+    O p;
+
+    c1 = p.Add(3);
+    p.Erase(3);
+    EXPECT_EQ(i, 1);
+    EXPECT_FALSE((c3 = p.Get(3)));
+    c2 = p.Add(3);
+    p.Erase(3);
+    EXPECT_EQ(i, 2);
+    EXPECT_FALSE((c3 = p.Get(3)));
+    EXPECT_NE(c1, c2);
+    EXPECT_EQ(p.size(), 2u);
+    EXPECT_EQ(i, 2);
+    p.Release(3, c2);
+    EXPECT_EQ(p.size(), 1u);
+    EXPECT_EQ(i, 1);
+    p.Release(3, c1);
+    EXPECT_EQ(p.size(), 0u);
+    EXPECT_EQ(i, 0);
+}
+
+TEST(ObjectMapTest, TestDuplicatedMapAndDrop)
+{
+    int i = 0;
+    C::_c = &i;
+
+    C *c1, *c2, *c3;
+    O p;
+
+    c1 = p.Add(3);
+    p.Erase(3);
+    EXPECT_EQ(i, 1);
+    EXPECT_FALSE((c3 = p.Get(3)));
+    c2 = p.Add(3);
+    EXPECT_EQ(i, 2);
+    EXPECT_NE(c1, c2);
+    EXPECT_EQ(p.size(), 2u);
+    EXPECT_EQ(i, 2);
+    p.Release(3, c1);
+    EXPECT_EQ(p.size(), 1u);
+    EXPECT_EQ(i, 1);
+    p.Erase(3);
+    p.Release(3, c1);
+    EXPECT_EQ(p.size(), 1u);
+    EXPECT_EQ(i, 1);
+    p.Release(3, c2);
+    EXPECT_EQ(p.size(), 0u);
+    EXPECT_EQ(i, 0);
 }

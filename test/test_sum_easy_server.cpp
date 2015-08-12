@@ -28,7 +28,7 @@ public:
                                      const void *buffer,
                                      size_t length)
     {
-        const char *buf = reinterpret_cast<const char *>(buffer);
+        const unsigned char *buf = reinterpret_cast<const unsigned char *>(buffer);
 
         printf("LEN ");
         for (size_t i = 0; i < length; ++i) {
@@ -61,7 +61,7 @@ public:
     virtual int OnMessage(const flinter::EasyContext &context,
                           const void *buffer, size_t length)
     {
-        const char *buf = reinterpret_cast<const char *>(buffer);
+        const unsigned char *buf = reinterpret_cast<const unsigned char *>(buffer);
         flinter::EasyServer *server = context.easy_server();
 
         printf("MSG ");
@@ -70,7 +70,7 @@ public:
         }
         printf("\n");
 
-        int n = atoi(buf);
+        int n = atoi(reinterpret_cast<const char *>(buf));
         if (n == 0) {
             if (!server->Send(context, "QUIT\r\n", 6)) {
                 return -1;
@@ -137,6 +137,8 @@ int main()
     flinter::EasyServer s;
 
     flinter::EasyServer::Configure *c = s.configure();
+    c->incoming_receive_timeout = 2000000000LL;
+    c->incoming_idle_timeout = 10000000000LL;
     c->maximum_incoming_connections = 10;
 
     // Factory mode, each connection has its own Handler.
@@ -153,7 +155,7 @@ int main()
         return EXIT_FAILURE;
     }
 
-    msleep(10000);
+    msleep(120000);
     s.Shutdown();
     return EXIT_SUCCESS;
 }

@@ -78,3 +78,43 @@ TEST_F(TreeTest, TestJson)
     ASSERT_TRUE(t.SerializeToHdfString(&str, false));
     printf("HDF\n%s\n", str.c_str());
 }
+
+TEST_F(TreeTest, TestBool)
+{
+    Tree t;
+    ASSERT_TRUE(t.ParseFromHdfString("a=1\nb=true\nc=0\nd=FAlse\ne=ab"));
+
+    bool valid;
+    EXPECT_TRUE(t["a"].as<bool>(true, &valid));
+    EXPECT_TRUE(valid);
+    EXPECT_TRUE(t["b"].as<bool>(true, &valid));
+    EXPECT_TRUE(valid);
+    EXPECT_FALSE(t["c"].as<bool>(true, &valid));
+    EXPECT_TRUE(valid);
+    EXPECT_FALSE(t["d"].as<bool>(true, &valid));
+    EXPECT_TRUE(valid);
+    EXPECT_TRUE(t["e"].as<bool>(true, &valid));
+    EXPECT_FALSE(valid);
+    EXPECT_FALSE(t["e"].as<bool>(false, &valid));
+    EXPECT_FALSE(valid);
+}
+
+TEST_F(TreeTest, TestString)
+{
+    Tree t;
+    ASSERT_TRUE(t.ParseFromHdfString("a=a\nb="));
+
+    bool valid;
+    EXPECT_EQ(t["a"].as<std::string>("z", &valid), "a");
+    EXPECT_TRUE(valid);
+    EXPECT_EQ(t["b"].as<std::string>("z", &valid), "z");
+    EXPECT_FALSE(valid);
+    EXPECT_STREQ(t["a"].as<const char *>("z", &valid), "a");
+    EXPECT_TRUE(valid);
+    EXPECT_STREQ(t["b"].as<const char *>("z", &valid), "z");
+    EXPECT_FALSE(valid);
+    EXPECT_STREQ(t["a"].as("z", &valid), "a");
+    EXPECT_TRUE(valid);
+    EXPECT_STREQ(t["b"].as("z", &valid), "z");
+    EXPECT_FALSE(valid);
+}

@@ -461,7 +461,9 @@ bool LinkageWorker::OnHealthCheck(int64_t now)
          p != drops.end(); ++p) {
 
         struct client_t *client = *p;
-        CLOG.Trace("Linkage: disconnect timed out connection: fd = %d", client->fd);
+        CLOG.Verbose("Linkage: disconnect timed out connection: fd = %d",
+                     client->fd);
+
         DoRelease(client, true);
     }
 

@@ -86,6 +86,7 @@ protected:
     // @param handler life span NOT taken.
     Linkage(LinkageHandler *handler, const std::string &name);
 
+    bool DoCheckConnected();
     bool DoConnectTcp4(const std::string &host, uint16_t port);
     bool DoConnectUnix(const std::string &sockname, bool file_based);
 
@@ -94,17 +95,9 @@ protected:
     virtual int OnWritable(LinkageWorker *worker);
     virtual int Shutdown();
 
-    // Some bytes has received.
-    void UpdateLastReceived();
-
-    // Outgoing wire jammed, only update if not previously jammed.
-    void MaybeUpdateSendJam();
-
-    // Outgoing wire jammed.
-    void UpdateSendJam();
-
-    // Some bytes has gone on outgoing wire.
-    void ClearSendJam();
+    /// @param sent if some bytes are just sent.
+    /// @param jammed if the message is incomplete.
+    void UpdateLastSent(bool sent, bool jammed);
 
     void AppendSendingBuffer(const void *buffer, size_t length);
     size_t PickSendingBuffer(void *buffer, size_t length);
@@ -137,6 +130,12 @@ private:
 
     static connect_t *PrepareToConnect(const std::string &name);
 
+    /// Incoming message is incomplete.
+    void UpdateReceiveJam(bool jammed);
+
+    /// Some bytes are just received.
+    void UpdateLastReceived();
+
     // Not a very good data structure, use it for now.
     std::vector<unsigned char> _rbuffer;
 
@@ -145,12 +144,15 @@ private:
 
     LinkageHandler *_handler;
     LinkageWorker *_worker;
+    connect_t *_connect;
     LinkagePeer *_peer;
     LinkagePeer *_me;
-    connect_t *_connect;
 
     int64_t _last_received;
+    int64_t _receive_jam;
+    int64_t _last_sent;
     int64_t _send_jam;
+
     size_t _rlength;
     int64_t _idle_timeout;
     int64_t _send_timeout;

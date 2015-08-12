@@ -173,9 +173,14 @@ private:
 
     static const Configure kDefaultConfigure;
 
+    typedef std::unordered_map<channel_t, OutgoingInformation *> outgoing_map_t;
+    typedef std::unordered_map<channel_t, ProxyLinkage *> channel_map_t;
+    typedef std::unordered_map<channel_t, ProxyHandler *> connect_map_t;
+
     std::list<std::pair<Runnable *, int64_t> > _timers;
-    std::list<ProxyHandler *> _proxy_handlers;
+    std::list<ProxyHandler *> _listen_proxy_handlers;
     std::list<LinkageWorker *> _io_workers;
+    connect_map_t _connect_proxy_handlers;
     std::list<JobWorker *> _job_workers;
     std::list<Listener *> _listeners;
     std::queue<Runnable *> _jobs;
@@ -185,9 +190,6 @@ private:
     FixedThreadPool *const _pool;
     Condition *const _incoming;
     Mutex *const _mutex;
-
-    typedef std::unordered_map<channel_t, OutgoingInformation *> outgoing_map_t;
-    typedef std::unordered_map<channel_t, ProxyLinkage *> channel_map_t;
 
     outgoing_map_t _outgoing_informations;
     channel_map_t _channel_linkages;

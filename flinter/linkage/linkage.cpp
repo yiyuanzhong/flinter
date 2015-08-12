@@ -28,7 +28,7 @@
 
 namespace flinter {
 
-const int64_t Linkage::kDefaultReceiveTimeout = 0LL;            // Disabled
+const int64_t Linkage::kDefaultReceiveTimeout = 15000000000LL;  // 15s
 const int64_t Linkage::kDefaultSendTimeout    = 15000000000LL;  // 15s
 const int64_t Linkage::kDefaultIdleTimeout    = 300000000000LL; // 5min
 
@@ -37,9 +37,11 @@ Linkage::Linkage(LinkageHandler *handler,
                  const LinkagePeer &me) : _graceful(false)
                                         , _handler(handler)
                                         , _worker(NULL)
+                                        , _connect(NULL)
                                         , _peer(new LinkagePeer(peer))
                                         , _me(new LinkagePeer(me))
-                                        , _connect(NULL)
+                                        , _receive_jam(0)
+                                        , _send_jam(0)
                                         , _rlength(0)
                                         , _idle_timeout(kDefaultIdleTimeout)
                                         , _send_timeout(kDefaultSendTimeout)
@@ -47,17 +49,20 @@ Linkage::Linkage(LinkageHandler *handler,
 {
     assert(handler);
 
-    UpdateLastReceived();
-    ClearSendJam();
+    int64_t now = get_monotonic_timestamp();
+    _last_received = now;
+    _last_sent = now;
 }
 
 Linkage::Linkage(LinkageHandler *handler, const std::string &name)
         : _graceful(false)
         , _handler(handler)
         , _worker(NULL)
+        , _connect(PrepareToConnect(name))
         , _peer(new LinkagePeer)
         , _me(new LinkagePeer)
-        , _connect(PrepareToConnect(name))
+        , _receive_jam(0)
+        , _send_jam(0)
         , _rlength(0)
         , _idle_timeout(kDefaultIdleTimeout)
         , _send_timeout(kDefaultSendTimeout)
@@ -65,8 +70,9 @@ Linkage::Linkage(LinkageHandler *handler, const std::string &name)
 {
     assert(handler);
 
-    UpdateLastReceived();
-    ClearSendJam();
+    int64_t now = get_monotonic_timestamp();
+    _last_received = now;
+    _last_sent = now;
 }
 
 Linkage::~Linkage()
@@ -202,12 +208,14 @@ int Linkage::OnReceived(const void *buffer, size_t length)
         return 1;
     }
 
+    UpdateLastReceived();
     if (_graceful) {
         return 1;
     }
 
     CLOG.Verbose("Linkage: received [%lu] bytes for fd = %d", length, _peer->fd());
     _rbuffer.insert(_rbuffer.end(), buf, buf + length);
+
     while (true) {
         if (!_rlength) {
             ssize_t ret = _handler->GetMessageLength(this,
@@ -224,6 +232,7 @@ int Linkage::OnReceived(const void *buffer, size_t length)
                 CLOG.Verbose("Linkage: message incomplete, keep receiving "
                              "for fd = %d", _peer->fd());
 
+                UpdateReceiveJam(true);
                 break;
             }
 
@@ -233,10 +242,11 @@ int Linkage::OnReceived(const void *buffer, size_t length)
         }
 
         if (_rbuffer.size() < _rlength) {
+            UpdateReceiveJam(true);
             break;
         }
 
-        UpdateLastReceived();
+        UpdateReceiveJam(false);
         CLOG.Verbose("Linkage: processing message of length [%lu] for fd = %d",
                      _rlength, _peer->fd());
 
@@ -329,7 +339,7 @@ bool Linkage::Send(const void *buffer, size_t length)
         CLOG.Verbose("Linkage: queued [%lu] bytes for fd = %d", length, _peer->fd());
         AppendSendingBuffer(buffer, length);
         _worker->SetWannaWrite(this, true);
-        UpdateSendJam();
+        UpdateLastSent(false, true);
 
     } else if (static_cast<size_t>(ret) < length) {
         CLOG.Verbose("Linkage: sent [%lu] bytes, queued [%lu] bytes for fd = %d",
@@ -338,13 +348,37 @@ bool Linkage::Send(const void *buffer, size_t length)
         const unsigned char *buf = reinterpret_cast<const unsigned char *>(buffer);
         AppendSendingBuffer(buf + ret, length - ret);
         _worker->SetWannaWrite(this, true);
-        UpdateSendJam();
+        UpdateLastSent(true, true);
 
     } else {
         CLOG.Verbose("Linkage: sent [%lu] bytes for fd = %d", length, _peer->fd());
-        ClearSendJam();
+        UpdateLastSent(true, false);
     }
 
+    return true;
+}
+
+bool Linkage::DoCheckConnected()
+{
+    if (!_connect || !_connect->connecting) {
+        return true;
+    }
+
+    if (!_connect->interface->TestIfConnected()) {
+        CLOG.Warn("Linkage: connecting to [%s] failed: %d: %s",
+                  _connect->name.c_str(), errno, strerror(errno));
+
+        return false;
+    }
+
+    CLOG.Verbose("Linkage: connected to [%s].", _connect->name.c_str());
+    _worker->SetWannaRead(this, true);
+    _connect->connecting = false;
+    if (!OnConnected()) {
+        return false;
+    }
+
+    UpdateLastSent(true, false);
     return true;
 }
 
@@ -355,20 +389,8 @@ int Linkage::OnWritable(LinkageWorker *worker)
     size_t count = 0;
 
     assert(worker == _worker);
-    if (_connect && _connect->connecting) {
-        if (!_connect->interface->TestIfConnected()) {
-            CLOG.Warn("Linkage: connecting to [%s] failed: %d: %s",
-                      _connect->name.c_str(), errno, strerror(errno));
-
-            return -1;
-        }
-
-        CLOG.Verbose("Linkage: connected to [%s].", _connect->name.c_str());
-        worker->SetWannaRead(this, true);
-        _connect->connecting = false;
-        if (!OnConnected()) {
-            return -1;
-        }
+    if (!DoCheckConnected()) {
+        return -1;
     }
 
     while (true) {
@@ -382,7 +404,7 @@ int Linkage::OnWritable(LinkageWorker *worker)
         if (ret < 0) {
             if (errno == EAGAIN || errno == EWOULDBLOCK) {
                 worker->SetWannaWrite(this, true);
-                MaybeUpdateSendJam();
+                UpdateLastSent(false, true);
                 return 1;
             }
 
@@ -390,7 +412,7 @@ int Linkage::OnWritable(LinkageWorker *worker)
         }
 
         if (static_cast<size_t>(ret) < length) {
-            UpdateSendJam();
+            UpdateLastSent(true, true);
             worker->SetWannaWrite(this, true);
             ConsumeSendingBuffer(static_cast<size_t>(ret));
             CLOG.Verbose("Linkage: dequeued [%lu] bytes and sent [%lu] bytes for fd = %d",
@@ -399,7 +421,7 @@ int Linkage::OnWritable(LinkageWorker *worker)
             return 1;
 
         } else {
-            ClearSendJam();
+            UpdateLastSent(true, false);
             ConsumeSendingBuffer(length);
             CLOG.Verbose("Linkage: dequeued [%lu] bytes and sent [%lu] bytes for fd = %d",
                          length, length, _peer->fd());
@@ -414,8 +436,6 @@ int Linkage::OnWritable(LinkageWorker *worker)
     }
 
     worker->SetWannaWrite(this, false);
-    ClearSendJam();
-
     if (_graceful && !GetSendingBufferSize()) {
         return Shutdown();
     }
@@ -428,21 +448,56 @@ void Linkage::UpdateLastReceived()
     _last_received = get_monotonic_timestamp();
 }
 
-void Linkage::MaybeUpdateSendJam()
+void Linkage::UpdateReceiveJam(bool jammed)
 {
-    if (!_send_jam) {
-        _send_jam = get_monotonic_timestamp();
+    if (jammed) {
+        if (!_receive_jam) {
+            _receive_jam = get_monotonic_timestamp();
+        }
+    } else {
+        _receive_jam = 0;
     }
 }
 
-void Linkage::UpdateSendJam()
+void Linkage::UpdateLastSent(bool sent, bool jammed)
 {
-    _send_jam = get_monotonic_timestamp();
+    int64_t now = get_monotonic_timestamp();
+    if (sent) {
+        _last_sent = now;
+    }
+
+    if (jammed) {
+        if (!_send_jam) {
+            _send_jam = now;
+        }
+    } else {
+        _send_jam = 0;
+    }
 }
 
-void Linkage::ClearSendJam()
+bool Linkage::Cleanup(int64_t now)
 {
-    _send_jam = 0;
+    int64_t jammed_w = _send_jam ? now - _send_jam : 0;
+    if (_send_timeout && jammed_w && jammed_w >= _send_timeout) {
+        CLOG.Verbose("Linkage: writing but timed out for fd = %d", _peer->fd());
+        return false;
+    }
+
+    int64_t jammed_r = _receive_jam ? now - _receive_jam : 0;
+    if (_receive_timeout && jammed_r && jammed_r >= _receive_timeout) {
+        CLOG.Verbose("Linkage: reading but timed out for fd = %d", _peer->fd());
+        return false;
+    }
+
+    int64_t passed_w = now - _last_sent;
+    int64_t passed_r = now - _last_received;
+    int64_t idle = passed_r < passed_w ? passed_r : passed_w;
+    if (_idle_timeout && idle >= _idle_timeout) {
+        CLOG.Verbose("Linkage: connection idle out for fd = %d", _peer->fd());
+        return false;
+    }
+
+    return true;
 }
 
 void Linkage::AppendSendingBuffer(const void *buffer, size_t length)
@@ -489,22 +544,6 @@ int Linkage::Shutdown()
     }
 
     return 0;
-}
-
-bool Linkage::Cleanup(int64_t now)
-{
-    int64_t passed_r = now - _last_received;
-    int64_t passed_w = _send_jam ? now - _send_jam : 0;
-    int64_t idle = !passed_w ? passed_r : (passed_r < passed_w ? passed_r : passed_w);
-
-    if ((_send_timeout && passed_w && passed_w >= _send_timeout)  ||
-        (_receive_timeout && passed_r >= _receive_timeout)        ||
-        (_idle_timeout && idle >= _idle_timeout)                  ){
-
-        return false;
-    }
-
-    return true;
 }
 
 void Linkage::SetHandler(LinkageHandler *handler)

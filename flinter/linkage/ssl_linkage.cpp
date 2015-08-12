@@ -164,7 +164,6 @@ int SslLinkage::OnEvent(LinkageWorker *worker, bool reading_or_writing)
         unsigned char buffer[8192];
         int ret = SSL_read(_ssl, buffer, sizeof(buffer));
         if (ret > 0) {
-            UpdateLastReceived();
             _in_progress = kActionNone;
             worker->SetWannaRead(this, true);
             return OnReceived(buffer, static_cast<size_t>(ret));
@@ -176,7 +175,6 @@ int SslLinkage::OnEvent(LinkageWorker *worker, bool reading_or_writing)
         unsigned char buffer[16384];
         size_t length = PickSendingBuffer(buffer, sizeof(buffer));
         if (!length) {
-            ClearSendJam();
             _in_progress = kActionNone;
             if (_graceful) {
                 return DoShutdown(worker);
@@ -187,7 +185,7 @@ int SslLinkage::OnEvent(LinkageWorker *worker, bool reading_or_writing)
         int ret = SSL_write(_ssl, buffer, length);
         if (ret > 0) {
             if (static_cast<size_t>(ret) < length) {
-                UpdateSendJam();
+                UpdateLastSent(true, true);
                 ConsumeSendingBuffer(static_cast<size_t>(ret));
                 CLOG.Verbose("Linkage: dequeued [%lu] bytes and sent [%d] "
                              "bytes for fd = %d", length, ret, peer()->fd());
@@ -196,7 +194,7 @@ int SslLinkage::OnEvent(LinkageWorker *worker, bool reading_or_writing)
                 worker->SetWannaWrite(this, true);
 
             } else {
-                ClearSendJam();
+                UpdateLastSent(true, false);
                 ConsumeSendingBuffer(length);
                 CLOG.Verbose("Linkage: dequeued [%lu] bytes and sent [%d] "
                              "bytes for fd = %d", length, ret, peer()->fd());
@@ -214,6 +212,7 @@ int SslLinkage::OnEvent(LinkageWorker *worker, bool reading_or_writing)
             return 1;
         }
 
+        UpdateLastSent(false, true);
         return HandleError(worker, in_progress, ret);
 
     } else if (in_progress == kActionAccept) {
@@ -268,7 +267,6 @@ int SslLinkage::DoShutdown(LinkageWorker *worker)
         CLOG.Verbose("Linkage: SSL bidirectional shutdown for fd = %d", peer()->fd());
         _in_progress = kActionNone;
         Linkage::Shutdown();
-        ClearSendJam();
         return 0;
     }
 
@@ -304,7 +302,6 @@ bool SslLinkage::OnConnected()
     }
 
     worker()->SetWanna(this, true, !!GetSendingBufferSize());
-    ClearSendJam();
     return true;
 }
 
@@ -316,7 +313,7 @@ int SslLinkage::OnReadable(LinkageWorker *worker)
 int SslLinkage::OnWritable(LinkageWorker *worker)
 {
     if (_in_progress == kActionConnect) {
-        return Linkage::OnWritable(worker);
+        return DoCheckConnected() ? 1 : -1;
     }
 
     return OnEvent(worker, false);
@@ -326,27 +323,29 @@ bool SslLinkage::Send(const void *buffer, size_t length)
 {
     if (_in_progress != kActionNone || GetSendingBufferSize()) {
         AppendSendingBuffer(buffer, length);
+        UpdateLastSent(false, true);
         return true;
     }
 
     int ret = SSL_write(_ssl, buffer, length);
     if (ret > 0) {
         if (static_cast<size_t>(ret) < length) {
-            UpdateSendJam();
+            UpdateLastSent(true, true);
             worker()->SetWannaWrite(this, true);
             AppendSendingBuffer(reinterpret_cast<const char *>(buffer) + ret, length - ret);
             CLOG.Verbose("Linkage: sent [%d] bytes, queued [%lu] bytes for fd = %d",
                          ret, length - ret, peer()->fd());
 
         } else {
-            ClearSendJam();
-            CLOG.Verbose("Linkage: sent [%d] bytes for fd = %d", ret, peer()->fd());
+            UpdateLastSent(true, false);
             worker()->SetWannaWrite(this, false);
+            CLOG.Verbose("Linkage: sent [%d] bytes for fd = %d", ret, peer()->fd());
         }
 
         return true;
     }
 
+    UpdateLastSent(false, true);
     AppendSendingBuffer(buffer, length);
     ret = HandleError(worker(), kActionWrite, ret);
     if (ret < 0) {

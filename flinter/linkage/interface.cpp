@@ -259,14 +259,25 @@ bool Interface::CloseButTheFd()
 bool Interface::Close()
 {
     int socket = _socket;
-    bool result = CloseButTheFd();
-    if (socket >= 0) {
-        if (shutdown(socket, SHUT_RDWR) || safe_close(socket)) {
-            result = false;
+    if (!CloseButTheFd()) {
+        return false;
+    }
+
+    if (socket < 0) {
+        return true;
+    }
+
+    if (shutdown(socket, SHUT_RDWR)) {
+        if (errno != ENOTCONN) {
+            return false;
         }
     }
 
-    return result;
+    if (safe_close(socket)) {
+        return false;
+    }
+
+    return true;
 }
 
 bool Interface::Accept(LinkagePeer *peer, LinkagePeer *me)

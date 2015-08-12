@@ -26,8 +26,11 @@
 
 namespace flinter {
 
-#define DEFINE_S(type,name,min,max) \
-type name(const std::string &from, type defval) { \
+#define DEFINE_S(type,min,max) \
+template <> \
+type convert(const std::string &from, const type &defval, bool *valid) \
+{ \
+    if (valid) { *valid = false; } \
     if (from.empty()) { return defval; } \
     const char *v = from.c_str(); \
     char *p; \
@@ -35,11 +38,15 @@ type name(const std::string &from, type defval) { \
     long long r = strtoll(v, &p, 0); \
     if (errno || p != v + from.length()) { return defval; } \
     if (r < (min) || r > (max)) { return defval; } \
+    if (valid) { *valid = true; } \
     return static_cast<type>(r); \
 }
 
-#define DEFINE_U(type,name,max) \
-type name(const std::string &from, type defval) { \
+#define DEFINE_U(type,max) \
+template <> \
+type convert(const std::string &from, const type &defval, bool *valid) \
+{ \
+    if (valid) { *valid = false; } \
     if (from.empty()) { return defval; } \
     const char *v = from.c_str(); \
     char *p; \
@@ -47,11 +54,15 @@ type name(const std::string &from, type defval) { \
     unsigned long long r = strtoull(v, &p, 0); \
     if (errno || p != v + from.length()) { return defval; } \
     if (r > (max)) { return defval; } \
+    if (valid) { *valid = true; } \
     return static_cast<type>(r); \
 }
 
-#define DEFINE_D(type,name,min,max) \
-type name(const std::string &from, type defval) { \
+#define DEFINE_D(type,min,max) \
+template <> \
+type convert(const std::string &from, const type &defval, bool *valid) \
+{ \
+    if (valid) { *valid = false; } \
     if (from.empty()) { return defval; } \
     const char *v = from.c_str(); \
     char *p; \
@@ -59,35 +70,85 @@ type name(const std::string &from, type defval) { \
     long double r = strtold(v, &p); \
     if (errno || p != v + from.length()) { return defval; } \
     if (r < (min) || r > (max)) { return defval; } \
+    if (valid) { *valid = true; } \
     return static_cast<type>(r); \
 }
 
-#define DEFINE_TO_S(type,name,min,max) DEFINE_S(type,convert_to_##name,min,max)
-#define DEFINE_TO_U(type,name,max)     DEFINE_U(type,convert_to_##name,max)
-#define DEFINE_TO_D(type,name,min,max) DEFINE_D(type,convert_to_##name,min,max)
+#define DEFINE_TO_S(type,min,max) DEFINE_S(type,min,max)
+#define DEFINE_TO_U(type,max)     DEFINE_U(type,max)
+#define DEFINE_TO_D(type,min,max) DEFINE_D(type,min,max)
 
-DEFINE_TO_S(  int8_t,   int8,   INT8_MIN,  INT8_MAX);
-DEFINE_TO_S( int16_t,  int16,  INT16_MIN, INT16_MAX);
-DEFINE_TO_S( int32_t,  int32,  INT32_MIN, INT32_MAX);
-DEFINE_TO_S( int64_t,  int64,  INT64_MIN, INT64_MAX);
-DEFINE_TO_U( uint8_t,  uint8,  UINT8_MAX           );
-DEFINE_TO_U(uint16_t, uint16, UINT16_MAX           );
-DEFINE_TO_U(uint32_t, uint32, UINT32_MAX           );
-DEFINE_TO_U(uint64_t, uint64, UINT64_MAX           );
+DEFINE_TO_S(         char     ,  SCHAR_MIN, SCHAR_MAX);
+DEFINE_TO_S(         short    ,   SHRT_MIN,  SHRT_MAX);
+DEFINE_TO_S(         int      ,    INT_MIN,   INT_MAX);
+DEFINE_TO_S(         long     ,   LONG_MIN,  LONG_MAX);
+DEFINE_TO_S(         long long,  LLONG_MIN, LLONG_MAX);
+DEFINE_TO_U(unsigned char     ,  UCHAR_MAX           );
+DEFINE_TO_U(unsigned short    ,  USHRT_MAX           );
+DEFINE_TO_U(unsigned int      ,   UINT_MAX           );
+DEFINE_TO_U(unsigned long     ,  ULONG_MAX           );
+DEFINE_TO_U(unsigned long long, ULLONG_MAX           );
 
-DEFINE_TO_S(         char     ,   char,  SCHAR_MIN, SCHAR_MAX);
-DEFINE_TO_S(         short    ,  short,   SHRT_MIN,  SHRT_MAX);
-DEFINE_TO_S(         int      ,    int,    INT_MIN,   INT_MAX);
-DEFINE_TO_S(         long     ,   long,   LONG_MIN,  LONG_MAX);
-DEFINE_TO_S(         long long,  llong,  LLONG_MIN, LLONG_MAX);
-DEFINE_TO_U(unsigned char     ,  uchar,  UCHAR_MAX           );
-DEFINE_TO_U(unsigned short    , ushort,  USHRT_MAX           );
-DEFINE_TO_U(unsigned int      ,   uint,   UINT_MAX           );
-DEFINE_TO_U(unsigned long     ,  ulong,  ULONG_MAX           );
-DEFINE_TO_U(unsigned long long, ullong, ULLONG_MAX           );
+DEFINE_TO_D(float      ,  FLT_MIN,  FLT_MAX);
+DEFINE_TO_D(double     ,  DBL_MIN,  DBL_MAX);
+DEFINE_TO_D(long double, LDBL_MIN, LDBL_MAX);
 
-DEFINE_TO_D(float      , float  ,  FLT_MIN,  FLT_MAX);
-DEFINE_TO_D(double     , double ,  DBL_MIN,  DBL_MAX);
-DEFINE_TO_D(long double, ldouble, LDBL_MIN, LDBL_MAX);
+const char *convert(const std::string &from,
+                    const char *defval,
+                    bool *valid)
+{
+    if (valid) {
+        *valid = !from.empty();
+    }
+
+    return from.empty() ? defval : from.c_str();
+}
+
+template <>
+const char *convert(const std::string &from,
+                    const char *const &defval,
+                    bool *valid)
+{
+    return convert(from, defval, valid);
+}
+
+template <>
+std::string convert(const std::string &from,
+                    const std::string &defval,
+                    bool *valid)
+{
+    if (valid) {
+        *valid = !from.empty();
+    }
+
+    return from.empty() ? defval : from;
+}
+
+template <>
+bool convert(const std::string &from, const bool &defval, bool *valid)
+{
+    if (valid) {
+        *valid = true;
+    }
+
+    std::string v(from);
+    std::transform(v.begin(), v.end(), v.begin(), ::tolower);
+    if (v.compare("true") == 0 ||
+        v.compare("1")    == 0 ){
+
+        return true;
+
+    } else if (v.compare("false") == 0 ||
+               v.compare("0")     == 0 ){
+
+        return false;
+    }
+
+    if (valid) {
+        *valid = false;
+    }
+
+    return defval;
+}
 
 } // namespace flinter

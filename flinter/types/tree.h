@@ -23,6 +23,8 @@
 #include <sstream>
 #include <string>
 
+#include <flinter/convert.h>
+
 namespace Json {
 class Value;
 } // namespace Json
@@ -74,14 +76,26 @@ public:
     }
 
     template <class T>
-    T key_as(const T &defval = T()) const;
-    const char *key_as(const char *defval = NULL) const;
-    const std::string &key_as(const std::string &defval = std::string()) const;
+    T key_as(const T &defval = T(), bool *valid = NULL) const
+    {
+        return convert<T>(_key, defval, valid);
+    }
+
+    const char *key_as(const char *defval = NULL, bool *valid = NULL) const
+    {
+        return convert(_key, defval, valid);
+    }
 
     template <class T>
-    T as(const T &defval = T()) const;
-    const char *as(const char *defval = NULL) const;
-    const std::string &as(const std::string &defval = std::string()) const;
+    T as(const T &defval = T(), bool *valid = NULL) const
+    {
+        return convert<T>(_value, defval, valid);
+    }
+
+    const char *as(const char *defval = NULL, bool *valid = NULL) const
+    {
+        return convert(_value, defval, valid);
+    }
 
     const Tree &operator [](const std::string &path) const
     {
@@ -196,7 +210,6 @@ protected:
     }
 
 private:
-    static bool ParseBool(const std::string &value, bool defval);
     std::string GetFullPath(const std::string &child) const;
     bool RenderTemplateInternal(const std::string &tmpl,
                                 bool file_or_string,
@@ -224,30 +237,6 @@ Tree::Tree(const std::map<K, V, C, A> &m)
 
         Set(p->first, p->second);
     }
-}
-
-template <>
-bool Tree::as<bool>(const bool &defval) const;
-
-template <>
-bool Tree::key_as<bool>(const bool &defval) const;
-
-template <class T>
-T Tree::as(const T &defval) const
-{
-    std::istringstream s(_value);
-    T value = defval;
-    s >> value;
-    return value;
-}
-
-template <class T>
-T Tree::key_as(const T &defval) const
-{
-    std::istringstream s(_key);
-    T value = defval;
-    s >> value;
-    return value;
 }
 
 std::ostream &operator <<(std::ostream &out, const Tree &tree);

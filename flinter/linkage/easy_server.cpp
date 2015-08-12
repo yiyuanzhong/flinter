@@ -38,10 +38,10 @@
 namespace flinter {
 
 const EasyServer::Configure EasyServer::kDefaultConfigure = {
-    /* incoming_receive_timeout     = */ 0,
+    /* incoming_receive_timeout     = */ 5000000000LL,
     /* incoming_send_timeout        = */ 5000000000LL,
     /* incoming_idle_timeout        = */ 60000000000LL,
-    /* outgoing_receive_timeout     = */ 0,
+    /* outgoing_receive_timeout     = */ 5000000000LL,
     /* outgoing_send_timeout        = */ 5000000000LL,
     /* outgoing_idle_timeout        = */ 60000000000LL,
     /* maximum_active_connections   = */ 50000,
@@ -377,7 +377,7 @@ bool EasyServer::DoListen(uint16_t port,
         return false;
     }
 
-    _proxy_handlers.push_back(proxy_handler);
+    _listen_proxy_handlers.push_back(proxy_handler);
     _listeners.push_back(listener);
     return true;
 }
@@ -512,10 +512,16 @@ bool EasyServer::DoShutdown(MutexLocker *locker)
     _pool->Shutdown();
     locker->Relock();
 
-    for (std::list<ProxyHandler *>::iterator p = _proxy_handlers.begin();
-         p != _proxy_handlers.end(); ++p) {
+    for (std::list<ProxyHandler *>::iterator p = _listen_proxy_handlers.begin();
+         p != _listen_proxy_handlers.end(); ++p) {
 
         delete *p;
+    }
+
+    for (connect_map_t::iterator p = _connect_proxy_handlers.begin();
+         p != _connect_proxy_handlers.end(); ++p) {
+
+        delete p->second;
     }
 
     for (std::list<Listener *>::iterator p = _listeners.begin();
@@ -538,8 +544,9 @@ bool EasyServer::DoShutdown(MutexLocker *locker)
 
     DoDumpJobs();
 
+    _connect_proxy_handlers.clear();
+    _listen_proxy_handlers.clear();
     _outgoing_informations.clear();
-    _proxy_handlers.clear();
     _job_workers.clear();
     _io_workers.clear();
     _listeners.clear();
@@ -628,11 +635,22 @@ void EasyServer::ReleaseChannel(channel_t channel)
 {
     MutexLocker locker(_mutex);
     _channel_linkages.erase(channel);
-    if (IsOutgoingChannel(channel)) {
-        --_outgoing_connections;
-    } else {
+    if (!IsOutgoingChannel(channel)) {
         --_incoming_connections;
+        return;
     }
+
+    --_outgoing_connections;
+    if (_outgoing_informations.find(channel) != _outgoing_informations.end()) {
+        // Still needed.
+        return;
+    }
+
+    LOG(VERBOSE) << "EasyServer: outgoing ProxyHandler released: " << channel;
+    connect_map_t::iterator p = _connect_proxy_handlers.find(channel);
+    assert(p != _connect_proxy_handlers.end());
+    delete p->second;
+    _connect_proxy_handlers.erase(p);
 }
 
 void EasyServer::QueueOrExecuteJob(Runnable *job)
@@ -656,6 +674,20 @@ void EasyServer::Forget(channel_t channel)
         delete p->second;
         _outgoing_informations.erase(p);
     }
+
+    if (_channel_linkages.find(channel) != _channel_linkages.end()) {
+        // Still needed.
+        return;
+    }
+
+    connect_map_t::iterator q = _connect_proxy_handlers.find(channel);
+    if (q == _connect_proxy_handlers.end()) {
+        return;
+    }
+
+    delete q->second;
+    _connect_proxy_handlers.erase(q);
+    LOG(VERBOSE) << "EasyServer: outgoing ProxyHandler released: " << channel;
 }
 
 void EasyServer::Forget(const EasyContext &context)
@@ -787,8 +819,8 @@ EasyServer::channel_t EasyServer::DoConnectTcp4(
         }
     }
 
+    _connect_proxy_handlers.insert(std::make_pair(c, proxy_handler));
     _outgoing_informations.insert(std::make_pair(c, info));
-    _proxy_handlers.push_back(proxy_handler);
     return c;
 }
 

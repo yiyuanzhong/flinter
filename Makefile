@@ -10,6 +10,7 @@ PATH := $(STAGING)/bin:$(TOOLS)/bin:$(PATH)
 LDFLAGS := -L$(STAGING)/lib $(LDFLAGS)
 LC_ALL = C
 
+debug := 0
 CONFIGURE_FLAGS := --with-pic
 ifeq ($(debug), 1)
 CONFIGURE_FLAGS := ${CONFIGURE_FLAGS} --enable-debug

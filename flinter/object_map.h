@@ -23,6 +23,7 @@
 #include <set>
 #include <vector>
 
+#include <flinter/thread/condition.h>
 #include <flinter/thread/mutex.h>
 #include <flinter/thread/mutex_locker.h>
 #include <flinter/utility.h>
@@ -36,13 +37,17 @@ public:
 
     /// Might rewind GetNext().
     void SetAll(const std::set<K> &keys);
-    void EraseAll();
+
+    /// Shouldn't SetAll() nor Add() when calling this.
+    /// Might rewind GetNext().
+    void EraseAll(bool wait_until_empty = true);
 
     /// Might rewind GetNext().
     void Erase(const K &key);
 
-    /// Might rewind GetNext().
+    /// All objects will be release at once even if it's in use.
     /// Subclasses must call this in their deconstructors.
+    /// Might rewind GetNext().
     void Clear();
 
     /// Create or get object.
@@ -69,7 +74,10 @@ public:
 
     /// Decreases reference count.
     /// Objects no longer in the map with 0 reference count will be released.
-    void Release(const K &key);
+    void Release(const K &key, T *object);
+
+    /// Locked, don't call any method of this object within the callback.
+    void for_each(void (*function)(const K &, T *, void *), void *param);
 
     size_t size() const;
 
@@ -83,12 +91,25 @@ private:
     T *DoAdd(const K &key);
 
     mutable Mutex _mutex;
+    mutable Condition _condition;
     typedef std::pair<T *, size_t> V;
     typename std::map<K, V>::iterator _ptr;
-    std::map<K, V> _drop;
+    std::multimap<K, V> _drop;
     std::map<K, V> _map;
 
 }; // class ObjectMap
+
+template <class K, class T>
+inline void ObjectMap<K, T>::for_each(void (*function)(const K &, T *, void *),
+                                      void *param)
+{
+    MutexLocker locker(&_mutex);
+    for (typename std::map<K, V>::iterator p = _map.begin();
+         p != _map.end(); ++p) {
+
+        function(p->first, p->second.first, param);
+    }
+}
 
 template <class K, class T>
 inline ObjectMap<K, T>::ObjectMap()
@@ -183,7 +204,7 @@ inline void ObjectMap<K, T>::DoErase(const K &key)
 }
 
 template <class K, class T>
-inline void ObjectMap<K, T>::EraseAll()
+inline void ObjectMap<K, T>::EraseAll(bool wait_until_empty)
 {
     MutexLocker locker(&_mutex);
     for (typename std::map<K, V>::iterator p = _map.begin();
@@ -198,25 +219,47 @@ inline void ObjectMap<K, T>::EraseAll()
 
     _map.clear();
     _ptr = _map.end();
+
+    if (!wait_until_empty) {
+        return;
+    }
+
+    while (!_drop.empty()) {
+        _condition.Wait(&_mutex);
+    }
 }
 
 template <class K, class T>
-inline void ObjectMap<K, T>::Release(const K &key)
+inline void ObjectMap<K, T>::Release(const K &key, T *object)
 {
     MutexLocker locker(&_mutex);
     typename std::map<K, V>::iterator p = _map.find(key);
     if (p != _map.end()) {
-        --p->second.second;
-        return;
+        if (p->second.first == object) {
+            --p->second.second;
+            return;
+        }
     }
 
-    p = _drop.find(key);
-    if (p != _drop.end()) {
+    typename std::pair<typename std::multimap<K, V>::iterator,
+                       typename std::multimap<K, V>::iterator>
+            range = _drop.equal_range(key);
+
+    for (typename std::multimap<K, V>::iterator
+         p = range.first; p != range.second; ++p) {
+
+        if (p->second.first != object) {
+            continue;
+        }
+
         --p->second.second;
         if (!p->second.second) {
             Destroy(p->second.first);
             _drop.erase(p);
+            _condition.WakeAll();
         }
+
+        break;
     }
 }
 

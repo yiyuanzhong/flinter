@@ -21,6 +21,8 @@
 #include <list>
 #include <map>
 
+#include <flinter/thread/mutex.h>
+#include <flinter/thread/mutex_locker.h>
 #include <flinter/utility.h>
 
 namespace flinter {
@@ -47,6 +49,7 @@ public:
 
     void Insert(const K &k, const V &v, int64_t timeout = 0)
     {
+        MutexLocker locker(&_mutex);
         int64_t now = get_monotonic_timestamp();
         int64_t deadline = now + (timeout > 0 ? timeout : _default_timeout);
         std::pair<typename std::map<K, Value>::iterator, bool> ret =
@@ -54,8 +57,7 @@ public:
 
         if (!ret.second) {
             Value &value = ret.first->second;
-            if (_auto_release)
-            {
+            if (_auto_release) {
                 delete value._v;
             }
 
@@ -64,22 +66,22 @@ public:
         }
     }
 
-    void Erase(const K &k)
+    V *Erase(const K &k)
     {
+        MutexLocker locker(&_mutex);
         typename std::map<K, Value>::iterator p = _pool.find(k);
         if (p == _pool.end()) {
-            return;
+            return NULL;
         }
 
-        if (_auto_release) {
-            delete p->second._v;
-        }
-
+        V *v = p->second._v;
         _pool.erase(p);
+        return v;
     }
 
     void Check()
     {
+        MutexLocker locker(&_mutex);
         std::list<K> drop;
         int64_t now = get_monotonic_timestamp();
         for (typename std::map<K, Value>::iterator
@@ -103,6 +105,7 @@ public:
 
     void Clear()
     {
+        MutexLocker locker(&_mutex);
         if (_auto_release) {
             for (typename std::map<K, Value>::iterator
                  p = _pool.begin(); p != _pool.end(); ++p) {
@@ -118,6 +121,7 @@ private:
     const int64_t _default_timeout;
     const bool _auto_release;
     std::map<K, Value> _pool;
+    mutable Mutex _mutex;
 
 }; // class TimeoutPool
 
