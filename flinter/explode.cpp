@@ -22,7 +22,9 @@
 
 namespace flinter {
 
-void explode(const std::string &methods, const char *delim, std::list<std::string> *result)
+void explode(const std::string &methods,
+             const char *delim,
+             std::vector<std::string> *result)
 {
     result->clear();
     char *buffer = new char[methods.length() + 1];
@@ -38,7 +40,27 @@ void explode(const std::string &methods, const char *delim, std::list<std::strin
     delete [] buffer;
 }
 
-void explode(const std::string &methods, const char *delim, std::set<std::string> *result)
+void explode(const std::string &methods,
+             const char *delim,
+             std::list<std::string> *result)
+{
+    result->clear();
+    char *buffer = new char[methods.length() + 1];
+    memcpy(buffer, methods.c_str(), methods.length() + 1);
+
+    char *ptr = NULL;
+    char *token = strtok_r(buffer, delim, &ptr);
+    while (token) {
+        result->push_back(token);
+        token = strtok_r(NULL, delim, &ptr);
+    }
+
+    delete [] buffer;
+}
+
+void explode(const std::string &methods,
+             const char *delim,
+             std::set<std::string> *result)
 {
     result->clear();
     char *buffer = new char[methods.length() + 1];

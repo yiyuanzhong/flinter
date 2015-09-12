@@ -19,8 +19,13 @@
 #include <list>
 #include <set>
 #include <string>
+#include <vector>
 
 namespace flinter {
+
+extern void explode(const std::string &methods,
+                    const char *delim,
+                    std::vector<std::string> *result);
 
 extern void explode(const std::string &methods,
                     const char *delim,
@@ -29,6 +34,32 @@ extern void explode(const std::string &methods,
 extern void explode(const std::string &methods,
                     const char *delim,
                     std::set<std::string> *result);
+
+template <class iterator>
+inline void implode(const std::string &glue,
+                    iterator begin, iterator end,
+                    std::string *result)
+{
+    result->clear();
+    if (begin == end) {
+        return;
+    }
+
+    iterator p = begin;
+    result->assign(*p++);
+    for (; p != end; ++p) {
+        result->append(glue);
+        result->append(*p);
+    }
+}
+
+template <class T>
+inline void implode(const std::string &glue,
+                    const T &container,
+                    std::string *result)
+{
+    implode(glue, container.begin(), container.end(), result);
+}
 
 } // namespace flinter
 

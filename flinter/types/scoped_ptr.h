@@ -57,11 +57,6 @@ public:
         return _t;
     }
 
-    operator bool() const
-    {
-        return !!_t;
-    }
-
 private:
     scoped_ptr<T> &operator = (const scoped_ptr<T> &);
     explicit scoped_ptr(const scoped_ptr<T> &);
