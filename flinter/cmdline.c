@@ -197,7 +197,7 @@ static int cmdline_get_module_path_via_exe(void)
 {
     char buffer[PATH_MAX];
     char path[128];
-    int ret;
+    ssize_t ret;
 
     if (g_module_dirname && g_module_basename) {
         return 0;
@@ -294,8 +294,8 @@ static int cmdline_get_module_path_via_fd(const char *argv)
 {
     char buffer[PATH_MAX];
     char path[128];
+    ssize_t ret;
     char *ptr;
-    int ret;
     int fd;
 
     if (g_module_dirname) {
@@ -546,7 +546,7 @@ int cmdline_set_process_name(const char *fmt, ...)
 
     /* And we erase all remaining buffer to 0, since some OS might remember the old length. */
     if (max > (size_t)eraser) {
-        off += eraser;
+        off += (size_t)eraser;
     } else {
         off += max;
     }

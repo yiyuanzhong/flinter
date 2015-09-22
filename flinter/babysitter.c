@@ -120,7 +120,7 @@ static int babysitter_check_watchdog(const babysitter_configure_t *configure,
                                      int64_t last_feed)
 {
     int64_t now;
-    int elapsed;
+    int64_t elapsed;
 
     if (!configure->watchdog_timer) {
         return 0;

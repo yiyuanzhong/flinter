@@ -41,7 +41,7 @@ public:
     ~Tree();
 
     void Merge(const Tree &other, bool overwrite_existing_nodes);
-    Tree &operator =(const Tree &other);
+    Tree &operator = (const Tree &other);
     explicit Tree(const Tree &other);
 
     template <class K, class V, class C, class A>
@@ -97,18 +97,18 @@ public:
         return convert(_value, defval, valid);
     }
 
-    const Tree &operator [](const std::string &path) const
+    const Tree &operator [] (const std::string &path) const
     {
         return Get(path);
     }
 
-    Tree &operator [](const std::string &path)
+    Tree &operator [] (const std::string &path)
     {
         return Get(path);
     }
 
     template <class T>
-    Tree &operator =(const T &value);
+    Tree &operator = (const T &value);
 
     template <class T>
     Tree &Set(const std::string &path, const T &value);
@@ -162,20 +162,20 @@ public:
         IteratorBase(const Q &other): _p(other._p) {}
 
         const std::string &key() const { return _p->first; }
-        T *operator ->() { return _p->second; }
-        T &operator *() { return *_p->second; }
+        T *operator -> () { return _p->second; }
+        T &operator * () { return *_p->second; }
 
-        IteratorBase operator ++(int) { IteratorBase i; i._p = _p++; return i; }
-        IteratorBase &operator ++() { ++_p; return *this; }
-
-        template <class Q>
-        bool operator ==(const Q &other) const { return _p == other._p; }
+        IteratorBase operator ++ (int) { IteratorBase i; i._p = _p++; return i; }
+        IteratorBase &operator ++ () { ++_p; return *this; }
 
         template <class Q>
-        bool operator !=(const Q &other) const { return _p != other._p; }
+        bool operator == (const Q &other) const { return _p == other._p; }
 
         template <class Q>
-        IteratorBase &operator =(const Q &other) { _p = other._p; return *this; }
+        bool operator != (const Q &other) const { return _p != other._p; }
+
+        template <class Q>
+        IteratorBase &operator = (const Q &other) { _p = other._p; return *this; }
 
     private:
         P _p;
@@ -239,10 +239,10 @@ Tree::Tree(const std::map<K, V, C, A> &m)
     }
 }
 
-std::ostream &operator <<(std::ostream &out, const Tree &tree);
+std::ostream &operator << (std::ostream &out, const Tree &tree);
 
 template <class T>
-Tree &Tree::operator =(const T &value)
+Tree &Tree::operator = (const T &value)
 {
     return Set(value);
 }

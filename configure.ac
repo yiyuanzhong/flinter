@@ -35,6 +35,9 @@ AC_LANG([C++])
 AX_CHECK_COMPILE_FLAG([-std=gnu++11], [AC_SUBST([CXXFLAGS_11], [-std=gnu++11])],
     [AX_CHECK_COMPILE_FLAG([-std=gnu++0x], [AC_SUBST([CXXFLAGS_11], [-std=gnu++0x])])])
 
+AX_CHECK_COMPILE_FLAG([-Wsign-conversion],
+                      [AC_SUBST([CXXFLAGS_SC], [-Wsign-conversion])])
+
 AC_ARG_ENABLE([debug],
               [AC_HELP_STRING([--enable-debug],
                               [enable debug build parameters [default=no]])])

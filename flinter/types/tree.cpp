@@ -21,15 +21,13 @@
 #include <algorithm>
 #include <ostream>
 #include <sstream>
+#include <stdexcept>
 
 #include "flinter/convert.h"
 
 namespace flinter {
 
 const Tree kDummyConstTree;
-
-// TODO(yiyuanzhong): this object is in danger if multiple threads access it.
-Tree kDummyTree;
 
 Tree::Tree(const std::string &full_path,
            const std::string &key,
@@ -151,11 +149,11 @@ const Tree &Tree::Get(const std::string &path) const
 Tree &Tree::Get(const std::string &path)
 {
     Tree *tree = CreateOrSet(path, std::string());
-    if (tree) {
-        return *tree;
+    if (!tree) {
+        throw std::runtime_error("invalid path when creating subtree node.");
     }
 
-    return kDummyTree;
+    return *tree;
 }
 
 std::ostream &operator << (std::ostream &out, const Tree &tree)
@@ -232,7 +230,7 @@ Tree::iterator Tree::end()
     return p;
 }
 
-Tree &Tree::operator =(const Tree &other)
+Tree &Tree::operator = (const Tree &other)
 {
     if (this == &other) {
         return *this;

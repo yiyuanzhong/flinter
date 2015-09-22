@@ -18,8 +18,8 @@ ACLOCAL_AMFLAGS = -I m4
 SUBDIRS = flinter
 
 AM_CPPFLAGS = -I${abs_top_builddir} -I${abs_top_srcdir} @CPPFLAGS_APPLE@
-AM_CFLAGS = -g -pthread -Wall -Wextra @CFLAGS_11@
-AM_CXXFLAGS = -g -pthread -Wall @CXXFLAGS_11@
+AM_CFLAGS = -g -pthread -Wall -Wextra -Winit-self -Wunused -Wpointer-arith -Wconversion @CFLAGS_11@
+AM_CXXFLAGS = -g -pthread -Wall -Wextra -Winit-self -Wunused -Wpointer-arith -Wconversion @CXXFLAGS_SC@ @CXXFLAGS_11@
 
 if !ENABLE_DEBUG
 AM_CPPFLAGS += -DNDEBUG

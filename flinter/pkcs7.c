@@ -178,7 +178,7 @@ int pkcs7_verify_into_memory(const char *cacert,
         return -6;
     }
 
-    if (handler(memory, length, parameter)) {
+    if (handler(memory, (size_t)length, parameter)) {
         BIO_free(output);
         return -7;
     }
