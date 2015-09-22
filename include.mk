@@ -170,6 +170,7 @@ CFLAGS_REL += -DNDEBUG -O2 -fomit-frame-pointer
 CFLAGS_REL += -ffunction-sections -fdata-sections
 CFLAGS_ALL += -g
 CFLAGS_ALL += -pipe
+CFLAGS_ALL += -pthread
 CFLAGS_ALL += -fPIC -DPIC
 CFLAGS_USR_ALL += -fno-strict-aliasing
 CFLAGS_USR_ALL += -DPREFIX=\"$(prefix)\"
@@ -221,23 +222,19 @@ CFLAGS_DBG += -pg
 LDFLAGS_DBG += -pg
 endif
 
-LDFLAGS_LIB_INPUT := $(LIBRARIES)
-LDFLAGS_NEED_PTHREAD += $(filter pthread,$(LIBRARIES))
-LDFLAGS_NEED_PTHREAD += $(filter $(SHLIBRARY),$(GOAL))
-LDFLAGS_NEED_PTHREAD += $(filter $(LIBRARY),$(GOAL))
-
-ifneq ($(LDFLAGS_NEED_PTHREAD),)
+LDFLAGS_LIB_INPUT := $(filter-out pthread,$(LIBRARIES))
+ifneq ($(filter pthread,$(LIBRARIES)),)
 ifneq ($(SYSTEM),Darwin)
 LDFLAGS_ALL += -pthread
 endif
-CFLAGS_ALL += -pthread
-LDFLAGS_LIB_INPUT := $(filter-out pthread,$(LDFLAGS_LIB_INPUT))
 endif
 
 ifeq ($(SYSTEM),Darwin)
 LDFLAGS_LIB_INPUT := $(filter-out rt,$(LDFLAGS_LIB_INPUT))
-else
+endif
+
 ifneq ($(HardcodeRunPath),)
+ifneq ($(SYSTEM),Darwin)
 LDFLAGS_ALL += -Wl,-rpath -Wl,'$$ORIGIN/$(HardcodeRunPath)'
 endif
 endif
