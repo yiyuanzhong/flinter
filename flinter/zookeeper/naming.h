@@ -34,8 +34,8 @@ public:
     class Callback {
     public:
         virtual ~Callback() {}
-        virtual void OnError(const std::string &path) {}
-        virtual void OnChanged(const std::map<int32_t, std::string> &naming) {}
+        virtual void OnError(const std::string & /*path*/) {}
+        virtual void OnChanged(const std::map<int32_t, std::string> & /*naming*/) {}
 
     }; // class Callback
 

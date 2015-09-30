@@ -45,10 +45,10 @@ public:
         /// @param path the election path.
         /// @param recoverable if false, you must disconnect ZooKeeper immediately to
         ///        prevent additional damage to the Council ecosphere.
-        virtual void OnFired(const std::string &path, bool recoverable)              {}
+        virtual void OnFired(const std::string & /*path*/, bool /*recoverable*/) {}
 
         /// Successfully elected.
-        virtual void OnElected(const std::string &path, int32_t id)                  {}
+        virtual void OnElected(const std::string & /*path*/, int32_t /*id*/) {}
 
     }; // class Callback
 
@@ -64,7 +64,9 @@ public:
     /// @param zk life span is NOT taken, make sure the object is alive while attended.
     /// @param election_path a node path that election will take place.
     /// @param cb can be NULL.
-    bool Initialize(ZooKeeper *zk, const std::string &election_path, Callback *cb = NULL);
+    bool Initialize(ZooKeeper *zk,
+                    const std::string &election_path,
+                    Callback *cb = NULL);
 
     /// Block and wait, might not be reliable if we're elected then fired immediately.
     bool WaitUntilAttended() const;
@@ -127,14 +129,14 @@ private:
     ZooKeeper *_zk;
     ZooKeeperTracker *_zkt;
 
-    int32_t         _actual_id;         ///< Node ID that I created.
-    std::string     _election_path;     ///< A node path to perform election.
-    std::string     _node_name;         ///< Last used election name.
-    std::string     _name;              ///< User provided election name.
-    Callback       *_cb;                ///< Callback to notify.
+    int32_t         _actual_id;     ///< Node ID that I created.
+    std::string     _election_path; ///< A node path to perform election.
+    std::string     _node_name;     ///< Last used election name.
+    std::string     _name;          ///< User provided election name.
+    Callback       *_cb;            ///< Callback to notify.
 
-    int32_t         _id;                ///< Elected ID, if >=0 then == _actual_id.
-    int32_t         _size;              ///< Council size.
+    int32_t         _id;            ///< Elected ID, if >=0 then == _actual_id.
+    int32_t         _size;          ///< Council size.
 
     mutable Condition _condition;
     mutable Mutex _mutex;

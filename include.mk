@@ -185,14 +185,25 @@ CFLAGS_USR_REL += -Wuninitialized
 SYSTEM := $(shell $(UNAME) -s)
 GCC_VER_41 := $(shell $(CC) -dumpversion | $(AWK) -F. '{ print ($$1 > 4 || $$1 == 4 && $$2 >= 1) }')
 GCC_VER_43 := $(shell $(CC) -dumpversion | $(AWK) -F. '{ print ($$1 > 4 || $$1 == 4 && $$2 >= 3) }')
+GCC_VER_46 := $(shell $(CC) -dumpversion | $(AWK) -F. '{ print ($$1 > 4 || $$1 == 4 && $$2 >= 6) }')
 GCC_VER_47 := $(shell $(CC) -dumpversion | $(AWK) -F. '{ print ($$1 > 4 || $$1 == 4 && $$2 >= 7) }')
 
+CFLAGS_STD := -std=gnu99
+ifeq ($(GCC_VER_46),1)
+ifeq ($(GCC_VER_47),1)
+CFLAGS_STD := -std=gnu11
+else
+CFLAGS_STD := -std=gnu1x
+endif
+endif
+
+CXXFLAGS_STD := -std=gnu++98
 ifeq ($(GCC_VER_43),1)
 ifeq ($(GCC_VER_47),1)
-CXXFLAGS_ALL += -std=gnu++11
+CXXFLAGS_STD := -std=gnu++11
 CXXFLAGS_USR_ALL += -Wzero-as-null-pointer-constant
 else
-CXXFLAGS_ALL += -std=gnu++0x
+CXXFLAGS_STD := -std=gnu++0x
 endif
 endif
 
@@ -265,12 +276,16 @@ CFLAGS_REL_SYS    := $(CFLAGS_PKGCONFIG) $(CPPFLAGS) $(CFLAGS) $(CFLAGS_ALL) $(C
 CFLAGS_DBG_SYS    := $(CFLAGS_PKGCONFIG) $(CPPFLAGS) $(CFLAGS) $(CFLAGS_ALL) $(CFLAGS_SYS_ALL) $(CFLAGS_DBG) $(CFLAGS_SYS_DBG)
 CFLAGS_REL_USR    := $(CFLAGS_PKGCONFIG) $(CPPFLAGS) $(CFLAGS) $(CFLAGS_ALL) $(CFLAGS_USR_ALL) $(CFLAGS_REL) $(CFLAGS_SYS_REL)
 CFLAGS_DBG_USR    := $(CFLAGS_PKGCONFIG) $(CPPFLAGS) $(CFLAGS) $(CFLAGS_ALL) $(CFLAGS_USR_ALL) $(CFLAGS_DBG) $(CFLAGS_SYS_DBG)
-CXXFLAGS_REL_SYS  := $(CPPFLAGS) $(CXXFLAGS) $(CXXFLAGS_ALL) $(CXXFLAGS_SYS_ALL) $(CXXFLAGS_REL) $(CXXFLAGS_SYS_REL) $(CFLAGS_REL_SYS)
-CXXFLAGS_DBG_SYS  := $(CPPFLAGS) $(CXXFLAGS) $(CXXFLAGS_ALL) $(CXXFLAGS_SYS_ALL) $(CXXFLAGS_DBG) $(CXXFLAGS_SYS_DBG) $(CFLAGS_DBG_SYS)
-CXXFLAGS_REL_USR  := $(CPPFLAGS) $(CXXFLAGS) $(CXXFLAGS_ALL) $(CXXFLAGS_USR_ALL) $(CXXFLAGS_REL) $(CXXFLAGS_USR_REL) $(CFLAGS_REL_USR)
-CXXFLAGS_DBG_USR  := $(CPPFLAGS) $(CXXFLAGS) $(CXXFLAGS_ALL) $(CXXFLAGS_USR_ALL) $(CXXFLAGS_DBG) $(CXXFLAGS_USR_DBG) $(CFLAGS_DBG_USR)
+CXXFLAGS_REL_SYS  := $(CXXFLAGS_STD) $(CFLAGS_REL_SYS) $(CXXFLAGS) $(CXXFLAGS_ALL) $(CXXFLAGS_SYS_ALL) $(CXXFLAGS_REL) $(CXXFLAGS_SYS_REL)
+CXXFLAGS_DBG_SYS  := $(CXXFLAGS_STD) $(CFLAGS_DBG_SYS) $(CXXFLAGS) $(CXXFLAGS_ALL) $(CXXFLAGS_SYS_ALL) $(CXXFLAGS_DBG) $(CXXFLAGS_SYS_DBG)
+CXXFLAGS_REL_USR  := $(CXXFLAGS_STD) $(CFLAGS_REL_USR) $(CXXFLAGS) $(CXXFLAGS_ALL) $(CXXFLAGS_USR_ALL) $(CXXFLAGS_REL) $(CXXFLAGS_USR_REL)
+CXXFLAGS_DBG_USR  := $(CXXFLAGS_STD) $(CFLAGS_DBG_USR) $(CXXFLAGS) $(CXXFLAGS_ALL) $(CXXFLAGS_USR_ALL) $(CXXFLAGS_DBG) $(CXXFLAGS_USR_DBG)
 LDFLAGS_REL_FINAL := $(LDFLAGS_REL) $(LDFLAGS_ALL) $(LDFLAGS) $(LDFLAGS_PKGCONFIG)
 LDFLAGS_DBG_FINAL := $(LDFLAGS_DBG) $(LDFLAGS_ALL) $(LDFLAGS) $(LDFLAGS_PKGCONFIG)
+CFLAGS_REL_SYS    := $(CFLAGS_STD) $(CFLAGS_REL_SYS)
+CFLAGS_DBG_SYS    := $(CFLAGS_STD) $(CFLAGS_DBG_SYS)
+CFLAGS_REL_USR    := $(CFLAGS_STD) $(CFLAGS_REL_USR)
+CFLAGS_DBG_USR    := $(CFLAGS_STD) $(CFLAGS_DBG_USR)
 
 EXECUTABLE := $(TARGET)
 EXECUTABLEd := $(TARGET)_debug
@@ -394,18 +409,14 @@ define rule_cgi_release
 $(1): $(patsubst $(TARGET)/%,%,$(dir $(1))).libs/$(patsubst %$(CGI_SUFFIX),%_cgi.cpp.release.o,$(notdir $(1))) $(CGI_OBJ_REL) $(STATICS_DEPS_REL)
 	@$$(ECHO_LDR) $$@
 	@$$(MKDIR) $$(dir $$@)
-	$(AT)$$(CXX) $$< $$(CGI_OBJ_REL) \
-			$$(call make_release_objects,$$($$(call nolibs,$$@)_SOURCES)) \
-			$$(LDFLAGS_REL_FINAL) $$(STATICS_REL) $$(LDFLAGS_LIB) $$(STATICS_REL) $$(LDFLAGS_LIB) -o $$@
+	$(AT)$$(CXX) $$< $$(CGI_OBJ_REL) $$(LDFLAGS_REL_FINAL) $$(STATICS_REL) $$(LDFLAGS_LIB) $$(STATICS_REL) $$(LDFLAGS_LIB) -Wl,--rpath=../lib -o $$@
 endef
 
 define rule_test_release
 $(1): $(patsubst $(TARGET)/%,%,$(dir $(1))).libs/$(patsubst %,%.cpp.release.o,$(notdir $(1))) $(TEST_OBJ_REL) $(STATICS_DEPS_REL)
 	@$$(ECHO_LDR) $$@
 	@$$(MKDIR) $$(dir $$@)
-	$(AT)$$(CXX) $$< $$(TEST_OBJ_REL) \
-			$$(call make_release_objects,$$($$(call nolibs,$$@)_SOURCES)) \
-			$$(LDFLAGS_REL_FINAL) $$(STATICS_REL) $$(LDFLAGS_LIB) $$(STATICS_REL) $$(LDFLAGS_LIB) -o $$@
+	$(AT)$$(CXX) $$< $$(TEST_OBJ_REL) $$(LDFLAGS_REL_FINAL) $$(STATICS_REL) $$(LDFLAGS_LIB) $$(STATICS_REL) $$(LDFLAGS_LIB) -Wl,--rpath=../lib -o $$@
 endef
 
 %.pb.cc.release.o: $(dir %)../$(notdir %.pb.cc)
@@ -425,12 +436,10 @@ endef
 	$(AT)$(CC) $(CFLAGS_REL_USR) -c -o $@ $(call clean,$<)
 
 %.cpp.release.deps: $(dir %)../$(notdir %.cpp)
-	@$(CXX) $(CXXFLAGS_REL_USR) -MT '$(basename $@).o $@' -E -M -MF $@ $< >/dev/null 2>&1 && \
-        $(ECHO) "$(basename $@).o $@: $(call make_release_objects,$($(basename $@)_SOURCES))" >>$@ || ($(RM) $@; $(RM) $(basename $@).o)
+	@$(CXX) $(CXXFLAGS_REL_USR) -MP -MT '$(basename $@).o $@' -E -M -MF $@ $< >/dev/null 2>&1 || ($(RM) $@; $(RM) $(basename $@).o)
 
 %.c.release.deps: $(dir %)../$(notdir %.c)
-	@$(CC) $(CFLAGS_REL_USR) -MT '$(basename $@).o $@' -E -M -MF $@ $< >/dev/null 2>&1 && \
-        $(ECHO) "$(basename $@).o $@: $(call make_release_objects,$($(basename $@)_SOURCES))" >>$@ || ($(RM) $@; $(RM) $(basename $@).o)
+	@$(CC) $(CFLAGS_REL_USR) -MP -MT '$(basename $@).o $@' -E -M -MF $@ $< >/dev/null 2>&1 || ($(RM) $@; $(RM) $(basename $@).o)
 
 else # ReleaseAsDebug
 
@@ -484,9 +493,7 @@ define rule_cgi_debug
 $(1): $(patsubst $(TARGET)/%,%,$(dir $(1))).libs/$(patsubst %_debug$(CGI_SUFFIX),%_cgi.cpp.debug.o,$(notdir $(1))) $(CGI_OBJ_DBG) $(STATICS_DEPS_DBG)
 	@$$(ECHO_LDD) $$@
 	@$$(MKDIR) $$(dir $$@)
-	$(AT)$$(CXX) $$< $$(CGI_OBJ_DBG) \
-			$$(call make_debug_objects,$$($$(call nolibs,$$@)_SOURCES)) \
-			$$(LDFLAGS_DBG_FINAL) $$(STATICS_DBG) $$(LDFLAGS_LIB) $$(STATICS_DBG) $$(LDFLAGS_LIB) -Wl,--rpath=../lib -o $$@
+	$(AT)$$(CXX) $$< $$(CGI_OBJ_DBG) $$(LDFLAGS_DBG_FINAL) $$(STATICS_DBG) $$(LDFLAGS_LIB) $$(STATICS_DBG) $$(LDFLAGS_LIB) -Wl,--rpath=../lib -o $$@
 endef
 
 define rule_test_debug
@@ -494,9 +501,7 @@ $(1): $(patsubst $(TARGET)/%,%,$(dir $(1))).libs/$(patsubst %_debug,%.cpp.debug.
 	@$$(RM) $(patsubst $(TARGET)/%,%,$(dir $(1)))$(notdir $(1))
 	@$$(ECHO_LDD) $$@
 	@$$(MKDIR) $$(dir $$@)
-	$(AT)$$(CXX) $$< $$(TEST_OBJ_DBG) \
-			$$(call make_debug_objects,$$($$(call nolibs,$$@)_SOURCES)) \
-			$$(LDFLAGS_DBG_FINAL) $$(STATICS_DBG) $$(LDFLAGS_LIB) $$(STATICS_DBG) $$(LDFLAGS_LIB) -Wl,--rpath=../lib -o $$@
+	$(AT)$$(CXX) $$< $$(TEST_OBJ_DBG) $$(LDFLAGS_DBG_FINAL) $$(STATICS_DBG) $$(LDFLAGS_LIB) $$(STATICS_DBG) $$(LDFLAGS_LIB) -Wl,--rpath=../lib -o $$@
 endef
 
 $(foreach cgi,$(CGI),$(eval $(call rule_cgi_release,$(cgi))))
@@ -529,12 +534,10 @@ $(foreach test,$(TESTd),$(eval $(call rule_test_debug,$(test))))
 	$(AT)$(THRIFT) --gen cpp -strict --out $(dir $@) $<
 
 %.cpp.debug.deps: $(dir %)../$(notdir %.cpp)
-	@$(CXX) $(CXXFLAGS_DBG_USR) -MT '$(basename $@).o $@' -E -M -MF $@ $< >/dev/null 2>&1 && \
-        $(ECHO) "$(basename $@).o $@: $(call make_debug_objects,$($(basename $@)_SOURCES))" >>$@ || ($(RM) $@; $(RM) $(basename $@).o)
+	@$(CXX) $(CXXFLAGS_DBG_USR) -MP -MT '$(basename $@).o $@' -E -M -MF $@ $< >/dev/null 2>&1 || ($(RM) $@; $(RM) $(basename $@).o)
 
 %.c.debug.deps: $(dir %)../$(notdir %.c)
-	@$(CC) $(CFLAGS_DBG_USR) -MT '$(basename $@).o $@' -E -M -MF $@ $< >/dev/null 2>&1 && \
-        $(ECHO) "$(basename $@).o $@: $(call make_debug_objects,$($(basename $@)_SOURCES))" >>$@ || ($(RM) $@; $(RM) $(basename $@).o)
+	@$(CC) $(CFLAGS_DBG_USR) -MP -MT '$(basename $@).o $@' -E -M -MF $@ $< >/dev/null 2>&1 || ($(RM) $@; $(RM) $(basename $@).o)
 
 # Same as .PRECIOUS, remember to synchronize.
 # HACK(yiyuanzhong): make 3.81 misunderstands '.libs/Makefile.dep: .PRECIOUS'.

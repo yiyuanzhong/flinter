@@ -112,7 +112,7 @@ bool Naming::Shutdown()
     return true;
 }
 
-void Naming::OnError(int error, const char *path)
+void Naming::OnError(int /*error*/, const char *path)
 {
     MutexLocker locker(&_mutex);
     RemoveNode();
