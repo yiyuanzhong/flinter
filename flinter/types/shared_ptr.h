@@ -28,7 +28,7 @@ public:
         _c->AddAndFetch(1);
     }
 
-    explicit shared_ptr(const shared_ptr<T> &other) : _c(other._c), _t(other._t)
+    shared_ptr(const shared_ptr<T> &other) : _c(other._c), _t(other._t)
     {
         _c->AddAndFetch(1);
     }

@@ -201,7 +201,7 @@ CXXFLAGS_STD := -std=gnu++98
 ifeq ($(GCC_VER_43),1)
 ifeq ($(GCC_VER_47),1)
 CXXFLAGS_STD := -std=gnu++11
-CXXFLAGS_USR_ALL += -Wzero-as-null-pointer-constant
+CXXFLAGS_USR_ALL += -Wno-zero-as-null-pointer-constant
 else
 CXXFLAGS_STD := -std=gnu++0x
 endif
