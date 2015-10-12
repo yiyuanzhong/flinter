@@ -183,10 +183,17 @@ CXXFLAGS_USR_ALL += -Woverloaded-virtual
 CFLAGS_USR_REL += -Wuninitialized
 
 SYSTEM := $(shell $(UNAME) -s)
+ifeq ($(SYSTEM),Darwin)
+GCC_VER_41 := 1
+GCC_VER_43 := 1
+GCC_VER_46 := 1
+GCC_VER_47 := 1
+else
 GCC_VER_41 := $(shell $(CC) -dumpversion | $(AWK) -F. '{ print ($$1 > 4 || $$1 == 4 && $$2 >= 1) }')
 GCC_VER_43 := $(shell $(CC) -dumpversion | $(AWK) -F. '{ print ($$1 > 4 || $$1 == 4 && $$2 >= 3) }')
 GCC_VER_46 := $(shell $(CC) -dumpversion | $(AWK) -F. '{ print ($$1 > 4 || $$1 == 4 && $$2 >= 6) }')
 GCC_VER_47 := $(shell $(CC) -dumpversion | $(AWK) -F. '{ print ($$1 > 4 || $$1 == 4 && $$2 >= 7) }')
+endif
 
 CFLAGS_STD := -std=gnu99
 ifeq ($(GCC_VER_46),1)
@@ -201,7 +208,6 @@ CXXFLAGS_STD := -std=gnu++98
 ifeq ($(GCC_VER_43),1)
 ifeq ($(GCC_VER_47),1)
 CXXFLAGS_STD := -std=gnu++11
-CXXFLAGS_USR_ALL += -Wno-zero-as-null-pointer-constant
 else
 CXXFLAGS_STD := -std=gnu++0x
 endif
