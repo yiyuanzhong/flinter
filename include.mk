@@ -248,6 +248,8 @@ endif
 
 ifeq ($(SYSTEM),Darwin)
 LDFLAGS_LIB_INPUT := $(filter-out rt,$(LDFLAGS_LIB_INPUT))
+else
+LDFLAGS_TEST_RPATH := -Wl,-rpath -Wl,../lib
 endif
 
 ifneq ($(HardcodeRunPath),)
@@ -415,14 +417,14 @@ define rule_cgi_release
 $(1): $(patsubst $(TARGET)/%,%,$(dir $(1))).libs/$(patsubst %$(CGI_SUFFIX),%_cgi.cpp.release.o,$(notdir $(1))) $(CGI_OBJ_REL) $(STATICS_DEPS_REL)
 	@$$(ECHO_LDR) $$@
 	@$$(MKDIR) $$(dir $$@)
-	$(AT)$$(CXX) $$< $$(CGI_OBJ_REL) $$(LDFLAGS_REL_FINAL) $$(STATICS_REL) $$(LDFLAGS_LIB) $$(STATICS_REL) $$(LDFLAGS_LIB) -Wl,--rpath=../lib -o $$@
+	$(AT)$$(CXX) $$< $$(CGI_OBJ_REL) $$(LDFLAGS_REL_FINAL) $$(STATICS_REL) $$(LDFLAGS_LIB) $$(STATICS_REL) $$(LDFLAGS_LIB) $(LDFLAGS_TEST_RPATH) -o $$@
 endef
 
 define rule_test_release
 $(1): $(patsubst $(TARGET)/%,%,$(dir $(1))).libs/$(patsubst %,%.cpp.release.o,$(notdir $(1))) $(TEST_OBJ_REL) $(STATICS_DEPS_REL)
 	@$$(ECHO_LDR) $$@
 	@$$(MKDIR) $$(dir $$@)
-	$(AT)$$(CXX) $$< $$(TEST_OBJ_REL) $$(LDFLAGS_REL_FINAL) $$(STATICS_REL) $$(LDFLAGS_LIB) $$(STATICS_REL) $$(LDFLAGS_LIB) -Wl,--rpath=../lib -o $$@
+	$(AT)$$(CXX) $$< $$(TEST_OBJ_REL) $$(LDFLAGS_REL_FINAL) $$(STATICS_REL) $$(LDFLAGS_LIB) $$(STATICS_REL) $$(LDFLAGS_LIB) $(LDFLAGS_TEST_RPATH) -o $$@
 endef
 
 %.pb.cc.release.o: $(dir %)../$(notdir %.pb.cc)
@@ -499,7 +501,7 @@ define rule_cgi_debug
 $(1): $(patsubst $(TARGET)/%,%,$(dir $(1))).libs/$(patsubst %_debug$(CGI_SUFFIX),%_cgi.cpp.debug.o,$(notdir $(1))) $(CGI_OBJ_DBG) $(STATICS_DEPS_DBG)
 	@$$(ECHO_LDD) $$@
 	@$$(MKDIR) $$(dir $$@)
-	$(AT)$$(CXX) $$< $$(CGI_OBJ_DBG) $$(LDFLAGS_DBG_FINAL) $$(STATICS_DBG) $$(LDFLAGS_LIB) $$(STATICS_DBG) $$(LDFLAGS_LIB) -Wl,--rpath=../lib -o $$@
+	$(AT)$$(CXX) $$< $$(CGI_OBJ_DBG) $$(LDFLAGS_DBG_FINAL) $$(STATICS_DBG) $$(LDFLAGS_LIB) $$(STATICS_DBG) $$(LDFLAGS_LIB) $(LDFLAGS_TEST_FLAGS) -o $$@
 endef
 
 define rule_test_debug
@@ -507,7 +509,7 @@ $(1): $(patsubst $(TARGET)/%,%,$(dir $(1))).libs/$(patsubst %_debug,%.cpp.debug.
 	@$$(RM) $(patsubst $(TARGET)/%,%,$(dir $(1)))$(notdir $(1))
 	@$$(ECHO_LDD) $$@
 	@$$(MKDIR) $$(dir $$@)
-	$(AT)$$(CXX) $$< $$(TEST_OBJ_DBG) $$(LDFLAGS_DBG_FINAL) $$(STATICS_DBG) $$(LDFLAGS_LIB) $$(STATICS_DBG) $$(LDFLAGS_LIB) -Wl,--rpath=../lib -o $$@
+	$(AT)$$(CXX) $$< $$(TEST_OBJ_DBG) $$(LDFLAGS_DBG_FINAL) $$(STATICS_DBG) $$(LDFLAGS_LIB) $$(STATICS_DBG) $$(LDFLAGS_LIB) $(LDFLAGS_TEST_RPATH) -o $$@
 endef
 
 $(foreach cgi,$(CGI),$(eval $(call rule_cgi_release,$(cgi))))

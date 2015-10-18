@@ -93,9 +93,10 @@ private:
     mutable Mutex _mutex;
     mutable Condition _condition;
     typedef std::pair<T *, size_t> V;
-    typename std::map<K, V>::iterator _ptr;
-    std::multimap<K, V> _drop;
+
     std::map<K, V> _map;
+    std::multimap<K, V> _drop;
+    typename std::map<K, V>::iterator _ptr;
 
 }; // class ObjectMap
 
