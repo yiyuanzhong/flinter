@@ -87,6 +87,16 @@ AS_IF([test x"${with_libcurl}" != x"no"],
       [PKG_CHECK_MODULES([libcurl], [libcurl])
        AC_CHECK_HEADERS([curl/curl.h])])
 
+# ICU
+AC_ARG_WITH([icu],
+            [AC_HELP_STRING([--without-icu],
+                            [enable ICU libraries [default=yes]])])
+
+AM_CONDITIONAL([WITH_ICU], [test x"${with_icu}" != x"no"])
+AS_IF([test x"${with_icu}" != x"no"],
+      [PKG_CHECK_MODULES([icu], [icu-uc])],
+      [AC_SEARCH_LIBS([libiconv], [iconv])])
+
 # libzookeeper
 AC_ARG_WITH([zookeeper],
             [AC_HELP_STRING([--without-zookeeper],
@@ -150,7 +160,6 @@ AC_CHECK_HEADERS([utmp.h])
 
 AC_SEARCH_LIBS([pthread_create], [pthread])
 AC_SEARCH_LIBS([clock_gettime], [rt])
-AC_SEARCH_LIBS([libiconv], [iconv])
 
 AC_CHECK_FUNCS([ppoll])
 AC_CHECK_FUNCS([openat])

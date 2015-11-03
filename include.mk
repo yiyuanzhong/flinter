@@ -254,7 +254,11 @@ endif
 
 ifneq ($(HardcodeRunPath),)
 ifneq ($(SYSTEM),Darwin)
+ifeq ($(HardcodeRunPath),.)
+LDFLAGS_ALL += -Wl,-rpath -Wl,'$$ORIGIN'
+else
 LDFLAGS_ALL += -Wl,-rpath -Wl,'$$ORIGIN/$(HardcodeRunPath)'
+endif
 endif
 endif
 

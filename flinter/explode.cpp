@@ -21,41 +21,51 @@
 #include <algorithm>
 
 namespace flinter {
+namespace {
+
+template <class T>
+void explode_internal(const std::string &methods,
+                      const char *delim,
+                      bool preserve_null,
+                      T *result)
+{
+    result->clear();
+    size_t pos = 0;
+    while (pos < methods.length()) {
+        size_t hit = methods.find_first_of(delim, pos);
+        if (hit == std::string::npos) {
+            result->push_back(methods.substr(pos));
+            return;
+        }
+
+        if (pos != hit || preserve_null) {
+            result->push_back(methods.substr(pos, hit - pos));
+        }
+
+        pos = hit + 1;
+    }
+
+    if (preserve_null) {
+        result->push_back(std::string());
+    }
+}
+
+} // anonymous namespace
 
 void explode(const std::string &methods,
              const char *delim,
-             std::vector<std::string> *result)
+             std::vector<std::string> *result,
+             bool preserve_null)
 {
-    result->clear();
-    char *buffer = new char[methods.length() + 1];
-    memcpy(buffer, methods.c_str(), methods.length() + 1);
-
-    char *ptr = NULL;
-    char *token = strtok_r(buffer, delim, &ptr);
-    while (token) {
-        result->push_back(token);
-        token = strtok_r(NULL, delim, &ptr);
-    }
-
-    delete [] buffer;
+    explode_internal(methods, delim, preserve_null, result);
 }
 
 void explode(const std::string &methods,
              const char *delim,
-             std::list<std::string> *result)
+             std::list<std::string> *result,
+             bool preserve_null)
 {
-    result->clear();
-    char *buffer = new char[methods.length() + 1];
-    memcpy(buffer, methods.c_str(), methods.length() + 1);
-
-    char *ptr = NULL;
-    char *token = strtok_r(buffer, delim, &ptr);
-    while (token) {
-        result->push_back(token);
-        token = strtok_r(NULL, delim, &ptr);
-    }
-
-    delete [] buffer;
+    explode_internal(methods, delim, preserve_null, result);
 }
 
 void explode(const std::string &methods,
@@ -63,17 +73,20 @@ void explode(const std::string &methods,
              std::set<std::string> *result)
 {
     result->clear();
-    char *buffer = new char[methods.length() + 1];
-    memcpy(buffer, methods.c_str(), methods.length() + 1);
+    size_t pos = 0;
+    while (pos < methods.length()) {
+        size_t hit = methods.find_first_of(delim, pos);
+        if (hit == std::string::npos) {
+            result->insert(methods.substr(pos));
+            break;
+        }
 
-    char *ptr = NULL;
-    char *token = strtok_r(buffer, delim, &ptr);
-    while (token) {
-        result->insert(token);
-        token = strtok_r(NULL, delim, &ptr);
+        if (pos != hit) {
+            result->insert(methods.substr(pos, hit - pos));
+        }
+
+        pos = hit + 1;
     }
-
-    delete [] buffer;
 }
 
 } // namespace flinter

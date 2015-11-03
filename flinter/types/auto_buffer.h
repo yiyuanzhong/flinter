@@ -26,7 +26,7 @@ public:
     AutoBuffer() : _size(0), _buffer(NULL) {}
     explicit AutoBuffer(size_t size) : _size(size)
     {
-        _buffer = reinterpret_cast<T *>(malloc(size));
+        _buffer = reinterpret_cast<T *>(malloc(size * sizeof(T)));
     }
 
     ~AutoBuffer()
@@ -36,7 +36,7 @@ public:
 
     void resize(size_t size)
     {
-        void *tmp = realloc(_buffer, size);
+        void *tmp = realloc(_buffer, size * sizeof(T));
         if (tmp) {
             _buffer = reinterpret_cast<T *>(tmp);
             _size = size;

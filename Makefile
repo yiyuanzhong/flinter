@@ -20,6 +20,9 @@ CONFIGURE_FLAGS := ${CONFIGURE_FLAGS} --enable-silent-rules
 STRIP = strip
 endif
 
+# ICU module is not yet completed.
+CONFIGURE_FLAGS := $(CONFIGURE_FLAGS) --without-icu
+
 SYSTEM := $(shell uname -s)
 ifeq ($(SYSTEM),Darwin)
 SO := dylib

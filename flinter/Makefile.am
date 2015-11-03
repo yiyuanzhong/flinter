@@ -179,6 +179,13 @@ libflinter_la_SOURCES += types/uuid.cpp
 libflinter_la_LIBADD += ${libuuid_LIBS}
 endif
 
+if WITH_ICU
+libflinter_la_SOURCES += charset_icu.cpp
+libflinter_la_LIBADD += ${icu_LIBS}
+else
+libflinter_la_SOURCES += charset_iconv.cpp
+endif
+
 if WITH_ZOOKEEPER
 include_zookeeper_HEADERS = zookeeper/council.h \
                             zookeeper/naming.h \

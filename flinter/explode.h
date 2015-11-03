@@ -25,11 +25,13 @@ namespace flinter {
 
 extern void explode(const std::string &methods,
                     const char *delim,
-                    std::vector<std::string> *result);
+                    std::vector<std::string> *result,
+                    bool preserve_null = false);
 
 extern void explode(const std::string &methods,
                     const char *delim,
-                    std::list<std::string> *result);
+                    std::list<std::string> *result,
+                    bool preserve_null = false);
 
 extern void explode(const std::string &methods,
                     const char *delim,

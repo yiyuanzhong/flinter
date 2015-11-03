@@ -2,6 +2,20 @@
 
 #include <flinter/charset.h>
 
+TEST(CharsetTest, TestUtf8AndGb18030)
+{
+    std::string q;
+    std::string o = "emm";
+    std::string p = "妈妈说不管多长的字符串flinter都可以转换出来！";
+    EXPECT_EQ(0, flinter::charset_utf8_to_gb18030("", &o));
+    EXPECT_TRUE(o.empty());
+    EXPECT_EQ(0, flinter::charset_utf8_to_gb18030(p, &q));
+    EXPECT_EQ(0, flinter::charset_gb18030_to_utf8(q, &o));
+    EXPECT_EQ(p, o);
+    EXPECT_EQ(p.size(), 64u);
+    EXPECT_EQ(q.size(), 45u);
+}
+
 TEST(CharsetTest, TestUtf8AndGbk)
 {
     std::string q;

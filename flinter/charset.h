@@ -31,6 +31,9 @@ extern int charset_wide_to_utf8(const std::wstring &wide, std::string *utf);
 
 extern int charset_utf8_to_json(const std::string &utf, std::string *json);
 
+extern int charset_utf8_to_gb18030(const std::string &utf, std::string *gbk);
+extern int charset_gb18030_to_utf8(const std::string &gbk, std::string *utf);
+
 } // namespace flinter
 
 #endif /* __FLINTER_CHARSET_H__ */
