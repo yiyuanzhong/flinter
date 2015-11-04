@@ -24,7 +24,8 @@
 namespace flinter {
 namespace {
 
-int charset_icu_load(const std::string &input,
+template <class F>
+int charset_icu_load(const F &input,
                      flinter::AutoBuffer<UChar> *output,
                      const char *encoding,
                      size_t *length)
@@ -46,19 +47,19 @@ int charset_icu_load(const std::string &input,
 
     long outpos = 0;
     size_t outlen = 1024;
-    const char *source = input.c_str();
-    const char *const sourceLimit = source + input.length();
+    const char *source = reinterpret_cast<const char *>(&input[0]);
+    const char *const source_limit = source + input.size() * sizeof(typename F::value_type);
 
     while (true) {
         output->resize(outlen);
         UChar *target = output->get() + outpos;
-        UChar *const targetLimit = output->get() + outlen;
+        UChar *const target_limit = output->get() + outlen;
         outlen *= 2;
 
         error = U_ZERO_ERROR;
         ucnv_toUnicode(conv,
-                       &target, targetLimit,
-                       &source, sourceLimit,
+                       &target, target_limit,
+                       &source, source_limit,
                        NULL, TRUE, &error);
 
         outpos = target - output->get();
@@ -75,8 +76,9 @@ int charset_icu_load(const std::string &input,
     return 0;
 }
 
+template <class T>
 int charset_icu_save(const flinter::AutoBuffer<UChar> &input,
-                     std::string *output,
+                     T *output,
                      const char *encoding,
                      size_t length)
 {
@@ -98,24 +100,24 @@ int charset_icu_save(const flinter::AutoBuffer<UChar> &input,
     long outpos = 0;
     size_t outlen = 1024;
     const UChar *source = input.get();
-    const UChar *const sourceLimit = source + length;
+    const UChar *const source_limit = source + length;
 
     while (true) {
-        output->resize(outlen);
-        char *const out = &(*output)[0];
+        output->resize(outlen / sizeof(typename T::value_type));
+        char *const out = reinterpret_cast<char *>(&(*output)[0]);
         char *target = out + outpos;
-        char *const targetLimit = out + outlen;
+        char *const target_limit = out + outlen;
         outlen *= 2;
 
         error = U_ZERO_ERROR;
         ucnv_fromUnicode(conv,
-                         &target, targetLimit,
-                         &source, sourceLimit,
+                         &target, target_limit,
+                         &source, source_limit,
                          NULL, TRUE, &error);
 
         outpos = target - out;
         if (error == U_ZERO_ERROR) {
-            output->resize(static_cast<size_t>(outpos));
+            output->resize(outpos / sizeof(typename T::value_type));
             break;
         } else if (error != U_BUFFER_OVERFLOW_ERROR) {
             ucnv_close(conv);
@@ -127,8 +129,9 @@ int charset_icu_save(const flinter::AutoBuffer<UChar> &input,
     return 0;
 }
 
-int charset_icu(const std::string &input,
-                std::string *output,
+template <class F, class T>
+int charset_icu(const F &input,
+                T *output,
                 const char *from,
                 const char *to)
 {
@@ -161,24 +164,32 @@ int charset_icu(const std::string &input,
 
 } // anonymous namespace
 
-int charset_utf8_to_gbk(const std::string &utf, std::string *gbk)
-{
-    return charset_icu(utf, gbk, "UTF-8", "GBK");
+#define CHARSET(f,t,ef,et) \
+int charset_##f##_to_##t(const std::string &from, std::string *to) \
+{ \
+    return charset_icu(from, to, ef, et); \
 }
 
-int charset_gbk_to_utf8(const std::string &gbk, std::string *utf)
-{
-    return charset_icu(gbk, utf, "GBK", "UTF-8");
+#define CHARSET_I(f,t,ef,et) \
+int charset_##f##_to_##t(const std::vector<int32_t> &from, std::string *to) \
+{ \
+    return charset_icu(from, to, ef, et); \
 }
 
-int charset_utf8_to_gb18030(const std::string &utf, std::string *gbk)
-{
-    return charset_icu(utf, gbk, "UTF-8", "GB18030");
+#define CHARSET_O(f,t,ef,et) \
+int charset_##f##_to_##t(const std::string &from, std::vector<int32_t> *to) \
+{ \
+    return charset_icu(from, to, ef, et); \
 }
 
-int charset_gb18030_to_utf8(const std::string &gbk, std::string *utf)
-{
-    return charset_icu(gbk, utf, "GB18030", "UTF-8");
-}
+CHARSET(utf8,    gbk,     "UTF-8",                "GBK");
+CHARSET(gbk,     utf8,    "GBK",                  "UTF-8");
+CHARSET(utf8,    gb18030, "UTF-8",                "GB18030");
+CHARSET(gb18030, utf8,    "GB18030",              "UTF-8");
+
+CHARSET_O(utf8,  cp,      "UTF-8",                "UTF32_PlatformEndian");
+CHARSET_I(cp,    utf8,    "UTF32_PlatformEndian", "UTF-8");
+CHARSET_O(gbk,   cp,      "GBK",                  "UTF32_PlatformEndian");
+CHARSET_I(cp,    gbk,     "UTF32_PlatformEndian", "GBK");
 
 } // namespace flinter

@@ -30,14 +30,17 @@ int charset_utf8_to_json(const std::string &utf, std::string *json)
     }
 
     json->clear();
-    std::wstring wide;
-    if (charset_utf8_to_wide(utf, &wide)) {
+    std::vector<int32_t> w;
+    if (charset_utf8_to_cp(utf, &w)) {
         return -1;
     }
 
     char buffer[32];
-    for (std::wstring::const_iterator p = wide.begin(); p != wide.end(); ++p) {
-        if (*p > 0x1f && *p < 0x7f) {
+    for (std::vector<int32_t>::const_iterator p = w.begin(); p != w.end(); ++p) {
+        if (*p < 0) {
+            return -1;
+
+        } else if (*p > 0x1f && *p < 0x7f) {
             buffer[0] = static_cast<char>(*p);
             buffer[1] = '\0';
 
@@ -47,7 +50,9 @@ int charset_utf8_to_json(const std::string &utf, std::string *json)
             }
 
         } else {
-            return -1;
+            if (snprintf(buffer, sizeof(buffer), "\\U%08x", *p) != 10) {
+                return -1;
+            }
         }
 
         json->append(buffer);

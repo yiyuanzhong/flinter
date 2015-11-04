@@ -24,10 +24,9 @@
 namespace flinter {
 namespace {
 
-template <class T>
-static int charset_iconv(const void *input,
-                         size_t input_size,
-                         std::basic_string<T> *output,
+template <class F, class T>
+static int charset_iconv(const F &input,
+                         T *output,
                          const char *from,
                          const char *to)
 {
@@ -36,7 +35,7 @@ static int charset_iconv(const void *input,
     }
 
     output->clear();
-    if (!input_size) {
+    if (input.empty()) {
         return 0;
     }
 
@@ -47,9 +46,9 @@ static int charset_iconv(const void *input,
 
     char buffer[1024];
     char *outbuf = buffer;
-    size_t inbytesleft = input_size;
     size_t outbytesleft = sizeof(buffer);
-    char *inbuf = reinterpret_cast<char *>(const_cast<void *>(input));
+    size_t inbytesleft = input.size() * sizeof(typename F::value_type);
+    char *inbuf = const_cast<char *>(reinterpret_cast<const char *>(&input[0]));
 
     int result = -1;
     while (true) {
@@ -60,8 +59,9 @@ static int charset_iconv(const void *input,
             } else if (errno == EINVAL) { // Input is incomplete.
                 break;
             } else if (errno == E2BIG) { // Recoverable.
-                output->append(reinterpret_cast<T *>(buffer),
-                               reinterpret_cast<T *>(outbuf));
+                output->insert(output->end(),
+                               reinterpret_cast<typename T::value_type *>(buffer),
+                               reinterpret_cast<typename T::value_type *>(outbuf));
 
                 outbytesleft = sizeof(buffer);
                 outbuf = buffer;
@@ -75,8 +75,9 @@ static int charset_iconv(const void *input,
             break;
         }
 
-        output->append(reinterpret_cast<T *>(buffer),
-                       reinterpret_cast<T *>(outbuf));
+        output->insert(output->end(),
+                       reinterpret_cast<typename T::value_type *>(buffer),
+                       reinterpret_cast<typename T::value_type *>(outbuf));
 
         result = 0;
         break;
@@ -88,46 +89,52 @@ static int charset_iconv(const void *input,
 
 } // anonymous namespace
 
-int charset_utf8_to_gb18030(const std::string &utf, std::string *gbk)
-{
-    return charset_iconv(utf.data(), utf.length(), gbk, "UTF-8", "GB18030");
-}
-
-int charset_gb18030_to_utf8(const std::string &gbk, std::string *utf)
-{
-    return charset_iconv(gbk.data(), gbk.length(), utf, "GB18030", "UTF-8");
-}
-
-int charset_utf8_to_gbk(const std::string &utf, std::string *gbk)
-{
-    return charset_iconv(utf.data(), utf.length(), gbk, "UTF-8", "GBK");
-}
-
-int charset_gbk_to_utf8(const std::string &gbk, std::string *utf)
-{
-    return charset_iconv(gbk.data(), gbk.length(), utf, "GBK", "UTF-8");
-}
-
 int charset_utf8_to_wide(const std::string &utf, std::wstring *wide)
 {
-    return charset_iconv(utf.data(), utf.length(), wide, "UTF-8", "WCHAR_T");
+    return charset_iconv(utf, wide, "UTF-8", "WCHAR_T");
 }
 
 int charset_wide_to_utf8(const std::wstring &wide, std::string *utf)
 {
-    return charset_iconv(wide.data(), wide.length() * sizeof(wchar_t), utf,
-                         "WCHAR_T", "UTF-8");
+    return charset_iconv(wide, utf, "WCHAR_T", "UTF-8");
 }
 
 int charset_gbk_to_wide(const std::string &gbk, std::wstring *wide)
 {
-    return charset_iconv(gbk.data(), gbk.length(), wide, "GBK", "WCHAR_T");
+    return charset_iconv(gbk, wide, "GBK", "WCHAR_T");
 }
 
 int charset_wide_to_gbk(const std::wstring &wide, std::string *gbk)
 {
-    return charset_iconv(wide.data(), wide.length() * sizeof(wchar_t), gbk,
-                         "WCHAR_T", "GBK");
+    return charset_iconv(wide, gbk, "WCHAR_T", "GBK");
 }
+
+#define CHARSET(f,t,ef,et) \
+int charset_##f##_to_##t(const std::string &from, std::string *to) \
+{ \
+    return charset_iconv(from, to, ef, et); \
+}
+
+#define CHARSET_I(f,t,ef,et) \
+int charset_##f##_to_##t(const std::vector<int32_t> &from, std::string *to) \
+{ \
+    return charset_iconv(from, to, ef, et); \
+}
+
+#define CHARSET_O(f,t,ef,et) \
+int charset_##f##_to_##t(const std::string &from, std::vector<int32_t> *to) \
+{ \
+    return charset_iconv(from, to, ef, et); \
+}
+
+CHARSET(utf8,    gbk,     "UTF-8",          "GBK");
+CHARSET(gbk,     utf8,    "GBK",            "UTF-8");
+CHARSET(utf8,    gb18030, "UTF-8",          "GB18030");
+CHARSET(gb18030, utf8,    "GB18030",        "UTF-8");
+
+CHARSET_O(utf8,  cp,      "UTF-8",          "UCS-4-INTERNAL");
+CHARSET_I(cp,    utf8,    "UCS-4-INTERNAL", "UTF-8");
+CHARSET_O(gbk,   cp,      "GBK",            "UCS-4-INTERNAL");
+CHARSET_I(cp,    gbk,     "UCS-4-INTERNAL", "GBK");
 
 } // namespace flinter

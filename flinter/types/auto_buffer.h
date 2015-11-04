@@ -18,6 +18,8 @@
 
 #include <stdlib.h>
 
+#include <stdexcept>
+
 namespace flinter {
 
 template <class T = unsigned char>
@@ -27,6 +29,9 @@ public:
     explicit AutoBuffer(size_t size) : _size(size)
     {
         _buffer = reinterpret_cast<T *>(malloc(size * sizeof(T)));
+        if (!_buffer) {
+            throw std::bad_alloc();
+        }
     }
 
     ~AutoBuffer()
@@ -37,15 +42,12 @@ public:
     void resize(size_t size)
     {
         void *tmp = realloc(_buffer, size * sizeof(T));
-        if (tmp) {
-            _buffer = reinterpret_cast<T *>(tmp);
-            _size = size;
-
-        } else {
-            free(_buffer);
-            _buffer = NULL;
-            _size = 0;
+        if (!tmp) {
+            throw std::bad_alloc();
         }
+
+        _buffer = reinterpret_cast<T *>(tmp);
+        _size = size;
     }
 
     T *get()
@@ -70,11 +72,19 @@ public:
 
     T &operator [] (int i)
     {
+        if (i < 0 || static_cast<size_t>(i) >= _size) {
+            throw std::out_of_range("out of range");
+        }
+
         return _buffer[i];
     }
 
     const T &operator [] (int i) const
     {
+        if (i < 0 || static_cast<size_t>(i) >= _size) {
+            throw std::out_of_range("out of range");
+        }
+
         return _buffer[i];
     }
 
