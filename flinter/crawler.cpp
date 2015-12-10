@@ -153,7 +153,7 @@ bool Crawler::PostRaw(const std::string &content_type,
         return false;
     }
 
-    curl_off_t size = raw.length();
+    curl_off_t size = static_cast<curl_off_t>(raw.length());
     if (curl_easy_setopt(_context->curl, CURLOPT_POSTFIELDS, raw.data())    ||
         curl_easy_setopt(_context->curl, CURLOPT_POSTFIELDSIZE_LARGE, size) ){
 

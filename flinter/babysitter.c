@@ -393,7 +393,7 @@ void babysitter_feed(void)
         return;
     }
 
-    ret = safe_write(g_watchdog_fd, &c, 1);
+    ret = safe_write(g_watchdog_fd, &c, (size_t)1);
     if (ret < 0) {
         /* Either way, we're going to die. */
         safe_close(g_watchdog_fd);

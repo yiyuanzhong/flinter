@@ -84,10 +84,13 @@ include_thread_HEADERS = thread/abstract_thread_pool.h \
                          thread/tls.h \
                          thread/write_locker.h
 
-include_linkage_HEADERS = linkage/easy_context.h \
+include_linkage_HEADERS = linkage/abstract_io.h \
+                          linkage/async_router.h \
+                          linkage/easy_context.h \
                           linkage/easy_handler.h \
                           linkage/easy_tuner.h \
                           linkage/easy_server.h \
+                          linkage/file_descriptor_io.h \
                           linkage/interface.h \
                           linkage/linkage.h \
                           linkage/linkage_base.h \
@@ -96,8 +99,9 @@ include_linkage_HEADERS = linkage/easy_context.h \
                           linkage/linkage_worker.h \
                           linkage/listener.h \
                           linkage/resolver.h \
+                          linkage/route_handler.h \
                           linkage/ssl_context.h \
-                          linkage/ssl_linkage.h
+                          linkage/ssl_io.h
 
 libflinter_core_la_SOURCES = babysitter.c \
                              cmdline.c \
@@ -135,6 +139,7 @@ libflinter_la_SOURCES = $(libflinter_core_la_SOURCES) \
                         linkage/easy_context.cpp \
                         linkage/easy_handler.cpp \
                         linkage/easy_server.cpp \
+                        linkage/file_descriptor_io.cpp \
                         linkage/interface.cpp \
                         linkage/linkage.cpp \
                         linkage/linkage_base.cpp \
@@ -144,7 +149,7 @@ libflinter_la_SOURCES = $(libflinter_core_la_SOURCES) \
                         linkage/listener.cpp \
                         linkage/resolver.cpp \
                         linkage/ssl_context.cpp \
-                        linkage/ssl_linkage.cpp \
+                        linkage/ssl_io.cpp \
                         MurmurHash3.cpp \
                         MurmurHash3.h \
                         charset.cpp \

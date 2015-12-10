@@ -19,12 +19,11 @@
 
 namespace flinter {
 
-bool LinkageBase::DoAttach(LinkageWorker *worker,
-                           int fd,
-                           bool read_now,
+bool LinkageBase::DoAttach(LinkageWorker *worker, int fd,
+                           bool read_now, bool write_now,
                            bool auto_release)
 {
-    return worker->Attach(this, fd, read_now, auto_release);
+    return worker->Attach(this, fd, read_now, write_now, auto_release);
 }
 
 bool LinkageBase::DoDetach(LinkageWorker *worker)

@@ -78,7 +78,7 @@ extern void cmdline_unset_process_name(void);
  * @return NULL if failed, errno is set accordingly.
  * @warning Caller free the returned buffer via free(3).
  *
- * TODO(zhongyiyuan): not (yet) working on Windows due to path rules.
+ * TODO(yiyuanzhong): not (yet) working on Windows due to path rules.
  */
 extern char *cmdline_get_absolute_path(const char *path, int force_relative);
 

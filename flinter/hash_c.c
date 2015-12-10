@@ -46,7 +46,7 @@ static int do_hash(hash_init_t hash_init,
 {
     static const char TABLE[] = "0123456789abcdef";
     static const int64_t TICK = 20000000LL; /**< 20ms */
-    static const int64_t TICK_MS = 20LL;
+    static const int TICK_MS = 20LL;
 
     int64_t deadline;
     int64_t start;
@@ -108,7 +108,7 @@ static int do_hash(hash_init_t hash_init,
             turn_now = turn_remain;
         }
 
-        ret = safe_timed_read(fd, buffer, turn_now, TICK_MS);
+        ret = safe_timed_read(fd, buffer, (size_t)turn_now, TICK_MS);
         if (ret < 0) {
             if (errno == EAGAIN || errno == EWOULDBLOCK || errno == ETIMEDOUT) {
                 continue;
@@ -120,7 +120,7 @@ static int do_hash(hash_init_t hash_init,
             break;
         }
 
-        if (!hash_update(hash_context, buffer, ret)) {
+        if (!hash_update(hash_context, buffer, (unsigned long)ret)) {
             errno = EACCES;
             break;
         }

@@ -16,6 +16,7 @@
 #include "flinter/linkage/linkage_handler.h"
 
 #include <assert.h>
+#include <string.h>
 
 #include "flinter/linkage/linkage.h"
 #include "flinter/linkage/linkage_peer.h"
@@ -28,9 +29,9 @@ void LinkageHandler::OnError(Linkage *linkage,
                              int errnum)
 {
     assert(linkage);
-    CLOG.Trace("Linkage: ERROR %d when %s for fd = %d",
+    CLOG.Trace("Linkage: ERROR %d when %s for fd = %d: %s",
                errnum, reading_or_writing ? "reading" : "writing",
-               linkage->peer()->fd());
+               linkage->peer()->fd(), strerror(errnum));
 }
 
 void LinkageHandler::OnDisconnected(Linkage *linkage)

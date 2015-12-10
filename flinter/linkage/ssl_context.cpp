@@ -56,6 +56,10 @@ bool SslContext::Initialize()
         return false;
     }
 
+    // It's known vulnerable.
+    SSL_CTX_set_options(_context, SSL_OP_NO_SSLv2);
+    SSL_CTX_set_options(_context, SSL_OP_NO_SSLv3);
+
     if (ciphers) {
         if (SSL_CTX_set_cipher_list(_context, ciphers) != 1) {
             SSL_CTX_free(_context);
@@ -126,14 +130,14 @@ bool SslContext::LoadPrivateKey(const std::string &filename,
     return true;
 }
 
-int SslContext::PasswordCallback(char *buf, int size, int rwflag, void *userdata)
+int SslContext::PasswordCallback(char *buf, int size, int /*rwflag*/, void *userdata)
 {
     const std::string *s = reinterpret_cast<const std::string *>(userdata);
     if (!s) {
         return -1;
     }
 
-    int ret = snprintf(buf, size, "%s", s->c_str());
+    int ret = snprintf(buf, static_cast<size_t>(size), "%s", s->c_str());
     if (ret < 0 || ret >= size) {
         return -1;
     }

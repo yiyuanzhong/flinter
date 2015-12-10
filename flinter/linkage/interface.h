@@ -40,7 +40,7 @@ public:
      * @param file_based sockets will have a file on disk, removed automatically if
      *        possible, unless chroot() is called, permission denied or the program
      *        crashed.
-     * @param privileged umask 600 for file based, root only if not file based.
+     * @param privileged umask 600 or 0666 for file based, ignored if not file based.
      *
      */
     bool ListenUnix(const std::string &sockname, bool file_based = true, bool privileged = false);
@@ -63,10 +63,14 @@ public:
     /// @param me can be NULL.
     bool Accept(LinkagePeer *peer, LinkagePeer *me = NULL);
 
+    /// If you accept from some other places.
+    bool Accepted(int fd);
+
     /// <0 failed, 0 connected, >0 in progress.
     int ConnectUnix(const std::string &sockname,
                     bool file_based = true,
-                    LinkagePeer *peer = NULL);
+                    LinkagePeer *peer = NULL,
+                    LinkagePeer *me = NULL);
 
     /// <0 failed, 0 connected, >0 in progress.
     /// @param hostname target hostname.
@@ -85,12 +89,11 @@ public:
     ///          writable for the first time.
     bool TestIfConnected();
 
+    /// Shutdown (but keep fd) all underlying sockets.
+    bool Shutdown();
+
     /// Close all underlying sockets.
     bool Close();
-
-    /// Same as close() but don't really close the fd.
-    /// Call this method instead of close() if the fd is closed outside the object.
-    bool CloseButTheFd();
 
     int domain() const
     {

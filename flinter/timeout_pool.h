@@ -66,7 +66,7 @@ public:
         }
     }
 
-    V *Erase(const K &k)
+    V Erase(const K &k)
     {
         MutexLocker locker(&_mutex);
         typename std::map<K, Value>::iterator p = _pool.find(k);
@@ -74,7 +74,7 @@ public:
             return NULL;
         }
 
-        V *v = p->second._v;
+        V v = p->second._v;
         _pool.erase(p);
         return v;
     }

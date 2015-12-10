@@ -25,7 +25,6 @@
 #include "flinter/logger.h"
 #include "flinter/signals.h"
 
-static flinter::LinkageHandler *g_handler;
 static flinter::LinkageWorker *g_worker;
 
 class H : public flinter::LinkageHandler {
@@ -55,26 +54,6 @@ public:
 
 }; // class H
 
-class L : public flinter::Listener {
-public:
-    virtual ~L() {}
-protected:
-    virtual flinter::LinkageBase *CreateLinkage(const flinter::LinkagePeer &peer,
-                                                const flinter::LinkagePeer &me)
-    {
-        LOG(INFO) << "Accept: " << me.ip_str() << ":" << me.port()
-                  << " <- " << peer.ip_str() << ":" << peer.port();
-
-        flinter::Interface *i = new flinter::Interface;
-        i->Accepted(peer.fd());
-        flinter::FileDescriptorIo *io = new flinter::FileDescriptorIo(i, false);
-        flinter::Linkage *l = new flinter::Linkage(io, g_handler, peer, me);
-        l->set_receive_timeout(15000000000);
-        return l;
-    }
-
-}; // class L
-
 static void on_signal_quit(int /*signum*/)
 {
     g_worker->Shutdown();
@@ -90,13 +69,16 @@ TEST(echoServer, TestListen)
     signals_set_handler(SIGTERM, on_signal_quit);
 
     H handler;
-    g_handler = &handler;
+    flinter::LinkagePeer me;
+    flinter::LinkagePeer peer;
+    flinter::Interface *i = new flinter::Interface;
+    ASSERT_TRUE(i->ConnectTcp4("localhost", 5566, &peer, &me));
 
-    L listener;
-    ASSERT_TRUE(listener.ListenTcp(5566, false));
+    flinter::FileDescriptorIo *io = new flinter::FileDescriptorIo(i, true);
+    flinter::Linkage *l = new flinter::Linkage(io, &handler, peer, me);
 
     flinter::LinkageWorker worker;
-    ASSERT_TRUE(listener.Attach(&worker));
+    ASSERT_TRUE(l->Attach(&worker));
 
     g_worker = &worker;
     ASSERT_TRUE(worker.Run());

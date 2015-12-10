@@ -38,6 +38,38 @@
 
 namespace flinter {
 
+template <class T>
+static bool GetPeerOrClose(int s,
+                           const T &addr,
+                           LinkagePeer *peer,
+                           LinkagePeer *me)
+{
+    if (set_non_blocking_mode(s) || set_close_on_exec(s)) {
+        safe_close(s);
+        return false;
+    }
+
+    if (peer) {
+        if (!peer->Set(&addr, s)) {
+            safe_close(s);
+            return false;
+        }
+    }
+
+    if (me) {
+        T sa;
+        socklen_t len = sizeof(sa);
+        if (getsockname(s, reinterpret_cast<struct sockaddr *>(&sa), &len) ||
+            !me->Set(&sa, s)) {
+
+            safe_close(s);
+            return false;
+        }
+    }
+
+    return true;
+}
+
 Interface::Interface() : _file_based(true), _socket(-1), _domain(AF_UNSPEC), _client(true)
 {
     // Intended left blank.
@@ -55,10 +87,7 @@ int Interface::CreateSocket(int domain, int type, int protocol)
         return -1;
     }
 
-    if (set_non_blocking_mode(s)    ||
-        set_socket_address_reuse(s) ||
-        set_close_on_exec(s)        ){
-
+    if (set_non_blocking_mode(s) || set_close_on_exec(s)) {
         safe_close(s);
         return -1;
     }
@@ -83,7 +112,9 @@ int Interface::BindIPv6(uint16_t port, bool loopback)
         memcpy(&addr6.sin6_addr, &in6addr_any, sizeof(addr6.sin6_addr));
     }
 
-    if (bind(s, reinterpret_cast<struct sockaddr *>(&addr6), sizeof(addr6)) < 0) {
+    if (set_socket_address_reuse(s) ||
+        bind(s, reinterpret_cast<struct sockaddr *>(&addr6), sizeof(addr6))) {
+
         safe_close(s);
         return -1;
     }
@@ -108,7 +139,9 @@ int Interface::BindIPv4(uint16_t port, bool loopback)
         addr.sin_addr.s_addr = htonl(INADDR_ANY);
     }
 
-    if (bind(s, reinterpret_cast<struct sockaddr *>(&addr), sizeof(addr)) < 0) {
+    if (set_socket_address_reuse(s) ||
+        bind(s, reinterpret_cast<struct sockaddr *>(&addr), sizeof(addr))) {
+
         safe_close(s);
         return -1;
     }
@@ -157,7 +190,7 @@ bool Interface::DoListenTcp(uint16_t port, bool loopback, int domain)
         return false;
     }
 
-    if (safe_listen(s, kMaximumQueueLength) < 0) {
+    if (safe_listen(s, kMaximumQueueLength)) {
         safe_close(s);
         return false;
     }
@@ -193,7 +226,7 @@ bool Interface::ListenUnix(const std::string &sockname, bool file_based, bool pr
     }
 
     if (bind(s, reinterpret_cast<struct sockaddr *>(&addr),
-                static_cast<socklen_t>(size)) < 0) {
+                static_cast<socklen_t>(size))) {
 
         if (file_based && errno == EADDRINUSE) {
             // TODO(yiyuanzhong): check if the socket is actually dead.
@@ -204,19 +237,17 @@ bool Interface::ListenUnix(const std::string &sockname, bool file_based, bool pr
     }
 
     if (file_based) {
-        mode_t mode = S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP | S_IROTH | S_IWOTH;
-        if (privileged) {
-            mode = S_IRUSR | S_IWUSR;
-        }
+        mode_t mode = privileged ? (S_IRUSR | S_IWUSR)
+                                 : (S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP | S_IROTH | S_IWOTH);
 
-        if (chmod(sockname.c_str(), mode) < 0) {
+        if (chmod(sockname.c_str(), mode)) {
             safe_close(s);
             unlink(sockname.c_str());
             return false;
         }
     }
 
-    if (safe_listen(s, kMaximumQueueLength) < 0) {
+    if (safe_listen(s, kMaximumQueueLength)) {
         safe_close(s);
         if (file_based) {
             unlink(sockname.c_str());
@@ -238,40 +269,42 @@ bool Interface::ListenUnix(const std::string &sockname, bool file_based, bool pr
     return true;
 }
 
-bool Interface::CloseButTheFd()
+bool Interface::Shutdown()
 {
-    bool result = true;
-    if (_socket >= 0) {
-        _socket = -1;
+    if (_socket < 0) {
+        return true;
+    }
 
-        if (_file_based) {
-            if (unlink(_sockname.c_str())) {
-                result = false;
-            }
+    // There're race conditions since socket handling is in kernel space,
+    // if peer hungup is done by kernel, even if user space haven't call
+    // shutdown() before, it will fail with ENOTCONN, so it's normal.
+    if (shutdown(_socket, SHUT_RDWR)) {
+        if (errno != ENOTCONN) {
+            CLOG.Warn("Interface: failed to shutdown(%d): %d: %s",
+                      _socket, errno, strerror(errno));
+
+            return false;
         }
     }
 
-    _client = true;
-    _file_based = true;
-    return result;
+    return true;
 }
 
 bool Interface::Close()
 {
-    int socket = _socket;
-    if (!CloseButTheFd()) {
-        return false;
-    }
-
-    if (socket < 0) {
+    if (_socket < 0) {
         return true;
     }
 
-    if (shutdown(socket, SHUT_RDWR)) {
-        if (errno != ENOTCONN) {
-            return false;
-        }
+    if (_file_based) {
+        // Try but not necessarily succeed.
+        unlink(_sockname.c_str());
     }
+
+    int socket = _socket;
+    _file_based = true;
+    _client = true;
+    _socket = -1;
 
     if (safe_close(socket)) {
         return false;
@@ -303,20 +336,7 @@ bool Interface::Accept(LinkagePeer *peer, LinkagePeer *me)
             return false;
         }
 
-        if (!peer->Set(&addr, fd)) {
-            safe_close(fd);
-            return false;
-        }
-
-        if (me) {
-            len = sizeof(addr);
-            if (getsockname(fd, reinterpret_cast<struct sockaddr *>(&addr), &len) ||
-                !me->Set(&addr, fd)) {
-
-                safe_close(fd);
-                return false;
-            }
-        }
+        return GetPeerOrClose(fd, addr, peer, me);
 
     } else if (_domain == AF_INET6) {
         struct sockaddr_in6 addr6;
@@ -331,20 +351,7 @@ bool Interface::Accept(LinkagePeer *peer, LinkagePeer *me)
             return false;
         }
 
-        if (!peer->Set(&addr6, fd)) {
-            safe_close(fd);
-            return false;
-        }
-
-        if (me) {
-            len = sizeof(addr6);
-            if (getsockname(fd, reinterpret_cast<struct sockaddr *>(&addr6), &len) ||
-                !me->Set(&addr6, fd)) {
-
-                safe_close(fd);
-                return false;
-            }
-        }
+        return GetPeerOrClose(fd, addr6, peer, me);
 
     } else if (_domain == AF_INET) {
         struct sockaddr_in addr;
@@ -359,29 +366,32 @@ bool Interface::Accept(LinkagePeer *peer, LinkagePeer *me)
             return false;
         }
 
-        if (!peer->Set(&addr, fd)) {
-            safe_close(fd);
-            return false;
-        }
+        return GetPeerOrClose(fd, addr, peer, me);
+    }
 
-        if (me) {
-            len = sizeof(addr);
-            if (getsockname(fd, reinterpret_cast<struct sockaddr *>(&addr), &len) ||
-                !me->Set(&addr, fd)) {
+    return false;
+}
 
-                safe_close(fd);
-                return false;
-            }
-        }
-
-    } else {
+bool Interface::Accepted(int fd)
+{
+    if (_socket >= 0) {
+        errno = EINVAL;
         return false;
     }
 
+    if (set_non_blocking_mode(fd) || set_close_on_exec(fd)) {
+        return false;
+    }
+
+    _file_based = false;
+    _socket = fd;
     return true;
 }
 
-int Interface::ConnectUnix(const std::string &sockname, bool file_based, LinkagePeer *peer)
+int Interface::ConnectUnix(const std::string &sockname,
+                           bool file_based,
+                           LinkagePeer *peer,
+                           LinkagePeer *me)
 {
     assert(sockname.length());
     assert(_socket < 0);
@@ -410,16 +420,16 @@ int Interface::ConnectUnix(const std::string &sockname, bool file_based, Linkage
         return -1;
     }
 
-    _socket = s;
-
-    if (peer) {
-        if (!peer->Set(&addr, s)) {
-            safe_close(s);
-            return -1;
+    if (!GetPeerOrClose(s, addr, peer, me)) {
+        if (file_based) {
+            unlink(sockname.c_str());
         }
+
+        return -1;
     }
 
     _file_based = file_based;
+    _socket = s;
     return 0;
 }
 
@@ -464,21 +474,8 @@ int Interface::ConnectTcp4(const std::string &hostname,
         }
     }
 
-    if (peer) {
-        if (!peer->Set(&addr, s)) {
-            safe_close(s);
-            return -1;
-        }
-    }
-
-    if (me) {
-        socklen_t len = sizeof(addr);
-        if (getsockname(s, reinterpret_cast<struct sockaddr *>(&addr), &len) ||
-            !me->Set(&addr, s)) {
-
-            safe_close(s);
-            return -1;
-        }
+    if (!GetPeerOrClose(s, addr, peer, me)) {
+        return -1;
     }
 
     _socket = s;

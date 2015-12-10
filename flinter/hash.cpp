@@ -23,7 +23,7 @@ uint32_t hash_murmurhash3(const void *buffer, size_t length)
 {
     const uint32_t seed = static_cast<uint32_t>(length * 0xdeadbeef);
     uint32_t hash;
-    MurmurHash3_x86_32(buffer, length, seed, &hash);
+    MurmurHash3_x86_32(buffer, (int)length, seed, &hash);
     return hash;
 }
 

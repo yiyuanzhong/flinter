@@ -16,49 +16,58 @@
 #ifndef __FLINTER_LINKAGE_LINKAGE_H__
 #define __FLINTER_LINKAGE_LINKAGE_H__
 
-#include "flinter/linkage/linkage_base.h"
-
 #include <sys/types.h>
 #include <stdint.h>
 
+#include <deque>
 #include <string>
 #include <vector>
 
+#include <flinter/linkage/abstract_io.h>
+#include <flinter/linkage/linkage_base.h>
+
 namespace flinter {
 
-class Interface;
 class LinkageHandler;
+class LinkagePeer;
+class Mutex;
 
 class Linkage : public LinkageBase {
 public:
-    static Linkage *ConnectTcp4(LinkageHandler *handler,
-                                const std::string &host,
-                                uint16_t port);
-
-    static Linkage *ConnectUnix(LinkageHandler *handler,
-                                const std::string &sockname,
-                                bool file_based);
-
-    // Accepted.
-    // @param handler life span NOT taken.
-    Linkage(LinkageHandler *handler,
+    /// Won't be initialized until Attach() is called.
+    /// @param io life span TAKEN.
+    /// @param handler life span NOT taken.
+    /// @param peer copied.
+    /// @param me copied.
+    Linkage(AbstractIo *io,
+            LinkageHandler *handler,
             const LinkagePeer &peer,
             const LinkagePeer &me);
 
     virtual ~Linkage();
+
+    virtual int Disconnect(bool finish_write = true);
+    virtual bool Attach(LinkageWorker *worker);
+    virtual bool Detach(LinkageWorker *worker);
+    virtual bool Cleanup(int64_t now);
 
     virtual int OnReceived(const void *buffer, size_t length);
     virtual void OnError(bool reading_or_writing, int errnum);
     virtual void OnDisconnected();
     virtual bool OnConnected();
 
-    virtual void Disconnect(bool finish_write = true);
-    virtual bool Attach(LinkageWorker *worker);
-    virtual bool Detach(LinkageWorker *worker);
-    virtual bool Cleanup(int64_t now);
+    /// @return true sent or queued.
+    virtual bool Send(const void *buffer, size_t length);
 
-    // @param handler life span NOT taken.
-    void SetHandler(LinkageHandler *handler);
+    void set_receive_timeout(int64_t timeout) { _receive_timeout = timeout; }
+    void set_connect_timeout(int64_t timeout) { _connect_timeout = timeout; }
+    void set_send_timeout   (int64_t timeout) { _send_timeout    = timeout; }
+    void set_idle_timeout   (int64_t timeout) { _idle_timeout    = timeout; }
+
+    static const int64_t kDefaultReceiveTimeout;
+    static const int64_t kDefaultConnectTimeout;
+    static const int64_t kDefaultSendTimeout;
+    static const int64_t kDefaultIdleTimeout;
 
     const LinkagePeer *peer() const
     {
@@ -70,65 +79,58 @@ public:
         return _me;
     }
 
-    /// @return true sent or queued.
-    virtual bool Send(const void *buffer, size_t length);
-
-    void set_receive_timeout(int64_t timeout) { _receive_timeout = timeout; }
-    void set_send_timeout   (int64_t timeout) { _send_timeout    = timeout; }
-    void set_idle_timeout   (int64_t timeout) { _idle_timeout    = timeout; }
-
-    static const int64_t kDefaultReceiveTimeout;
-    static const int64_t kDefaultSendTimeout;
-    static const int64_t kDefaultIdleTimeout;
+    AbstractIo *io()
+    {
+        return _io;
+    }
 
 protected:
-    // Outbound connection.
-    // @param handler life span NOT taken.
-    Linkage(LinkageHandler *handler, const std::string &name);
+    /// Return the packet size even if it's incomplete as long as you can tell.
+    /// Very handy when you write the message length in the header.
+    ///
+    /// @return >0 message length.
+    /// @return  0 message length is yet determined, keep receiving.
+    /// @return <0 message is invalid.
+    virtual ssize_t GetMessageLength(const void *buffer, size_t length);
 
-    bool DoCheckConnected();
-    bool DoConnectTcp4(const std::string &host, uint16_t port);
-    bool DoConnectUnix(const std::string &sockname, bool file_based);
+    /// @return >0 keep coming.
+    /// @return  0 hang up gracefully.
+    /// @return <0 error occurred, hang up immediately.
+    virtual int OnMessage(const void *buffer, size_t length);
 
-    // Don't call methods below explicitly.
+    /// @return >0 don't change event monitoring status.
+    /// @return  0 no more data to read, hang up gracefully.
+    /// @return <0 error occurred, drop connection immediately.
     virtual int OnReadable(LinkageWorker *worker);
-    virtual int OnWritable(LinkageWorker *worker);
-    virtual int Shutdown();
 
-    /// @param sent if some bytes are just sent.
-    /// @param jammed if the message is incomplete.
-    void UpdateLastSent(bool sent, bool jammed);
+    /// @return >0 don't change event monitoring status.
+    /// @return  0 no more data to write, hang up gracefully.
+    /// @return <0 error occurred, drop connection immediately.
+    virtual int OnWritable(LinkageWorker *worker);
+
+    /// @return >0 don't change event monitoring status.
+    /// @return  0 shut down completed successfully.
+    /// @return <0 error occurred, drop connection immediately.
+    virtual int Shutdown(AbstractIo::Status *status);
+
+private:
+    static const char *GetActionString(const AbstractIo::Action &action);
 
     void AppendSendingBuffer(const void *buffer, size_t length);
     size_t PickSendingBuffer(void *buffer, size_t length);
     void ConsumeSendingBuffer(size_t length);
     size_t GetSendingBufferSize() const;
 
-    LinkageWorker *worker() const
-    {
-        return _worker;
-    }
+    int OnEvent(LinkageWorker *worker,
+                const AbstractIo::Action &idle_action);
 
-    LinkagePeer *mutable_peer()
-    {
-        return _peer;
-    }
+    int AfterEvent(LinkageWorker *worker,
+                   const AbstractIo::Status &status);
 
-    LinkagePeer *mutable_me()
-    {
-        return _me;
-    }
+    bool DoConnected();
 
-    bool _graceful;
-
-private:
-    typedef struct {
-        Interface *interface;
-        std::string name;
-        bool connecting;
-    } connect_t;
-
-    static connect_t *PrepareToConnect(const std::string &name);
+    /// Connection is being established or closed.
+    void UpdateConnectJam(bool jammed);
 
     /// Incoming message is incomplete.
     void UpdateReceiveJam(bool jammed);
@@ -136,30 +138,37 @@ private:
     /// Some bytes are just received.
     void UpdateLastReceived();
 
+    /// @param sent if some bytes are just sent.
+    /// @param jammed if the message is incomplete.
+    void UpdateLastSent(bool sent, bool jammed);
+
     // Not a very good data structure, use it for now.
     std::vector<unsigned char> _rbuffer;
 
     // Only used when kernel send buffer is full.
-    std::vector<unsigned char> _wbuffer;
+    std::deque<unsigned char> _wbuffer;
 
-    LinkageHandler *_handler;
-    LinkageWorker *_worker;
-    connect_t *_connect;
-    LinkagePeer *_peer;
-    LinkagePeer *_me;
+    LinkageHandler *const _handler;
+    Mutex *const _wbuffer_mutex;
+    LinkagePeer *const _peer;
+    LinkagePeer *const _me;
+    AbstractIo *const _io;
 
+    int64_t _receive_timeout;
+    int64_t _connect_timeout;
     int64_t _last_received;
+    int64_t _idle_timeout;
+    int64_t _send_timeout;
     int64_t _receive_jam;
+    int64_t _connect_jam;
     int64_t _last_sent;
     int64_t _send_jam;
 
+    AbstractIo::Action _action;
+    LinkageWorker *_worker;
     size_t _rlength;
-    int64_t _idle_timeout;
-    int64_t _send_timeout;
-    int64_t _receive_timeout;
-
-    explicit Linkage(const Linkage &);
-    Linkage &operator = (const Linkage &);
+    bool _graceful;
+    bool _closed;
 
 }; // class Linkage
 

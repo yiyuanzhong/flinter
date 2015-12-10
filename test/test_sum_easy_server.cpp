@@ -24,7 +24,7 @@ public:
         LOG(INFO) << "Handler::~Handler(" << _id << "): " << this;
     }
 
-    virtual ssize_t GetMessageLength(const flinter::EasyContext &context,
+    virtual ssize_t GetMessageLength(const flinter::EasyContext & /*context*/,
                                      const void *buffer,
                                      size_t length)
     {
@@ -41,14 +41,14 @@ public:
              s <= length; ++p, ++s) {
 
             if (*p == '\n') {
-                return s;
+                return static_cast<ssize_t>(s);
             } else if (*p == '\r') {
                 if (s == length) {
                     return 0;
                 }
 
                 if (*(p + 1) == '\n') {
-                    return s + 1;
+                    return static_cast<ssize_t>(s + 1);
                 }
 
                 return -1;
@@ -127,9 +127,20 @@ private:
 
 }; // class Factory
 
+static volatile sig_atomic_t g_quit = 0;
+
+static void on_signal_quit(int /*signum*/)
+{
+    g_quit = 1;
+}
+
 int main()
 {
     flinter::Logger::SetFilter(flinter::Logger::kLevelVerbose);
+    signals_set_handler(SIGQUIT, on_signal_quit);
+    signals_set_handler(SIGTERM, on_signal_quit);
+    signals_set_handler(SIGHUP, on_signal_quit);
+    signals_set_handler(SIGINT, on_signal_quit);
     signals_ignore(SIGPIPE);
 
     Factory factory("1");
@@ -155,7 +166,10 @@ int main()
         return EXIT_FAILURE;
     }
 
-    msleep(120000);
+    while (!g_quit) {
+        msleep(1000);
+    }
+
     s.Shutdown();
     return EXIT_SUCCESS;
 }

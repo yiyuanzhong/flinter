@@ -60,7 +60,7 @@ bool Xml::DoParse(const std::string &xml,
 
     xmlDoc *doc;
     if (memory_or_file) {
-        doc = xmlReadMemory(xml.data(), xml.length(), NULL, enc, 0);
+        doc = xmlReadMemory(xml.data(), (int)xml.length(), NULL, enc, 0);
     } else {
         doc = xmlReadFile(xml.c_str(), enc, 0);
     }
@@ -130,7 +130,9 @@ Xml::Validator::Validator(const std::string &xml) : _parser(NULL)
                                                   , _valid(NULL)
                                                   , _schema(NULL)
 {
-    xmlSchemaParserCtxt *parser = xmlSchemaNewMemParserCtxt(xml.data(), xml.length());
+    xmlSchemaParserCtxt *parser =
+            xmlSchemaNewMemParserCtxt(xml.data(), (int)xml.length());
+
     if (!parser) {
         return;
     }

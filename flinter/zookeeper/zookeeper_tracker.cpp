@@ -24,13 +24,13 @@
 
 namespace flinter {
 
-void ZooKeeperTracker::Callback::OnData(const char *path, const std::string *data)
+void ZooKeeperTracker::Callback::OnData(const char *path, const std::string * /*data*/)
 {
     CLOG.Warn("ZooKeeperTracker: uhandled callback OnData(%s) called.", path);
 }
 
 void ZooKeeperTracker::Callback::OnChildren(const char *path,
-                                            const std::list<std::string> *children)
+                                            const std::list<std::string> * /*children*/)
 {
     CLOG.Warn("ZooKeeperTracker: uhandled callback OnChildren(%s) called.", path);
 }
@@ -202,22 +202,22 @@ void ZooKeeperTracker::Watcher::OnSession(int state)
     _zkt->Process(state);
 }
 
-void ZooKeeperTracker::Watcher::OnErased(int state, const char *path)
+void ZooKeeperTracker::Watcher::OnErased(int /*state*/, const char *path)
 {
     _zkt->Process(path, true, true, true);
 }
 
-void ZooKeeperTracker::Watcher::OnCreated(int state, const char *path)
+void ZooKeeperTracker::Watcher::OnCreated(int /*state*/, const char *path)
 {
     _zkt->Process(path, true, true, false);
 }
 
-void ZooKeeperTracker::Watcher::OnChanged(int state, const char *path)
+void ZooKeeperTracker::Watcher::OnChanged(int /*state*/, const char *path)
 {
     _zkt->Process(path, true, false, false);
 }
 
-void ZooKeeperTracker::Watcher::OnChild(int state, const char *path)
+void ZooKeeperTracker::Watcher::OnChild(int /*state*/, const char *path)
 {
     _zkt->Process(path, false, true, false);
 }

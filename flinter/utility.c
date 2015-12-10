@@ -179,14 +179,14 @@ static int make_clean_path_stage_two(const char *stage, char **result)
                 continue;
 
             } else {
-                memcpy(r, p, q - p);
+                memcpy(r, p, (size_t)(q - p));
                 r += q - p;
             }
 
             *r++ = '/';
 
         } else {
-            memcpy(r, p, q - p + 1);
+            memcpy(r, p, (size_t)(q - p + 1));
             r += q - p + 1;
             p += q - p;
         }
@@ -463,46 +463,41 @@ int set_alarm_timer(int milliseconds)
     return 0;
 }
 
-int set_maximum_files(int nofile)
+ssize_t set_maximum_files(size_t nofile)
 {
     struct rlimit rlim;
     struct rlimit old;
-
-    if (nofile < 0) {
-        errno = EINVAL;
-        return -1;
-    }
 
     if (getrlimit(RLIMIT_NOFILE, &rlim)) {
         return -1;
     }
 
     if (rlim.rlim_cur == (rlim_t)nofile) {
-        return rlim.rlim_cur;
+        return (ssize_t)rlim.rlim_cur;
     }
 
     old = rlim;
     rlim.rlim_cur = nofile;
-    if (rlim.rlim_max != RLIM_INFINITY && rlim.rlim_max < (rlim_t)nofile) {
+    if (rlim.rlim_max != RLIM_INFINITY && rlim.rlim_max < nofile) {
         /* Try to override. */
         rlim.rlim_max = nofile;
         if (setrlimit(RLIMIT_NOFILE, &rlim) == 0) { /* Cool! */
-            return rlim.rlim_cur;
+            return (ssize_t)rlim.rlim_cur;
         }
 
         /* No way to get more. */
         if (old.rlim_cur == old.rlim_max) {
-            return old.rlim_cur;
+            return (ssize_t)old.rlim_cur;
         }
 
         rlim.rlim_cur = rlim.rlim_max = old.rlim_max;
     }
 
     if (setrlimit(RLIMIT_NOFILE, &rlim)) {
-        return old.rlim_cur;
+        return (ssize_t)old.rlim_cur;
     }
 
-    return rlim.rlim_cur;
+    return (ssize_t)rlim.rlim_cur;
 }
 
 void randomize(void)
@@ -538,13 +533,13 @@ void randomize(void)
 int64_t get_wall_clock_timestamp(void)
 {
     time_t t;
-    uint64_t result;
+    int64_t result;
     struct timeval tv;
 
 #if HAVE_CLOCK_GETTIME
     struct timespec tp;
     if (clock_gettime(CLOCK_REALTIME, &tp) == 0) {
-        result = (int64_t)(1000000000LL * tp.tv_sec + tp.tv_nsec);
+        result = 1000000000LL * tp.tv_sec + tp.tv_nsec;
         return result;
     }
 #elif defined(__MACH__)
@@ -552,7 +547,7 @@ int64_t get_wall_clock_timestamp(void)
     if (host_get_clock_service(mach_host_self(), CALENDAR_CLOCK, &cclock) == KERN_SUCCESS) {
         mach_timespec_t mts;
         if (clock_get_time(cclock, &mts) == 0) {
-            result = (int64_t)(1000000000LL * mts.tv_sec + mts.tv_nsec);
+            result = 1000000000LL * mts.tv_sec + mts.tv_nsec;
             mach_port_deallocate(mach_task_self(), cclock);
             return result;
         }
@@ -561,12 +556,12 @@ int64_t get_wall_clock_timestamp(void)
 #endif
 
     if (gettimeofday(&tv, NULL) == 0) {
-        result = (int64_t)(1000000000LL * tv.tv_sec + tv.tv_usec * 1000LL);
+        result = 1000000000LL * tv.tv_sec + 1000LL * tv.tv_usec;
         return result;
     }
 
     if ((t = time(NULL)) >= 0) {
-        result = (int64_t)(1000000000LL * t);
+        result = 1000000000LL * t;
         return result;
     }
 

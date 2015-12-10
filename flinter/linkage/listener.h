@@ -39,12 +39,14 @@ public:
                     bool file_based = true,
                     bool privileged = false);
 
+    virtual ssize_t GetMessageLength(const void *buffer, size_t length);
     virtual int OnReceived(const void *buffer, size_t length);
     virtual void OnError(bool reading_or_writing, int errnum);
+    virtual int OnMessage(const void *buffer, size_t length);
     virtual void OnDisconnected();
     virtual bool OnConnected();
 
-    virtual void Disconnect(bool finish_write = true);
+    virtual int Disconnect(bool finish_write = true);
     virtual bool Attach(LinkageWorker *worker);
     virtual bool Detach(LinkageWorker *worker);
     virtual bool Cleanup(int64_t now);

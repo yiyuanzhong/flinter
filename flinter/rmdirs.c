@@ -65,7 +65,7 @@ static int rmdirs_with_getdents(int dirfd, const char *name)
     struct stat st;
     int recursive;
     char type;
-    int dlen;
+    long dlen;
     int ret;
     int fd;
     int i;

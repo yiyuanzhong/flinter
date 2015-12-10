@@ -20,6 +20,8 @@
 #include "flinter/linkage/easy_context.h"
 #include "flinter/linkage/easy_handler.h"
 #include "flinter/linkage/easy_tuner.h"
+#include "flinter/linkage/file_descriptor_io.h"
+#include "flinter/linkage/interface.h"
 #include "flinter/linkage/linkage.h"
 #include "flinter/linkage/linkage_handler.h"
 #include "flinter/linkage/linkage_peer.h"
@@ -39,15 +41,19 @@ namespace flinter {
 
 const EasyServer::Configure EasyServer::kDefaultConfigure = {
     /* incoming_receive_timeout     = */ 5000000000LL,
+    /* incoming_connect_timeout     = */ 5000000000LL,
     /* incoming_send_timeout        = */ 5000000000LL,
     /* incoming_idle_timeout        = */ 60000000000LL,
     /* outgoing_receive_timeout     = */ 5000000000LL,
+    /* outgoing_connect_timeout     = */ 5000000000LL,
     /* outgoing_send_timeout        = */ 5000000000LL,
     /* outgoing_idle_timeout        = */ 60000000000LL,
     /* maximum_active_connections   = */ 50000,
 };
 
 const EasyServer::channel_t EasyServer::kInvalidChannel = 0;
+const size_t EasyServer::kMaximumWorkers = 16384;
+const size_t EasyServer::kMaximumSlots = 128;
 
 class EasyServer::OutgoingInformation {
 public:
@@ -136,25 +142,14 @@ private:
 
 class EasyServer::ProxyLinkage : public Linkage {
 public:
-    static ProxyLinkage *ConnectTcp4(EasyContext *context,
-                                     ProxyHandler *handler,
-                                     const std::string &host,
-                                     uint16_t port);
+    ProxyLinkage(EasyContext *context, AbstractIo *io, ProxyHandler *handler,
+                 const LinkagePeer &peer, const LinkagePeer &me)
+            : Linkage(io, handler, peer, me), _context(context)
+    {
+        // Intended left blank.
+    }
 
     virtual ~ProxyLinkage() {}
-    ProxyLinkage(EasyContext *context,
-                 ProxyHandler *handler,
-                 const std::string &name)
-            : Linkage(handler, name)
-            , _context(context) {}
-
-    ProxyLinkage(EasyContext *context,
-                 ProxyHandler *handler,
-                 const LinkagePeer &peer,
-                 const LinkagePeer &me)
-            : Linkage(handler, peer, me)
-            , _context(context) {}
-
     const shared_ptr<EasyContext> &context()
     {
         return _context;
@@ -195,21 +190,6 @@ private:
     const std::string _message;
 
 }; // class EasyServer::JobWorker::Job
-
-EasyServer::ProxyLinkage *EasyServer::ProxyLinkage::ConnectTcp4(
-        EasyContext *context,
-        ProxyHandler *handler,
-        const std::string &host,
-        uint16_t port)
-{
-    ProxyLinkage *linkage = new ProxyLinkage(context, handler, host);
-    if (!linkage->DoConnectTcp4(host, port)) {
-        delete linkage;
-        return NULL;
-    }
-
-    return linkage;
-}
 
 bool EasyServer::ProxyLinkageWorker::OnInitialize()
 {
@@ -427,7 +407,10 @@ bool EasyServer::Initialize(size_t slots,
                             size_t workers,
                             EasyTuner *easy_tuner)
 {
-    if (!slots) {
+    if (slots  == 0               ||
+        slots   > kMaximumSlots   ||
+        workers > kMaximumWorkers ){
+
         return false;
     }
 
@@ -584,12 +567,6 @@ Runnable *EasyServer::GetJob()
     return job;
 }
 
-void EasyServer::AppendJob(Runnable *job)
-{
-    MutexLocker locker(_mutex);
-    DoAppendJob(job);
-}
-
 void EasyServer::DoAppendJob(Runnable *job)
 {
     _jobs.push(job);
@@ -618,11 +595,19 @@ Linkage *EasyServer::AllocateChannel(const LinkagePeer &peer,
         h = f->Create();
     }
 
+    Interface *interface = new Interface;
+    if (!interface->Accepted(peer.fd())) {
+        delete interface;
+        return NULL;
+    }
+
     EasyContext *context = new EasyContext(this, h, f ? true : false,
                                            channel, peer, me);
 
-    ProxyLinkage *linkage = new ProxyLinkage(context, proxy_handler, peer, me);
+    FileDescriptorIo *io = new FileDescriptorIo(interface, false);
+    ProxyLinkage *linkage = new ProxyLinkage(context, io, proxy_handler, peer, me);
     linkage->set_receive_timeout(_configure.incoming_receive_timeout);
+    linkage->set_connect_timeout(_configure.incoming_connect_timeout);
     linkage->set_send_timeout(_configure.incoming_send_timeout);
     linkage->set_idle_timeout(_configure.incoming_idle_timeout);
 
@@ -655,6 +640,10 @@ void EasyServer::ReleaseChannel(channel_t channel)
 
 void EasyServer::QueueOrExecuteJob(Runnable *job)
 {
+    if (!job) {
+        return;
+    }
+
     MutexLocker locker(_mutex);
     if (_workers) {
         DoAppendJob(job);
@@ -749,7 +738,7 @@ bool EasyServer::Send(const EasyContext &context, const void *buffer, size_t len
 LinkageWorker *EasyServer::GetRandomIoWorker() const
 {
     std::list<LinkageWorker *>::const_iterator p = _io_workers.begin();
-    int r = rand() % _io_workers.size();
+    int r = rand() % static_cast<int>(_io_workers.size());
     if (r) {
         std::advance(p, r);
     }
@@ -767,19 +756,20 @@ EasyServer::ProxyLinkage *EasyServer::DoReconnect(
         h = f->Create();
     }
 
-    EasyContext *context = new EasyContext(this, h, f ? true : false, channel);
-    ProxyLinkage *linkage = ProxyLinkage::ConnectTcp4(context,
-                                                      info->proxy_handler(),
-                                                      info->host(),
-                                                      info->port());
-
-    if (!linkage) {
-        // Don't delete context, embedded into linkage even if it's NULL.
+    LinkagePeer me;
+    LinkagePeer peer;
+    Interface *interface = new Interface;
+    if (!interface->ConnectTcp4(info->host(), info->port(), &peer, &me)) {
+        delete interface;
         return NULL;
     }
 
-    context->set_peer(*linkage->peer());
-    context->set_me(*linkage->me());
+    EasyContext *context = new EasyContext(this, h, f ? true : false,
+                                           channel, peer, me);
+
+    FileDescriptorIo *io = new FileDescriptorIo(interface, true);
+    ProxyLinkage *linkage = new ProxyLinkage(context, io, info->proxy_handler(),
+                                             peer, me);
 
     LinkageWorker *worker = GetRandomIoWorker();
     if (!linkage->Attach(worker)) {
@@ -787,9 +777,10 @@ EasyServer::ProxyLinkage *EasyServer::DoReconnect(
         return NULL;
     }
 
-    linkage->set_receive_timeout(_configure.incoming_receive_timeout);
-    linkage->set_send_timeout(_configure.incoming_send_timeout);
-    linkage->set_idle_timeout(_configure.incoming_idle_timeout);
+    linkage->set_receive_timeout(_configure.outgoing_receive_timeout);
+    linkage->set_connect_timeout(_configure.outgoing_receive_timeout);
+    linkage->set_send_timeout(_configure.outgoing_send_timeout);
+    linkage->set_idle_timeout(_configure.outgoing_idle_timeout);
 
     _channel_linkages.insert(std::make_pair(channel, linkage));
     ++_outgoing_connections;

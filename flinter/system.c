@@ -53,7 +53,7 @@ extern char **environ;
 
 static void system_timed_report(int fd, int ret)
 {
-    int result = safe_write(fd, &ret, sizeof(int));
+    ssize_t result = safe_write(fd, &ret, sizeof(int));
     safe_close(fd);
     if (result != sizeof(int)) {
         _exit(EXIT_FAILURE);

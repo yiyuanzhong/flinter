@@ -93,13 +93,13 @@ LinkageWorker::~LinkageWorker()
     delete _async;
 }
 
-void LinkageWorker::command_cb(struct ev_loop *loop, struct ev_async *w, int revents)
+void LinkageWorker::command_cb(struct ev_loop *loop, struct ev_async * /*w*/, int /*revents*/)
 {
     LinkageWorker *worker = reinterpret_cast<LinkageWorker *>(ev_userdata(loop));
     worker->OnCommand();
 }
 
-void LinkageWorker::readable_cb(struct ev_loop *loop, struct ev_io *w, int revents)
+void LinkageWorker::readable_cb(struct ev_loop *loop, struct ev_io *w, int /*revents*/)
 {
     LinkageWorker *worker = reinterpret_cast<LinkageWorker *>(ev_userdata(loop));
     unsigned char *p = reinterpret_cast<unsigned char *>(w);
@@ -108,7 +108,7 @@ void LinkageWorker::readable_cb(struct ev_loop *loop, struct ev_io *w, int reven
     worker->OnReadable(client);
 }
 
-void LinkageWorker::writable_cb(struct ev_loop *loop, struct ev_io *w, int revents)
+void LinkageWorker::writable_cb(struct ev_loop *loop, struct ev_io *w, int /*revents*/)
 {
     LinkageWorker *worker = reinterpret_cast<LinkageWorker *>(ev_userdata(loop));
     unsigned char *p = reinterpret_cast<unsigned char *>(w);
@@ -117,7 +117,7 @@ void LinkageWorker::writable_cb(struct ev_loop *loop, struct ev_io *w, int reven
     worker->OnWritable(client);
 }
 
-void LinkageWorker::timer_cb(struct ev_loop *loop, struct ev_timer *w, int revents)
+void LinkageWorker::timer_cb(struct ev_loop *loop, struct ev_timer *w, int /*revents*/)
 {
     LinkageWorker *worker = reinterpret_cast<LinkageWorker *>(ev_userdata(loop));
     unsigned char *p = reinterpret_cast<unsigned char *>(w);
@@ -232,6 +232,7 @@ void LinkageWorker::OnCommand()
 bool LinkageWorker::Attach(LinkageBase *linkage,
                            int fd,
                            bool read_now,
+                           bool write_now,
                            bool auto_release)
 {
     if (!linkage) {
@@ -247,14 +248,19 @@ bool LinkageWorker::Attach(LinkageBase *linkage,
     ev_io_init(ev_io_w, writable_cb, fd, EV_WRITE);
     client->auto_release = auto_release;
     client->linkage = linkage;
-    client->running_w = false;
     client->running_r = read_now;
+    client->running_w = write_now;
     client->fd = fd;
 
     CLOG.Verbose("Linkage: attached %p:%p:%d:%d", this, linkage, fd, auto_release);
     _events.insert(std::make_pair(linkage, client));
+
     if (read_now) {
         ev_io_start(_loop, &client->ev_io_r);
+    }
+
+    if (write_now) {
+        ev_io_start(_loop, &client->ev_io_w);
     }
 
     return true;

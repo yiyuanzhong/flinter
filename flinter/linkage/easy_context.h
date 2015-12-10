@@ -33,8 +33,8 @@ public:
                 EasyHandler *easy_handler,
                 bool auto_release_handler,
                 channel_t channel,
-                const LinkagePeer &peer = LinkagePeer(),
-                const LinkagePeer &me = LinkagePeer());
+                const LinkagePeer &peer,
+                const LinkagePeer &me);
 
     ~EasyContext();
 

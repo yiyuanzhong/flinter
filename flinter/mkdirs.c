@@ -61,9 +61,9 @@ int mkdirs(const char *pathname, mode_t mode)
         }
 
         if (prev) {
-            pos += (ssize_t)((next - prev) - 1 + len);
+            pos += (next - prev) - 1 + (ssize_t)len;
         } else {
-            pos += len + 1;
+            pos += (ssize_t)len + 1;
         }
 
         copy[pos] = '\0';

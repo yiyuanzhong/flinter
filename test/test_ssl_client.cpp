@@ -18,10 +18,13 @@
 #include <openssl/err.h>
 #include <openssl/ssl.h>
 
+#include <flinter/linkage/interface.h>
 #include <flinter/linkage/linkage_handler.h>
 #include <flinter/linkage/linkage_peer.h>
 #include <flinter/linkage/linkage_worker.h>
-#include <flinter/linkage/ssl_linkage.h>
+#include <flinter/linkage/linkage.h>
+#include <flinter/linkage/ssl_context.h>
+#include <flinter/linkage/ssl_io.h>
 #include <flinter/logger.h>
 #include <flinter/signals.h>
 
@@ -39,23 +42,28 @@ public:
     virtual int OnMessage(flinter::Linkage *linkage,
                           const void *buffer, size_t length)
     {
-        const char *buf = reinterpret_cast<const char *>(buffer);
-        for (size_t i = 0; i < length; ++i) {
-            printf("%c", buf[i]);
+        linkage->Send(buffer, length);
+        if (memcmp(buffer, "exit\r\n", 6) == 0 ||
+            memcmp(buffer, "exit\n", 5) == 0   ){
+
+            if (!linkage->Send("QUIT\r\n", 6)) {
+                return -1;
+            }
+
+            return linkage->Disconnect();
         }
 
-        printf("\n");
         return 1;
     }
 
     virtual bool OnConnected(flinter::Linkage *linkage)
     {
-        flinter::SslLinkage *ssl = static_cast<flinter::SslLinkage *>(linkage);
+        flinter::SslIo *ssl = static_cast<flinter::SslIo *>(linkage->io());
         LOG(INFO) << "SUBJECT: " << ssl->peer_subject_name();
         LOG(INFO) << "ISSUER: " << ssl->peer_issuer_name();
         LOG(INFO) << "SERIAL: " << std::hex << ssl->peer_serial_number();
-        flinter::LinkageHandler::OnConnected(ssl);
-        return linkage->Send("GET /\r\n", 7);
+        flinter::LinkageHandler::OnConnected(linkage);
+        return linkage->Send("12345\r\n", 7);
     }
 
     virtual void OnDisconnected(flinter::Linkage *linkage)
@@ -91,8 +99,13 @@ TEST(sslClient, TestConnect)
     ASSERT_TRUE(ssl->VerifyPrivateKey());
 
     H handler;
-    flinter::LinkageBase *l = flinter::SslLinkage::ConnectTcp4(&handler, "127.0.0.1", 5566, ssl);
-    ASSERT_TRUE(l);
+    flinter::LinkagePeer me;
+    flinter::LinkagePeer peer;
+    flinter::Interface *i = new flinter::Interface;
+    ASSERT_TRUE(i->ConnectTcp4("127.0.0.1", 5566, &peer, &me));
+
+    flinter::SslIo *io = new flinter::SslIo(i, true, ssl);
+    flinter::Linkage *l = new flinter::Linkage(io, &handler, peer, me);
 
     flinter::LinkageWorker worker;
     ASSERT_TRUE(l->Attach(&worker));

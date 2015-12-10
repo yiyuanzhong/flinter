@@ -72,7 +72,7 @@ void ZooKeeper::SetLog(FILE *stream, const ZooLogLevel &level)
     zoo_set_debug_level(level);
 }
 
-void ZooKeeper::GlobalWatcher(zhandle_t *zh,
+void ZooKeeper::GlobalWatcher(zhandle_t * /*zh*/,
                                int type,
                                int state,
                                const char *path,

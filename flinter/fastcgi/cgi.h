@@ -104,7 +104,7 @@ public:
 
         virtual std::streamsize xsputn(const char *s, std::streamsize n)
         {
-            _cgi->OutputBody(s, n);
+            _cgi->OutputBody(s, static_cast<size_t>(n));
             return n;
         }
 

@@ -49,7 +49,7 @@ bool Listener::Attach(LinkageWorker *worker)
         return true;
     }
 
-    if (!DoAttach(worker, _listener->fd(), true, false)) {
+    if (!DoAttach(worker, _listener->fd(), true, false, false)) {
         return false;
     }
 
@@ -111,14 +111,6 @@ int Listener::OnReadable(LinkageWorker *worker)
         return -1;
     }
 
-    if (!linkage->OnConnected()) {
-        CLOG.Warn("Listener: client failed to initialize for fd = %d", peer.fd());
-        linkage->OnDisconnected();
-        linkage->Detach(worker);
-        delete linkage;
-        return 1;
-    }
-
     return 1;
 }
 
@@ -175,19 +167,29 @@ bool Listener::ListenUnix(const std::string &sockname,
 
 int Listener::Shutdown()
 {
-    if (!_listener->Close()) {
+    if (!_listener->Shutdown()) {
         return -1;
     }
 
     return 0;
 }
 
-int Listener::OnReceived(const void *buffer, size_t length)
+ssize_t Listener::GetMessageLength(const void * /*buffer*/, size_t /*length*/)
 {
     return -1; // The hell?
 }
 
-void Listener::OnError(bool reading_or_writing, int errnum)
+int Listener::OnMessage(const void * /*buffer*/, size_t /*length*/)
+{
+    return -1; // The hell?
+}
+
+int Listener::OnReceived(const void * /*buffer*/, size_t /*length*/)
+{
+    return -1; // The hell?
+}
+
+void Listener::OnError(bool /*reading_or_writing*/, int /*errnum*/)
 {
     // Intended left blank.
 }
@@ -202,12 +204,12 @@ bool Listener::OnConnected()
     return true;
 }
 
-int Listener::OnWritable(LinkageWorker *worker)
+int Listener::OnWritable(LinkageWorker * /*worker*/)
 {
     return -1; // The hell?
 }
 
-void Listener::Disconnect(bool /*finish_write*/)
+int Listener::Disconnect(bool /*finish_write*/)
 {
     for (std::set<LinkageWorker *>::const_iterator p = _workers.begin();
          p != _workers.end(); ++p) {
@@ -216,7 +218,11 @@ void Listener::Disconnect(bool /*finish_write*/)
         worker->SetWannaRead(this, false);
     }
 
-    _listener->Close();
+    if (!_listener->Shutdown()) {
+        return -1;
+    }
+
+    return 0;
 }
 
 } // namespace flinter

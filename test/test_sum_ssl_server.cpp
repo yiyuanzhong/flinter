@@ -18,11 +18,14 @@
 #include <openssl/err.h>
 #include <openssl/ssl.h>
 
+#include <flinter/linkage/interface.h>
 #include <flinter/linkage/listener.h>
+#include <flinter/linkage/linkage.h>
 #include <flinter/linkage/linkage_handler.h>
 #include <flinter/linkage/linkage_peer.h>
 #include <flinter/linkage/linkage_worker.h>
-#include <flinter/linkage/ssl_linkage.h>
+#include <flinter/linkage/ssl_context.h>
+#include <flinter/linkage/ssl_io.h>
 #include <flinter/logger.h>
 #include <flinter/signals.h>
 
@@ -30,12 +33,12 @@ static flinter::LinkageHandler *g_handler;
 static flinter::LinkageWorker *g_worker;
 static flinter::SslContext *g_ssl;
 
-class I : public flinter::SslLinkage {
+class I : public flinter::Linkage {
 public:
-    I(flinter::LinkageHandler *h,
+    I(flinter::AbstractIo *io, flinter::LinkageHandler *h,
       const flinter::LinkagePeer &peer,
-      const flinter::LinkagePeer &me,
-      flinter::SslContext *ssl) : SslLinkage(h, peer, me, ssl), _s(0) {}
+      const flinter::LinkagePeer &me)
+            : Linkage(io, h, peer, me), _s(0) {}
 
     virtual ~I() {}
     int Add(int n)
@@ -51,7 +54,7 @@ private:
 class H : public flinter::LinkageHandler {
 public:
     virtual ~H() {}
-    virtual ssize_t GetMessageLength(flinter::Linkage *linkage,
+    virtual ssize_t GetMessageLength(flinter::Linkage * /*linkage*/,
                                      const void *buffer, size_t length)
     {
         const char *buf = reinterpret_cast<const char *>(buffer);
@@ -67,14 +70,14 @@ public:
              s <= length; ++p, ++s) {
 
             if (*p == '\n') {
-                return s;
+                return static_cast<ssize_t>(s);
             } else if (*p == '\r') {
                 if (s == length) {
                     return 0;
                 }
 
                 if (*(p + 1) == '\n') {
-                    return s + 1;
+                    return static_cast<ssize_t>(s + 1);
                 }
 
                 return -1;
@@ -101,14 +104,13 @@ public:
                 return -1;
             }
 
-            linkage->Disconnect();
-            return 1;
+            return linkage->Disconnect();
         }
 
         I *i = static_cast<I *>(linkage);
         int total = i->Add(n);
         std::ostringstream s;
-        s << total << "\n";
+        s << "Sum: " << total << "\n";
         std::string str = s.str();
         if (!linkage->Send(str.data(), str.length())) {
             return -1;
@@ -119,11 +121,15 @@ public:
 
     virtual bool OnConnected(flinter::Linkage *linkage)
     {
-        flinter::SslLinkage *ssl = static_cast<flinter::SslLinkage *>(linkage);
+        if (!flinter::LinkageHandler::OnConnected(linkage)) {
+            return false;
+        }
+
+        flinter::SslIo *ssl = static_cast<flinter::SslIo *>(linkage->io());
         LOG(INFO) << "SUBJECT: " << ssl->peer_subject_name();
         LOG(INFO) << "ISSUER: " << ssl->peer_issuer_name();
         LOG(INFO) << "SERIAL: " << std::hex << ssl->peer_serial_number();
-        return flinter::LinkageHandler::OnConnected(ssl);
+        return true;
     }
 
 }; // class H
@@ -138,8 +144,12 @@ protected:
         LOG(INFO) << "Accept: " << me.ip_str() << ":" << me.port()
                   << " <- " << peer.ip_str() << ":" << peer.port();
 
-        flinter::Linkage *l = new I(g_handler, peer, me, g_ssl);
+        flinter::Interface *i = new flinter::Interface;
+        i->Accepted(peer.fd());
+        flinter::AbstractIo *io = new flinter::SslIo(i, false, g_ssl);
+        flinter::Linkage *l = new I(io, g_handler, peer, me);
         l->set_receive_timeout(5000000000);
+        l->set_connect_timeout(2000000000);
         return l;
     }
 
@@ -162,7 +172,7 @@ TEST(sumServer, TestListen)
     ASSERT_TRUE(SSL_library_init());
     SSL_load_error_strings();
 
-    g_ssl = new flinter::SslContext;
+    g_ssl = new flinter::SslContext(false);
     ASSERT_TRUE(g_ssl->SetVerifyPeer(true));
     ASSERT_TRUE(g_ssl->AddTrustedCACertificate("ssl.pem"));
     ASSERT_TRUE(g_ssl->LoadCertificate("ssl.pem"));

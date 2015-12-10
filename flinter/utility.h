@@ -94,7 +94,7 @@ extern int set_alarm_timer(int milliseconds);
  * Change maximum files the process can open.
  * @return actual limit after calling. -1 for error.
  */
-extern int set_maximum_files(int nofile);
+extern ssize_t set_maximum_files(size_t nofile);
 
 #endif /* defined(__unix__) || defined(__MACH__) */
 

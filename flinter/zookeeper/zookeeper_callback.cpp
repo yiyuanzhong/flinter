@@ -48,13 +48,13 @@ void ZooKeeperCallback::OnSync(int rc, const char *path, const char *callback_pa
               this, rc, path, callback_path);
 }
 
-void ZooKeeperCallback::OnExists(int rc, const char *path, const struct Stat *stat)
+void ZooKeeperCallback::OnExists(int rc, const char *path, const struct Stat * /*stat*/)
 {
     CLOG.Warn("ZooKeeperCallback: unhandled EXISTS (this=%p, rc=%d, path=%s, stat=<optimized>)",
               this, rc, path);
 }
 
-void ZooKeeperCallback::OnSet(int rc, const char *path, const struct Stat *stat)
+void ZooKeeperCallback::OnSet(int rc, const char *path, const struct Stat * /*stat*/)
 {
     CLOG.Warn("ZooKeeperCallback: unhandled  SET   (this=%p, rc=%d, path=%s, stat=<optimized>)",
               this, rc, path);
@@ -63,7 +63,7 @@ void ZooKeeperCallback::OnSet(int rc, const char *path, const struct Stat *stat)
 void ZooKeeperCallback::OnGetChildren(int rc,
                                       const char *path,
                                       const std::list<std::string> &children,
-                                      const struct Stat *stat)
+                                      const struct Stat * /*stat*/)
 {
     CLOG.Warn("ZooKeeperCallback: unhandled  GETC  "
               "(this=%p, rc=%d, path=%s, children={%lu}, stat=<optimized>)",
@@ -73,7 +73,7 @@ void ZooKeeperCallback::OnGetChildren(int rc,
 void ZooKeeperCallback::OnGet(int rc,
                               const char *path,
                               const std::string &data,
-                              const struct Stat *stat)
+                              const struct Stat * /*stat*/)
 {
     CLOG.Warn("ZooKeeperCallback: unhandled  GET   "
               "(this=%p, rc=%d, path=%s, data={%lu}, stat=<optimized>)",
@@ -82,8 +82,8 @@ void ZooKeeperCallback::OnGet(int rc,
 
 void ZooKeeperCallback::OnGetAcl(int rc,
                                  const char *path,
-                                 const ZooKeeper::Acl &acl,
-                                 const struct Stat *stat)
+                                 const ZooKeeper::Acl & /*acl*/,
+                                 const struct Stat * /*stat*/)
 {
     CLOG.Warn("ZooKeeperCallback: unhandled  GETA  "
               "(this=%p, rc=%d, path=%s, acl=<optimized>, stat=<optimized>)",

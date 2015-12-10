@@ -47,10 +47,12 @@ public:
 
     struct Configure {
         int64_t incoming_receive_timeout;
+        int64_t incoming_connect_timeout;
         int64_t incoming_send_timeout;
         int64_t incoming_idle_timeout;
 
         int64_t outgoing_receive_timeout;
+        int64_t outgoing_connect_timeout;
         int64_t outgoing_send_timeout;
         int64_t outgoing_idle_timeout;
 
@@ -79,7 +81,7 @@ public:
         return &_configure;
     }
 
-    /// @param slots how many additional I/O threads, typically 1~4.
+    /// @param slots how many I/O threads, typically 1~4.
     /// @param workers how many job threads, 0 to share I/O threads.
     /// @param easy_tuner life span NOT taken, keep it valid.
     bool Initialize(size_t slots,
@@ -127,6 +129,8 @@ public:
     }
 
     static const channel_t kInvalidChannel;
+    static const size_t kMaximumWorkers;
+    static const size_t kMaximumSlots;
 
 private:
     class OutgoingInformation;
@@ -152,7 +156,6 @@ private:
     bool AttachListeners(LinkageWorker *worker);
     bool DoShutdown(MutexLocker *locker);
     void DoAppendJob(Runnable *job); // No lock.
-    void AppendJob(Runnable *job); // Locked.
     void DoDumpJobs();
 
     // Locked.

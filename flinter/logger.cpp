@@ -271,7 +271,7 @@ static bool Log(const Logger::Level &level,
     }
 
     *next++ = '\n';
-    ret = next - buffer;
+    ret = static_cast<size_t>(next - buffer);
 
     MutexLocker locker(&g_mutex);
     if (!MaybeReopen(tv.tv_sec)) {

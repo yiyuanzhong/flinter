@@ -68,8 +68,10 @@ protected:
     virtual void OnShutdown();
 
     // Only used by Linkages, don't call explicitly.
-    bool Attach(LinkageBase *linkage, int fd, bool read_now, bool auto_release);
     bool Detach(LinkageBase *linkage);
+    bool Attach(LinkageBase *linkage, int fd,
+                bool read_now, bool write_now,
+                bool auto_release);
 
 private:
     struct timer_t;

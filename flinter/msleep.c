@@ -95,7 +95,12 @@ int msleep_signal(int milliseconds, int alertable, const sigset_t *sigset)
         }
     }
 
-    milliseconds = -(int)(-diff / 1000000LL); // ceiling
+    // Ceiling.
+    milliseconds = (int)(diff / 1000000LL);
+    if ((diff % 1000000LL)) {
+        ++milliseconds;
+    }
+
     return milliseconds;
 }
 #endif

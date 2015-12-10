@@ -78,11 +78,11 @@ static const char *const kForbiddenCookies[] = { // Must be low case.
 
 class CGI::Parser {
 public:
-    static NEOERR *Parse(::CGI *, char *method, char *ctype, void *rock);
+    static NEOERR *Parse(::CGI *cgi, char *method, char *ctype, void *rock);
 
 }; // class CGI::Parser
 
-NEOERR *CGI::Parser::Parse(::CGI *, char *method, char *ctype, void *rock)
+NEOERR *CGI::Parser::Parse(::CGI *, char *, char *, void *rock)
 {
     CGI *cgi = reinterpret_cast<CGI *>(rock);
 
@@ -211,7 +211,7 @@ bool CGI::TranslateFile(void *cgi, const char *key, std::map<std::string, File> 
     rewind(fp);
     File file;
     file._fp = fp;
-    file._size = size;
+    file._size = static_cast<size_t>(size);
 
     const char *name = hdf_get_value(c->hdf, path.c_str(), NULL);
     if (name) {
@@ -634,7 +634,7 @@ void CGI::RealOutput(const void *what, size_t len)
         now -= kMaximum;
     }
 
-    err = cgiwrap_write(ptr, now);
+    err = cgiwrap_write(ptr, (int)now);
     ThrowIfNeoError(err);
 }
 

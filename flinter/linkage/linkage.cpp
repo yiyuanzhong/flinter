@@ -18,10 +18,15 @@
 #include <assert.h>
 #include <errno.h>
 
+#include "flinter/linkage/abstract_io.h"
 #include "flinter/linkage/interface.h"
 #include "flinter/linkage/linkage_handler.h"
 #include "flinter/linkage/linkage_peer.h"
 #include "flinter/linkage/linkage_worker.h"
+
+#include "flinter/thread/mutex.h"
+#include "flinter/thread/mutex_locker.h"
+
 #include "flinter/logger.h"
 #include "flinter/safeio.h"
 #include "flinter/utility.h"
@@ -29,45 +34,35 @@
 namespace flinter {
 
 const int64_t Linkage::kDefaultReceiveTimeout = 15000000000LL;  // 15s
+const int64_t Linkage::kDefaultConnectTimeout = 15000000000LL;  // 15s
 const int64_t Linkage::kDefaultSendTimeout    = 15000000000LL;  // 15s
 const int64_t Linkage::kDefaultIdleTimeout    = 300000000000LL; // 5min
 
-Linkage::Linkage(LinkageHandler *handler,
+Linkage::Linkage(AbstractIo *io,
+                 LinkageHandler *handler,
                  const LinkagePeer &peer,
-                 const LinkagePeer &me) : _graceful(false)
-                                        , _handler(handler)
-                                        , _worker(NULL)
-                                        , _connect(NULL)
-                                        , _peer(new LinkagePeer(peer))
-                                        , _me(new LinkagePeer(me))
-                                        , _receive_jam(0)
-                                        , _send_jam(0)
-                                        , _rlength(0)
-                                        , _idle_timeout(kDefaultIdleTimeout)
-                                        , _send_timeout(kDefaultSendTimeout)
-                                        , _receive_timeout(kDefaultReceiveTimeout)
-{
-    assert(handler);
-
-    int64_t now = get_monotonic_timestamp();
-    _last_received = now;
-    _last_sent = now;
-}
-
-Linkage::Linkage(LinkageHandler *handler, const std::string &name)
-        : _graceful(false)
-        , _handler(handler)
-        , _worker(NULL)
-        , _connect(PrepareToConnect(name))
-        , _peer(new LinkagePeer)
-        , _me(new LinkagePeer)
-        , _receive_jam(0)
-        , _send_jam(0)
-        , _rlength(0)
+                 const LinkagePeer &me)
+        : _handler(handler)
+        , _wbuffer_mutex(new Mutex)
+        , _peer(new LinkagePeer(peer))
+        , _me(new LinkagePeer(me))
+        , _io(io)
+        , _receive_timeout(kDefaultReceiveTimeout)
+        , _connect_timeout(kDefaultConnectTimeout)
+        , _last_received(0)
         , _idle_timeout(kDefaultIdleTimeout)
         , _send_timeout(kDefaultSendTimeout)
-        , _receive_timeout(kDefaultReceiveTimeout)
+        , _receive_jam(0)
+        , _connect_jam(0)
+        , _last_sent(0)
+        , _send_jam(0)
+        , _action(AbstractIo::kActionNone)
+        , _worker(NULL)
+        , _rlength(0)
+        , _graceful(false)
+        , _closed(false)
 {
+    assert(io);
     assert(handler);
 
     int64_t now = get_monotonic_timestamp();
@@ -77,126 +72,246 @@ Linkage::Linkage(LinkageHandler *handler, const std::string &name)
 
 Linkage::~Linkage()
 {
+    delete _io;
     delete _me;
-
-    safe_close(_peer->fd());
     delete _peer;
-
-    if (_connect) {
-        delete _connect->interface;
-        delete _connect;
-    }
+    delete _wbuffer_mutex;
 }
 
-Linkage::connect_t *Linkage::PrepareToConnect(const std::string &name)
+ssize_t Linkage::GetMessageLength(const void *buffer, size_t length)
 {
-    connect_t *c = new connect_t;
-    c->interface = new Interface;
-    c->connecting = true;
-    c->name = name;
-    return c;
+    return _handler->GetMessageLength(this, buffer, length);
 }
 
-bool Linkage::DoConnectTcp4(const std::string &host, uint16_t port)
+int Linkage::OnMessage(const void *buffer, size_t length)
 {
-    Interface *i = _connect->interface;
-    int ret = i->ConnectTcp4(host, port, _peer, _me);
-    if (ret < 0) {
-        CLOG.Warn("Linkage: failed to initiate connection to [%s]: %d: %s",
-                  host.c_str(), errno, strerror(errno));
-
-        return false;
-    }
-
-    return true;
+    return _handler->OnMessage(this, buffer, length);
 }
 
-bool Linkage::DoConnectUnix(const std::string &sockname, bool file_based)
+void Linkage::OnError(bool reading_or_writing, int errnum)
 {
-    Interface *i = _connect->interface;
-    int ret = i->ConnectUnix(sockname, file_based, _peer);
-    if (ret < 0) {
-        CLOG.Warn("Linkage: failed to initiate connection to [%s]: %d: %s",
-                  sockname.c_str(), errno, strerror(errno));
-
-        return false;
-    }
-
-    return true;
+    _handler->OnError(this, reading_or_writing, errnum);
 }
 
-Linkage *Linkage::ConnectTcp4(LinkageHandler *handler,
-                              const std::string &host,
-                              uint16_t port)
+void Linkage::OnDisconnected()
 {
-    if (!handler || host.empty() || !port) {
-        return NULL;
-    }
-
-    Linkage *linkage = new Linkage(handler, host);
-    if (!linkage->DoConnectTcp4(host, port)) {
-        delete linkage;
-        return NULL;
-    }
-
-    return linkage;
+    _handler->OnDisconnected(this);
 }
 
-Linkage *Linkage::ConnectUnix(LinkageHandler *handler,
-                              const std::string &sockname,
-                              bool file_based)
+bool Linkage::OnConnected()
 {
-    if (!handler || sockname.empty()) {
-        return NULL;
-    }
-
-    Linkage *linkage = new Linkage(handler, sockname);
-    if (!linkage->DoConnectUnix(sockname, file_based)) {
-        delete linkage;
-        return NULL;
-    }
-
-    return linkage;
+    return _handler->OnConnected(this);
 }
 
-bool Linkage::Attach(LinkageWorker *worker)
+void Linkage::AppendSendingBuffer(const void *buffer, size_t length)
 {
-    if (!worker || !_peer) {
-        return false;
-    } else if (_worker) {
-        return _worker == worker;
+    assert(buffer);
+    assert(length);
+    const unsigned char *p = reinterpret_cast<const unsigned char *>(buffer);
+    MutexLocker locker(_wbuffer_mutex);
+    _wbuffer.insert(_wbuffer.end(), p, p + length);
+}
+
+size_t Linkage::PickSendingBuffer(void *buffer, size_t length)
+{
+    assert(buffer);
+    if (!length) {
+        return 0;
     }
 
-    bool connecting = _connect && _connect->connecting;
-    if (!DoAttach(worker, _peer->fd(), !connecting, true)) {
-        return false;
+    MutexLocker locker(_wbuffer_mutex);
+    if (_wbuffer.empty()) {
+        return 0;
     }
 
-    if (connecting) {
-        if (!worker->SetWannaWrite(this, true)) {
-            DoDetach(worker);
-            return false;
+    size_t len = length < _wbuffer.size() ? length : _wbuffer.size();
+    std::deque<unsigned char>::iterator p = _wbuffer.begin();
+    std::advance(p, static_cast<ssize_t>(len));
+    std::copy(_wbuffer.begin(), p, reinterpret_cast<unsigned char *>(buffer));
+    return len;
+}
+
+void Linkage::ConsumeSendingBuffer(size_t length)
+{
+    MutexLocker locker(_wbuffer_mutex);
+    assert(length <= _wbuffer.size());
+    std::deque<unsigned char>::iterator p = _wbuffer.begin();
+    std::advance(p, static_cast<ssize_t>(length));
+    _wbuffer.erase(_wbuffer.begin(), p);
+}
+
+size_t Linkage::GetSendingBufferSize() const
+{
+    MutexLocker locker(_wbuffer_mutex);
+    return _wbuffer.size();
+}
+
+int Linkage::OnReadable(LinkageWorker *worker)
+{
+    return OnEvent(worker, AbstractIo::kActionRead);
+}
+
+int Linkage::OnWritable(LinkageWorker *worker)
+{
+    return OnEvent(worker, AbstractIo::kActionWrite);
+}
+
+bool Linkage::DoConnected()
+{
+    bool wanna_write = !!GetSendingBufferSize();
+    _worker->SetWanna(this, true, wanna_write);
+    _action = AbstractIo::kActionNone;
+    UpdateConnectJam(false);
+    UpdateLastReceived();
+    return OnConnected();
+}
+
+int Linkage::OnEvent(LinkageWorker *worker,
+                     const AbstractIo::Action &idle_action)
+{
+    AbstractIo::Action action = _action;
+    if (action == AbstractIo::kActionNone) {
+        action = idle_action;
+    }
+
+    errno = 0;
+    size_t retlen = 0;
+    AbstractIo::Status status = AbstractIo::kStatusBug;
+    if (action == AbstractIo::kActionRead) {
+        unsigned char buffer[16384];
+        status = _io->Read(buffer, sizeof(buffer), &retlen);
+        if (status == AbstractIo::kStatusOk) {
+            _action = AbstractIo::kActionNone;
+            worker->SetWannaRead(this, true);
+            int ret = OnReceived(buffer, retlen);
+            if (ret) {
+                return ret;
+            }
+
+            action = AbstractIo::kActionShutdown;
+            ret = Shutdown(&status);
+            if (ret <= 0) {
+                return ret;
+            }
+        }
+
+    } else if (action == AbstractIo::kActionWrite) {
+        unsigned char buffer[16384];
+        size_t length = PickSendingBuffer(buffer, sizeof(buffer));
+
+        if (length) { // Something to write.
+            status = _io->Write(buffer, length, &retlen);
+            if (status == AbstractIo::kStatusOk) {
+                _action = AbstractIo::kActionNone;
+                if (retlen < length) {
+                    UpdateLastSent(true, true);
+                    ConsumeSendingBuffer(retlen);
+                    CLOG.Verbose("Linkage: dequeued [%lu] bytes and sent [%lu] "
+                                 "bytes for fd = %d", length, retlen, peer()->fd());
+
+                    assert(GetSendingBufferSize());
+                    worker->SetWannaWrite(this, true);
+                    return 1;
+
+                } else {
+                    UpdateLastSent(true, false);
+                    ConsumeSendingBuffer(length);
+                    CLOG.Verbose("Linkage: dequeued [%lu] bytes and sent [%lu] "
+                                 "bytes for fd = %d", length, retlen, peer()->fd());
+
+                    if (!GetSendingBufferSize()) {
+                        worker->SetWannaWrite(this, false);
+                    }
+
+                    return 1;
+                }
+
+            } else {
+                UpdateLastSent(false, true);
+            }
+
+        } else if (_graceful) { // Finished writing.
+            action = AbstractIo::kActionShutdown;
+            int ret = Shutdown(&status);
+            if (ret <= 0) {
+                return ret;
+            }
+
+        } else { // Nothing to write for now.
+            worker->SetWannaWrite(this, false);
+            return 1;
+        }
+
+    } else if (action == AbstractIo::kActionAccept) {
+        status = _io->Accept();
+        if (status == AbstractIo::kStatusOk) {
+            return DoConnected() ? 1 : -1;
+        }
+
+    } else if (action == AbstractIo::kActionConnect) {
+        status = _io->Connect();
+        if (status == AbstractIo::kStatusOk) {
+            return DoConnected() ? 1 : -1;
+        }
+
+    } else if (action == AbstractIo::kActionShutdown) {
+        int ret = Shutdown(&status);
+        if (ret <= 0) {
+            return ret;
         }
     }
 
-    _worker = worker;
-    return true;
+    _action = action;
+    return AfterEvent(worker, status);
 }
 
-bool Linkage::Detach(LinkageWorker *worker)
+int Linkage::AfterEvent(LinkageWorker *worker,
+                        const AbstractIo::Status &status)
 {
-    if (!worker) {
-        return false;
-    } else if (!_worker || _worker != worker) {
-        return true;
-    }
+    switch (status) {
+    case AbstractIo::kStatusWannaRead:
+        worker->SetWanna(this, true, false);
+        return 1;
 
-    if (!DoDetach(_worker)) {
-        return false;
-    }
+    case AbstractIo::kStatusWannaWrite:
+        worker->SetWanna(this, false, true);
+        return 1;
 
-    _worker = NULL;
-    return true;
+    case AbstractIo::kStatusClosed:
+        return 0;
+
+    case AbstractIo::kStatusOk:
+        return 1;
+
+    case AbstractIo::kStatusError:
+    case AbstractIo::kStatusBug:
+    default:
+        return -1;
+    };
+}
+
+const char *Linkage::GetActionString(const AbstractIo::Action &action)
+{
+    switch (action) {
+    case AbstractIo::kActionRead:
+        return "reading";
+
+    case AbstractIo::kActionWrite:
+        return "writing";
+
+    case AbstractIo::kActionAccept:
+        return "accepting";
+
+    case AbstractIo::kActionConnect:
+        return "connecting";
+
+    case AbstractIo::kActionShutdown:
+        return "closing";
+
+    default:
+        assert(false);
+        return NULL;
+    };
 }
 
 int Linkage::OnReceived(const void *buffer, size_t length)
@@ -218,10 +333,7 @@ int Linkage::OnReceived(const void *buffer, size_t length)
 
     while (true) {
         if (!_rlength) {
-            ssize_t ret = _handler->GetMessageLength(this,
-                                                     &_rbuffer[0],
-                                                     _rbuffer.size());
-
+            ssize_t ret = GetMessageLength(&_rbuffer[0], _rbuffer.size());
             if (ret < 0) {
                 CLOG.Verbose("Linkage: failed to get message length for "
                              "fd = %d", _peer->fd());
@@ -250,7 +362,7 @@ int Linkage::OnReceived(const void *buffer, size_t length)
         CLOG.Verbose("Linkage: processing message of length [%lu] for fd = %d",
                      _rlength, _peer->fd());
 
-        int next = _handler->OnMessage(this, &_rbuffer[0], _rlength);
+        int next = OnMessage(&_rbuffer[0], _rlength);
         if (next < 0) {
             CLOG.Verbose("Linkage: failed to process message of length [%lu] "
                          "for fd = %d", _rlength, _peer->fd());
@@ -260,184 +372,19 @@ int Linkage::OnReceived(const void *buffer, size_t length)
             CLOG.Verbose("Linkage: processing message of length [%lu] but "
                          "instructed to shutdown for fd = %d", _rlength, _peer->fd());
 
-            return Shutdown();
+            _rbuffer.clear();
+            _rlength = 0;
+            return 0;
         }
 
         std::vector<unsigned char>::iterator p = _rbuffer.begin();
-        std::advance(p, _rlength);
+        std::advance(p, static_cast<ssize_t>(_rlength));
         _rlength = 0;
 
         _rbuffer.erase(_rbuffer.begin(), p);
         if (_rbuffer.empty()) {
             break;
         }
-    }
-
-    return 1;
-}
-
-void Linkage::OnError(bool reading_or_writing, int errnum)
-{
-    _handler->OnError(this, reading_or_writing, errnum);
-}
-
-void Linkage::OnDisconnected()
-{
-    _handler->OnDisconnected(this);
-}
-
-bool Linkage::OnConnected()
-{
-    return _handler->OnConnected(this);
-}
-
-int Linkage::OnReadable(LinkageWorker *worker)
-{
-    unsigned char buffer[8192];
-    assert(worker == _worker);
-    assert(_peer);
-
-    ssize_t ret = safe_read(_peer->fd(), buffer, sizeof(buffer));
-    if (ret < 0) {
-        if (errno == EAGAIN || errno == EWOULDBLOCK) {
-            return 1;
-        } else {
-            return -1;
-        }
-    }
-
-    if (ret == 0) {
-        return 0;
-    }
-
-    return OnReceived(buffer, static_cast<size_t>(ret));
-}
-
-bool Linkage::Send(const void *buffer, size_t length)
-{
-    if (!buffer || !_worker) {
-        return false;
-    } else if (!length) {
-        return true;
-    }
-
-    CLOG.Verbose("Linkage: sending [%lu] bytes for fd = %d", length, _peer->fd());
-
-    if ((_connect && _connect->connecting) || GetSendingBufferSize()) {
-        CLOG.Verbose("Linkage: queued [%lu] bytes for fd = %d", length, _peer->fd());
-        AppendSendingBuffer(buffer, length);
-        return true;
-    }
-
-    assert(_peer);
-    ssize_t ret = safe_write(_peer->fd(), buffer, length);
-    if (ret < 0) {
-        if (errno != EAGAIN && errno != EWOULDBLOCK) {
-            return false;
-        }
-
-        CLOG.Verbose("Linkage: queued [%lu] bytes for fd = %d", length, _peer->fd());
-        AppendSendingBuffer(buffer, length);
-        _worker->SetWannaWrite(this, true);
-        UpdateLastSent(false, true);
-
-    } else if (static_cast<size_t>(ret) < length) {
-        CLOG.Verbose("Linkage: sent [%lu] bytes, queued [%lu] bytes for fd = %d",
-                     ret, length - ret, _peer->fd());
-
-        const unsigned char *buf = reinterpret_cast<const unsigned char *>(buffer);
-        AppendSendingBuffer(buf + ret, length - ret);
-        _worker->SetWannaWrite(this, true);
-        UpdateLastSent(true, true);
-
-    } else {
-        CLOG.Verbose("Linkage: sent [%lu] bytes for fd = %d", length, _peer->fd());
-        UpdateLastSent(true, false);
-    }
-
-    return true;
-}
-
-bool Linkage::DoCheckConnected()
-{
-    if (!_connect || !_connect->connecting) {
-        return true;
-    }
-
-    if (!_connect->interface->TestIfConnected()) {
-        CLOG.Warn("Linkage: connecting to [%s] failed: %d: %s",
-                  _connect->name.c_str(), errno, strerror(errno));
-
-        return false;
-    }
-
-    CLOG.Verbose("Linkage: connected to [%s].", _connect->name.c_str());
-    _worker->SetWannaRead(this, true);
-    _connect->connecting = false;
-    if (!OnConnected()) {
-        return false;
-    }
-
-    UpdateLastSent(true, false);
-    return true;
-}
-
-int Linkage::OnWritable(LinkageWorker *worker)
-{
-    static const size_t kMaximumBytesPerRun = 131072;
-    unsigned char buffer[16384];
-    size_t count = 0;
-
-    assert(worker == _worker);
-    if (!DoCheckConnected()) {
-        return -1;
-    }
-
-    while (true) {
-        size_t length = PickSendingBuffer(buffer, sizeof(buffer));
-        if (!length) {
-            break;
-        }
-
-        assert(_peer);
-        ssize_t ret = safe_write(_peer->fd(), buffer, length);
-        if (ret < 0) {
-            if (errno == EAGAIN || errno == EWOULDBLOCK) {
-                worker->SetWannaWrite(this, true);
-                UpdateLastSent(false, true);
-                return 1;
-            }
-
-            return errno == EPIPE ? 0 : -1;
-        }
-
-        if (static_cast<size_t>(ret) < length) {
-            UpdateLastSent(true, true);
-            worker->SetWannaWrite(this, true);
-            ConsumeSendingBuffer(static_cast<size_t>(ret));
-            CLOG.Verbose("Linkage: dequeued [%lu] bytes and sent [%lu] bytes for fd = %d",
-                         length, static_cast<size_t>(ret), _peer->fd());
-
-            return 1;
-
-        } else {
-            UpdateLastSent(true, false);
-            ConsumeSendingBuffer(length);
-            CLOG.Verbose("Linkage: dequeued [%lu] bytes and sent [%lu] bytes for fd = %d",
-                         length, length, _peer->fd());
-
-            // Don't overrun the link.
-            count += length;
-            if (count >= kMaximumBytesPerRun && GetSendingBufferSize()) {
-                worker->SetWannaWrite(this, true);
-                return 1;
-            }
-        }
-    }
-
-    worker->SetWannaWrite(this, false);
-    if (_graceful && !GetSendingBufferSize()) {
-        return Shutdown();
     }
 
     return 1;
@@ -459,6 +406,17 @@ void Linkage::UpdateReceiveJam(bool jammed)
     }
 }
 
+void Linkage::UpdateConnectJam(bool jammed)
+{
+    if (jammed) {
+        if (!_connect_jam) {
+            _connect_jam = get_monotonic_timestamp();
+        }
+    } else {
+        _connect_jam = 0;
+    }
+}
+
 void Linkage::UpdateLastSent(bool sent, bool jammed)
 {
     int64_t now = get_monotonic_timestamp();
@@ -477,6 +435,12 @@ void Linkage::UpdateLastSent(bool sent, bool jammed)
 
 bool Linkage::Cleanup(int64_t now)
 {
+    int64_t jammed_c = _connect_jam ? now - _connect_jam : 0;
+    if (_connect_timeout && jammed_c && jammed_c >= _connect_timeout) {
+        CLOG.Verbose("Linkage: connecting but timed out for fd = %d", _peer->fd());
+        return false;
+    }
+
     int64_t jammed_w = _send_jam ? now - _send_jam : 0;
     if (_send_timeout && jammed_w && jammed_w >= _send_timeout) {
         CLOG.Verbose("Linkage: writing but timed out for fd = %d", _peer->fd());
@@ -500,59 +464,82 @@ bool Linkage::Cleanup(int64_t now)
     return true;
 }
 
-void Linkage::AppendSendingBuffer(const void *buffer, size_t length)
+bool Linkage::Attach(LinkageWorker *worker)
 {
-    assert(buffer);
-    assert(length);
-    const unsigned char *p = reinterpret_cast<const unsigned char *>(buffer);
-    _wbuffer.insert(_wbuffer.end(), p, p + length);
-}
-
-size_t Linkage::PickSendingBuffer(void *buffer, size_t length)
-{
-    assert(buffer);
-    assert(length);
-    if (_wbuffer.empty()) {
-        return 0;
+    if (!worker) {
+        return false;
+    } else if (_worker) {
+        return _worker == worker;
     }
 
-    size_t len = length < _wbuffer.size() ? length : _wbuffer.size();
-    unsigned char *b = reinterpret_cast<unsigned char *>(buffer);
-    std::vector<unsigned char>::iterator p = _wbuffer.begin();
-    std::advance(p, len);
-    std::copy(_wbuffer.begin(), p, b);
-    return len;
-}
+    bool wanna_read = false;
+    bool wanna_write = false;
+    AbstractIo::Action action;
+    AbstractIo::Action next_action;
+    AbstractIo::Status status = _io->Initialize(&action, &next_action);
+    assert(AbstractIo::kActionNone == action     ||
+           AbstractIo::kActionNone == next_action);
 
-void Linkage::ConsumeSendingBuffer(size_t length)
-{
-    assert(length <= _wbuffer.size());
-    std::vector<unsigned char>::iterator p = _wbuffer.begin();
-    std::advance(p, length);
-    _wbuffer.erase(_wbuffer.begin(), p);
-}
-
-size_t Linkage::GetSendingBufferSize() const
-{
-    return _wbuffer.size();
-}
-
-int Linkage::Shutdown()
-{
-    if (shutdown(_peer->fd(), SHUT_RDWR)) {
-        return -1;
+    if (status == AbstractIo::kStatusWannaRead) {
+        wanna_read = true;
+    } else if (status == AbstractIo::kStatusWannaWrite) {
+        wanna_write = true;
+    } else if (status != AbstractIo::kStatusOk) {
+        return false;
     }
 
-    return 0;
+    if (!DoAttach(worker, _peer->fd(), wanna_read, wanna_write, true)) {
+        return false;
+    }
+
+    _worker = worker;
+    bool connecting = (AbstractIo::kActionNone != action)    ||
+                      (AbstractIo::kActionNone != next_action);
+
+    if (!connecting) {
+        if (!DoConnected()) {
+            DoDetach(worker);
+            _worker = NULL;
+            return false;
+        }
+
+        return true;
+    }
+
+    UpdateConnectJam(true);
+    if (action == AbstractIo::kActionNone) {
+        _action = next_action;
+        return true;
+    }
+
+    _action = action;
+    int ret = OnEvent(worker, action);
+    if (ret <= 0) {
+        DoDetach(worker);
+        _worker = NULL;
+        return false;
+    }
+
+    return true;
 }
 
-void Linkage::SetHandler(LinkageHandler *handler)
+bool Linkage::Detach(LinkageWorker *worker)
 {
-    assert(handler);
-    _handler = handler;
+    if (!worker) {
+        return false;
+    } else if (!_worker || _worker != worker) {
+        return true;
+    }
+
+    if (!DoDetach(worker)) {
+        return false;
+    }
+
+    _worker = NULL;
+    return true;
 }
 
-void Linkage::Disconnect(bool finish_write)
+int Linkage::Disconnect(bool finish_write)
 {
     if (!finish_write) {
         size_t size = GetSendingBufferSize();
@@ -562,15 +549,92 @@ void Linkage::Disconnect(bool finish_write)
     }
 
     _graceful = true;
-    if (!GetSendingBufferSize()) {
-        Shutdown();
-        if (_worker) {
-            _worker->SetWanna(this, true, false);
-        }
-
-    } else if (_worker) {
-        _worker->SetWanna(this, true, true);
+    if (_action != AbstractIo::kActionNone) {
+        return 1;
     }
+
+    return OnEvent(_worker, AbstractIo::kActionShutdown);
+}
+
+int Linkage::Shutdown(AbstractIo::Status *status)
+{
+    _graceful = true;
+    if (_closed) {
+        return 0;
+    }
+
+    UpdateConnectJam(true);
+    *status = _io->Shutdown();
+    switch (*status) {
+    case AbstractIo::kStatusOk:
+    case AbstractIo::kStatusClosed:
+        _closed = true;
+        return 0;
+
+    case AbstractIo::kStatusWannaRead:
+    case AbstractIo::kStatusWannaWrite:
+        return 1;
+
+    default:
+        return -1;
+    };
+}
+
+bool Linkage::Send(const void *buffer, size_t length)
+{
+    static const size_t kMaximumBytes = INT_MAX - 1024;
+    if (!buffer || length >= kMaximumBytes) {
+        return false;
+    } else if (length == 0) {
+        return true;
+    }
+
+    CLOG.Verbose("Linkage: sending [%lu] bytes for fd = %d", length, _peer->fd());
+    if (!_worker || _action != AbstractIo::kActionNone || GetSendingBufferSize()) {
+        CLOG.Verbose("Linkage: queued [%lu] bytes for fd = %d", length, _peer->fd());
+        AppendSendingBuffer(buffer, length);
+        return true;
+    }
+
+    assert(_peer);
+    size_t retlen;
+    AbstractIo::Status status = _io->Write(buffer, length, &retlen);
+    switch (status) {
+    case AbstractIo::kStatusWannaRead:
+        CLOG.Verbose("Linkage: queued [%lu] bytes for fd = %d", length, _peer->fd());
+        AppendSendingBuffer(buffer, length);
+        _worker->SetWannaRead(this, true);
+        UpdateLastSent(false, true);
+        break;
+
+    case AbstractIo::kStatusWannaWrite:
+        CLOG.Verbose("Linkage: queued [%lu] bytes for fd = %d", length, _peer->fd());
+        AppendSendingBuffer(buffer, length);
+        _worker->SetWannaWrite(this, true);
+        UpdateLastSent(false, true);
+        break;
+
+    case AbstractIo::kStatusOk:
+        if (retlen < length) {
+            CLOG.Verbose("Linkage: sent [%lu] bytes, queued [%lu] bytes for fd = %d",
+                         retlen, length - retlen, _peer->fd());
+
+            const unsigned char *buf = reinterpret_cast<const unsigned char *>(buffer);
+            AppendSendingBuffer(buf + retlen, length - retlen);
+            _worker->SetWannaWrite(this, true);
+            UpdateLastSent(true, true);
+
+        } else {
+            CLOG.Verbose("Linkage: sent [%lu] bytes for fd = %d", length, _peer->fd());
+            UpdateLastSent(true, false);
+        }
+        break;
+
+    default:
+        return false;
+    };
+
+    return true;
 }
 
 } // namespace flinter

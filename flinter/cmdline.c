@@ -59,7 +59,7 @@ static void *cmdline_malloc(size_t size)
     size_t remain;
     char *ret;
 
-    remain = sizeof(g_memory_buffer) - (g_memory_pointer - g_memory_buffer);
+    remain = sizeof(g_memory_buffer) - (size_t)(g_memory_pointer - g_memory_buffer);
     if (size > remain) {
         return malloc(size);
     }
@@ -241,7 +241,7 @@ static int cmdline_get_module_path_via_stat(const char *argv)
         return -1;
     }
 
-    len = fread(buffer, 1, sizeof(buffer) - 1, file);
+    len = fread(buffer, (size_t)1, sizeof(buffer) - 1, file);
     fclose(file);
 
     /* Find 2nd token. */
@@ -257,7 +257,7 @@ static int cmdline_get_module_path_via_stat(const char *argv)
         return -1;
     }
 
-    start = second - buffer;
+    start = (size_t)(second - buffer);
     end = len - start;
     end = end <= 20 ? end : 20;
     end += start;
@@ -280,7 +280,7 @@ static int cmdline_get_module_path_via_stat(const char *argv)
     len = strlen(second);
 
     /* Looks like a truncation, proceed with argv. */
-    if (len == 15 && memcmp(argv_name, second, 15) == 0) {
+    if (len == 15 && memcmp(argv_name, second, (size_t)15) == 0) {
         g_module_basename = cmdline_strdup(argv_name);
     } else {
         g_module_basename = cmdline_strdup(second);
@@ -460,7 +460,7 @@ char **cmdline_setup(int argc, char *argv[])
         }
     }
 
-    argv_duplication = cmdline_malloc(sizeof(char *) * (argv_size + 1));
+    argv_duplication = cmdline_malloc(sizeof(char *) * (size_t)(argv_size + 1));
     if (!argv_duplication) {
         errno = ENOMEM;
         return NULL;
@@ -473,7 +473,9 @@ char **cmdline_setup(int argc, char *argv[])
 
     /* Not available, just occupy ARGV. */
     if (!environ_size) {
-        g_max_length = argv[argv_size - 1] - argv[0] + strlen(argv[argv_size - 1]);
+        g_max_length = (size_t)(argv[argv_size - 1] - argv[0])
+                     + strlen(argv[argv_size - 1]);
+
         return argv_duplication;
     }
 
@@ -482,7 +484,9 @@ char **cmdline_setup(int argc, char *argv[])
         return argv_duplication;
     }
 
-    g_max_length = environ[environ_size - 1] - argv[0] + strlen(environ[environ_size - 1]);
+    g_max_length = (size_t)(environ[environ_size - 1] - argv[0])
+                 + strlen(environ[environ_size - 1]);
+
     for (i = 0; i < environ_size; ++i) {
         environ_duplication[i] = cmdline_strdup(environ[i]);
     }
@@ -544,7 +548,7 @@ int cmdline_set_process_name(const char *fmt, ...)
         return -1;
     }
 
-    /* And we erase all remaining buffer to 0, since some OS might remember the old length. */
+    /* Erase all remaining buffer, since some OS remembers the old length. */
     if (max > (size_t)eraser) {
         off += (size_t)eraser;
     } else {
@@ -579,7 +583,7 @@ char *cmdline_get_absolute_path(const char *path, int force_relative)
     char *r;
 
 #ifdef WIN32
-    /* TODO(zhongyiyuan): Windows is a headache, disable it for now. */
+    /* TODO(yiyuanzhong): Windows is a headache, disable it for now. */
     force_relative = 1;
 #endif
 
