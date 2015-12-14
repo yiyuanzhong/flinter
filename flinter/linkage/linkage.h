@@ -120,6 +120,7 @@ private:
     size_t PickSendingBuffer(void *buffer, size_t length);
     void ConsumeSendingBuffer(size_t length);
     size_t GetSendingBufferSize() const;
+    void DumpSendingBuffer();
 
     int OnEvent(LinkageWorker *worker,
                 const AbstractIo::Action &idle_action);

@@ -146,6 +146,12 @@ size_t Linkage::GetSendingBufferSize() const
     return _wbuffer.size();
 }
 
+void Linkage::DumpSendingBuffer()
+{
+    MutexLocker locker(_wbuffer_mutex);
+    _wbuffer.clear();
+}
+
 int Linkage::OnReadable(LinkageWorker *worker)
 {
     return OnEvent(worker, AbstractIo::kActionRead);
@@ -541,14 +547,11 @@ bool Linkage::Detach(LinkageWorker *worker)
 
 int Linkage::Disconnect(bool finish_write)
 {
+    _graceful = true;
     if (!finish_write) {
-        size_t size = GetSendingBufferSize();
-        if (size) {
-            ConsumeSendingBuffer(size);
-        }
+        DumpSendingBuffer();
     }
 
-    _graceful = true;
     if (_action != AbstractIo::kActionNone) {
         return 1;
     }
@@ -583,7 +586,7 @@ int Linkage::Shutdown(AbstractIo::Status *status)
 bool Linkage::Send(const void *buffer, size_t length)
 {
     static const size_t kMaximumBytes = INT_MAX - 1024;
-    if (!buffer || length >= kMaximumBytes) {
+    if (!buffer || length >= kMaximumBytes || !_worker || _graceful) {
         return false;
     } else if (length == 0) {
         return true;
