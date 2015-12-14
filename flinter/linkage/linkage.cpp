@@ -17,6 +17,7 @@
 
 #include <assert.h>
 #include <errno.h>
+#include <limits.h>
 
 #include "flinter/linkage/abstract_io.h"
 #include "flinter/linkage/interface.h"
