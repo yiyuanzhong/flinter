@@ -101,7 +101,8 @@ include_linkage_HEADERS = linkage/abstract_io.h \
                           linkage/resolver.h \
                           linkage/route_handler.h \
                           linkage/ssl_context.h \
-                          linkage/ssl_io.h
+                          linkage/ssl_io.h \
+                          linkage/ssl_peer.h
 
 libflinter_core_la_SOURCES = babysitter.c \
                              cmdline.c \

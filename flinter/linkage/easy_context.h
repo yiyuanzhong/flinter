@@ -24,6 +24,7 @@ namespace flinter {
 
 class EasyHandler;
 class EasyServer;
+class SslPeer;
 
 class EasyContext {
 public:
@@ -63,23 +64,22 @@ public:
         return _peer;
     }
 
-    void set_peer(const LinkagePeer &peer)
+    const SslPeer *ssl_peer() const
     {
-        _peer = peer;
+        return _ssl_peer;
     }
 
-    void set_me(const LinkagePeer &me)
-    {
-        _me = me;
-    }
+    // Don't call this.
+    void set_ssl_peer(const SslPeer *ssl_peer);
 
 private:
     EasyServer *_easy_server;
     EasyHandler *_easy_handler;
     bool _auto_release_handler;
     channel_t _channel;
-    LinkagePeer _peer;
-    LinkagePeer _me;
+    const LinkagePeer _peer;
+    const LinkagePeer _me;
+    const SslPeer *_ssl_peer;
 
 }; // class EasyContext
 

@@ -27,6 +27,7 @@
 #include "flinter/linkage/linkage_peer.h"
 #include "flinter/linkage/linkage_worker.h"
 #include "flinter/linkage/listener.h"
+#include "flinter/linkage/ssl_io.h"
 
 #include "flinter/thread/condition.h"
 #include "flinter/thread/mutex.h"
@@ -35,7 +36,13 @@
 
 #include "flinter/types/shared_ptr.h"
 
+#include "flinter/runnable.h"
 #include "flinter/logger.h"
+
+#include "config.h"
+#if HAVE_OPENSSL_OPENSSLV_H
+#include <openssl/err.h>
+#endif
 
 namespace flinter {
 
@@ -67,9 +74,9 @@ public:
     uint16_t port() const               { return _port;          }
 
 private:
-    ProxyHandler *_proxy_handler;
-    std::string _host;
-    uint16_t _port;
+    ProxyHandler *const _proxy_handler;
+    const std::string _host;
+    const uint16_t _port;
 
 }; // class OutgoingInformation
 
@@ -106,8 +113,10 @@ class EasyServer::ProxyHandler : public LinkageHandler {
 public:
     virtual ~ProxyHandler() {}
     ProxyHandler(EasyHandler *easy_handler,
-                 Factory<EasyHandler> *easy_factory)
-            : _easy_handler(easy_handler)
+                 Factory<EasyHandler> *easy_factory,
+                 SslContext *ssl)
+            : _ssl(ssl)
+            , _easy_handler(easy_handler)
             , _easy_factory(easy_factory) {}
 
     virtual ssize_t GetMessageLength(Linkage *linkage,
@@ -124,6 +133,11 @@ public:
                          bool reading_or_writing,
                          int errnum);
 
+    SslContext *ssl() const
+    {
+        return _ssl;
+    }
+
     EasyHandler *easy_handler() const
     {
         return _easy_handler;
@@ -135,6 +149,7 @@ public:
     }
 
 private:
+    SslContext *const _ssl;
     EasyHandler *const _easy_handler;
     Factory<EasyHandler> *const _easy_factory;
 
@@ -150,13 +165,13 @@ public:
     }
 
     virtual ~ProxyLinkage() {}
-    const shared_ptr<EasyContext> &context()
+    shared_ptr<EasyContext> &context()
     {
         return _context;
     }
 
 private:
-    const shared_ptr<EasyContext> _context;
+    shared_ptr<EasyContext> _context;
 
 }; // class EasyServer::ProxyLinkage
 
@@ -191,6 +206,57 @@ private:
 
 }; // class EasyServer::JobWorker::Job
 
+class EasyServer::DisconnectJob : public flinter::Runnable {
+public:
+    DisconnectJob(flinter::LinkageBase *linkage, bool finish_write)
+            : _linkage(linkage), _finish_write(finish_write) {}
+
+    virtual ~DisconnectJob() {}
+    virtual bool Run()
+    {
+        _linkage->Disconnect(_finish_write);
+        return true;
+    }
+
+private:
+    flinter::LinkageBase *const _linkage;
+    const bool _finish_write;
+
+}; // class EasyServer::DisconnectJob
+
+class EasyServer::SendJob : public flinter::Runnable {
+public:
+    SendJob(flinter::Linkage *linkage, const void *buffer, size_t length)
+            : _linkage(linkage), _length(length), _buffer(malloc(length))
+    {
+        if (_buffer) {
+            memcpy(_buffer, buffer, length);
+        }
+    }
+
+    virtual ~SendJob()
+    {
+        free(_buffer);
+    }
+
+    virtual bool Run()
+    {
+        _linkage->Send(_buffer, _length);
+        return true;
+    }
+
+    operator bool() const
+    {
+        return !!_buffer;
+    }
+
+private:
+    flinter::Linkage *const _linkage;
+    const size_t _length;
+    void *const _buffer;
+
+}; // class EasyServer::SendJob
+
 bool EasyServer::ProxyLinkageWorker::OnInitialize()
 {
     if (!_tuner) {
@@ -202,11 +268,14 @@ bool EasyServer::ProxyLinkageWorker::OnInitialize()
 
 void EasyServer::ProxyLinkageWorker::OnShutdown()
 {
-    if (!_tuner) {
-        return;
+    if (_tuner) {
+        _tuner->OnIoThreadShutdown();
     }
 
-    _tuner->OnIoThreadShutdown();
+#if HAVE_OPENSSL_OPENSSLV_H
+    // Every thread should call this before terminating.
+    ERR_remove_thread_state(NULL);
+#endif
 }
 
 EasyServer::JobWorker::Job::Job(const shared_ptr<EasyContext> &context,
@@ -254,6 +323,12 @@ bool EasyServer::ProxyHandler::OnConnected(Linkage *linkage)
 {
     ProxyLinkage *l = static_cast<ProxyLinkage *>(linkage);
     EasyHandler *h = l->context()->easy_handler();
+
+    if (_ssl) {
+        SslIo *io = static_cast<SslIo *>(l->io());
+        l->context()->set_ssl_peer(io->peer());
+    }
+
     return h->OnConnected(*l->context());
 }
 
@@ -296,6 +371,11 @@ bool EasyServer::JobWorker::Run()
     if (_easy_tuner) {
         _easy_tuner->OnJobThreadShutdown();
     }
+
+#if HAVE_OPENSSL_OPENSSLV_H
+    // Every thread should call this before terminating.
+    ERR_remove_thread_state(NULL);
+#endif
 
     return true;
 }
@@ -343,11 +423,13 @@ EasyServer::~EasyServer()
 
 bool EasyServer::DoListen(uint16_t port,
                           EasyHandler *easy_handler,
-                          Factory<EasyHandler> *easy_factory)
+                          Factory<EasyHandler> *easy_factory,
+                          SslContext *ssl)
 {
     MutexLocker locker(_mutex);
     ProxyHandler *proxy_handler = new ProxyHandler(easy_handler,
-                                                   easy_factory);
+                                                   easy_factory,
+                                                   ssl);
 
     Listener *listener = new ProxyListener(this, proxy_handler);
 
@@ -369,7 +451,24 @@ bool EasyServer::Listen(uint16_t port, EasyHandler *easy_handler)
         return false;
     }
 
-    return DoListen(port, easy_handler, NULL);
+    return DoListen(port, easy_handler, NULL, NULL);
+}
+
+bool EasyServer::SslListen(uint16_t port,
+                           SslContext *ssl,
+                           EasyHandler *easy_handler)
+{
+    if (!ssl) {
+        LOG(FATAL) << "EasyServer: BUG: no SSL context configured.";
+        return false;
+    }
+
+    if (!easy_handler) {
+        LOG(FATAL) << "EasyServer: BUG: no handler configured.";
+        return false;
+    }
+
+    return DoListen(port, easy_handler, NULL, ssl);
 }
 
 bool EasyServer::Listen(uint16_t port, Factory<EasyHandler> *easy_factory)
@@ -379,7 +478,24 @@ bool EasyServer::Listen(uint16_t port, Factory<EasyHandler> *easy_factory)
         return false;
     }
 
-    return DoListen(port, NULL, easy_factory);
+    return DoListen(port, NULL, easy_factory, NULL);
+}
+
+bool EasyServer::SslListen(uint16_t port,
+                           SslContext *ssl,
+                           Factory<EasyHandler> *easy_factory)
+{
+    if (!ssl) {
+        LOG(FATAL) << "EasyServer: BUG: no SSL context configured.";
+        return false;
+    }
+
+    if (!easy_factory) {
+        LOG(FATAL) << "EasyServer: BUG: no handler factory configured.";
+        return false;
+    }
+
+    return DoListen(port, NULL, easy_factory, ssl);
 }
 
 bool EasyServer::RegisterTimer(int64_t interval, Runnable *timer)
@@ -604,7 +720,13 @@ Linkage *EasyServer::AllocateChannel(const LinkagePeer &peer,
     EasyContext *context = new EasyContext(this, h, f ? true : false,
                                            channel, peer, me);
 
-    FileDescriptorIo *io = new FileDescriptorIo(interface, false);
+    AbstractIo *io;
+    if (proxy_handler->ssl()) {
+        io = new SslIo(interface, false, proxy_handler->ssl());
+    } else {
+        io = new FileDescriptorIo(interface, false);
+    }
+
     ProxyLinkage *linkage = new ProxyLinkage(context, io, proxy_handler, peer, me);
     linkage->set_receive_timeout(_configure.incoming_receive_timeout);
     linkage->set_connect_timeout(_configure.incoming_connect_timeout);
@@ -692,9 +814,10 @@ void EasyServer::Disconnect(channel_t channel, bool finish_write)
         return;
     }
 
-    // TODO(yiyuanzhong): incorrect, should pass the signal to I/O threads.
     ProxyLinkage *linkage = p->second;
-    linkage->Disconnect(finish_write);
+    flinter::LinkageWorker *worker = linkage->worker();
+    DisconnectJob *job = new DisconnectJob(linkage, finish_write);
+    worker->SendCommand(job);
 }
 
 void EasyServer::Disconnect(const EasyContext &context, bool finish_write)
@@ -726,8 +849,18 @@ bool EasyServer::Send(channel_t channel, const void *buffer, size_t length)
         return true;
     }
 
-    // TODO(yiyuanzhong): incorrect, should pass the signal to I/O threads.
-    return linkage->Send(buffer, length);
+    flinter::LinkageWorker *worker = linkage->worker();
+    SendJob *job = new SendJob(linkage, buffer, length);
+    if (!*job) {
+        LOG(ERROR) << "EasyServer: memory allocation failed for "
+                   << length << " bytes.";
+
+        delete job;
+        return false;
+    }
+
+    worker->SendCommand(job);
+    return true;
 }
 
 bool EasyServer::Send(const EasyContext &context, const void *buffer, size_t length)
@@ -750,6 +883,7 @@ EasyServer::ProxyLinkage *EasyServer::DoReconnect(
         channel_t channel,
         const OutgoingInformation *info)
 {
+    SslContext *ssl = info->proxy_handler()->ssl();
     EasyHandler *h = info->proxy_handler()->easy_handler();
     Factory<EasyHandler> *f = info->proxy_handler()->easy_factory();
     if (f) {
@@ -767,7 +901,13 @@ EasyServer::ProxyLinkage *EasyServer::DoReconnect(
     EasyContext *context = new EasyContext(this, h, f ? true : false,
                                            channel, peer, me);
 
-    FileDescriptorIo *io = new FileDescriptorIo(interface, true);
+    AbstractIo *io;
+    if (ssl) {
+        io = new SslIo(interface, true, ssl);
+    } else {
+        io = new FileDescriptorIo(interface, true);
+    }
+
     ProxyLinkage *linkage = new ProxyLinkage(context, io, info->proxy_handler(),
                                              peer, me);
 
@@ -791,11 +931,13 @@ EasyServer::channel_t EasyServer::DoConnectTcp4(
         const std::string &host,
         uint16_t port,
         EasyHandler *easy_handler,
-        Factory<EasyHandler> *easy_factory)
+        Factory<EasyHandler> *easy_factory,
+        SslContext *ssl)
 {
     MutexLocker locker(_mutex);
     ProxyHandler *proxy_handler = new ProxyHandler(easy_handler,
-                                                   easy_factory);
+                                                   easy_factory,
+                                                   ssl);
 
     OutgoingInformation *info =
             new OutgoingInformation(proxy_handler, host, port);
@@ -825,7 +967,26 @@ EasyServer::channel_t EasyServer::ConnectTcp4(
         return kInvalidChannel;
     }
 
-    return DoConnectTcp4(host, port, easy_handler, NULL);
+    return DoConnectTcp4(host, port, easy_handler, NULL, NULL);
+}
+
+EasyServer::channel_t EasyServer::SslConnectTcp4(
+        const std::string &host,
+        uint16_t port,
+        SslContext *ssl,
+        EasyHandler *easy_handler)
+{
+    if (!ssl) {
+        LOG(FATAL) << "EasyServer: BUG: no SSL context configured.";
+        return false;
+    }
+
+    if (!easy_handler) {
+        LOG(FATAL) << "EasyServer: BUG: no handler configured.";
+        return kInvalidChannel;
+    }
+
+    return DoConnectTcp4(host, port, easy_handler, NULL, ssl);
 }
 
 EasyServer::channel_t EasyServer::ConnectTcp4(
@@ -838,7 +999,26 @@ EasyServer::channel_t EasyServer::ConnectTcp4(
         return kInvalidChannel;
     }
 
-    return DoConnectTcp4(host, port, NULL, easy_factory);
+    return DoConnectTcp4(host, port, NULL, easy_factory, NULL);
+}
+
+EasyServer::channel_t EasyServer::SslConnectTcp4(
+        const std::string &host,
+        uint16_t port,
+        SslContext *ssl,
+        Factory<EasyHandler> *easy_factory)
+{
+    if (!ssl) {
+        LOG(FATAL) << "EasyServer: BUG: no SSL context configured.";
+        return false;
+    }
+
+    if (!easy_factory) {
+        LOG(FATAL) << "EasyServer: BUG: no handler factory configured.";
+        return kInvalidChannel;
+    }
+
+    return DoConnectTcp4(host, port, NULL, easy_factory, ssl);
 }
 
 EasyServer::channel_t EasyServer::AllocateChannel(bool incoming_or_outgoing)

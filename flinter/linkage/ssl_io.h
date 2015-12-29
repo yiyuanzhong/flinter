@@ -26,6 +26,7 @@ namespace flinter {
 
 class Interface;
 class SslContext;
+class SslPeer;
 
 class SslIo : public AbstractIo {
 public:
@@ -34,26 +35,21 @@ public:
     SslIo(Interface *i, bool connecting, SslContext *context);
     virtual ~SslIo();
 
+    virtual bool Initialize(Action *action,
+                            Action *next_action,
+                            bool *wanna_read,
+                            bool *wanna_write);
+
     virtual Status Write(const void *buffer, size_t length, size_t *retlen);
     virtual Status Read(void *buffer, size_t length, size_t *retlen);
-    virtual Status Initialize(Action *action, Action *next_action);
     virtual Status Shutdown();
     virtual Status Connect();
     virtual Status Accept();
 
-    const std::string &peer_subject_name() const
+    // Might be NULL.
+    const SslPeer *peer() const
     {
-        return _peer_subject_name;
-    }
-
-    const std::string &peer_issuer_name() const
-    {
-        return _peer_issuer_name;
-    }
-
-    const uint64_t &peer_serial_number() const
-    {
-        return _peer_serial_number;
+        return _peer;
     }
 
 private:
@@ -67,11 +63,8 @@ private:
 
     struct ssl_st *_ssl;
     bool _connecting;
+    SslPeer *_peer;
     Interface *_i;
-
-    std::string _peer_subject_name;
-    std::string _peer_issuer_name;
-    uint64_t _peer_serial_number;
 
 }; // class SslIo
 

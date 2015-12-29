@@ -17,6 +17,7 @@
 
 #include "flinter/linkage/easy_handler.h"
 #include "flinter/linkage/linkage.h"
+#include "flinter/linkage/ssl_peer.h"
 
 namespace flinter {
 
@@ -32,6 +33,7 @@ EasyContext::EasyContext(EasyServer *easy_server,
         , _channel(channel)
         , _peer(peer)
         , _me(me)
+        , _ssl_peer(NULL)
 {
     // Intended left blank.
 }
@@ -40,6 +42,20 @@ EasyContext::~EasyContext()
 {
     if (_auto_release_handler) {
         delete _easy_handler;
+    }
+
+    delete _ssl_peer;
+}
+
+void EasyContext::set_ssl_peer(const SslPeer *ssl_peer)
+{
+    if (_ssl_peer) {
+        delete _ssl_peer;
+        _ssl_peer = NULL;
+    }
+
+    if (ssl_peer) {
+        _ssl_peer = new SslPeer(*ssl_peer);
     }
 }
 

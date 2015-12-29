@@ -54,7 +54,7 @@ AbstractIo::Status FileDescriptorIo::Write(const void *buffer,
     }
 
     if (errno == EAGAIN || errno == EWOULDBLOCK) {
-        return kStatusWannaWrite;
+        return kStatusJammed;
     } else if (errno == EPIPE) {
         return kStatusClosed;
     } else {
@@ -84,8 +84,7 @@ AbstractIo::Status FileDescriptorIo::Read(void *buffer,
     }
 
     if (errno == EAGAIN || errno == EWOULDBLOCK) {
-        return kStatusWannaRead;
-
+        return kStatusJammed;
     } else {
         return kStatusError;
     }
@@ -126,18 +125,25 @@ AbstractIo::Status FileDescriptorIo::Accept()
     return kStatusOk;
 }
 
-AbstractIo::Status FileDescriptorIo::Initialize(Action *action,
-                                                Action *next_action)
+bool FileDescriptorIo::Initialize(Action *action,
+                                  Action *next_action,
+                                  bool *wanna_read,
+                                  bool *wanna_write)
 {
     if (_connecting) {
-        *action = kActionNone;
+        *action      = kActionNone;
         *next_action = kActionConnect;
-        return kStatusWannaWrite;
+        *wanna_read  = false;
+        *wanna_write = true;
+
     } else {
-        *action = kActionNone;
+        *action      = kActionNone;
         *next_action = kActionNone;
-        return kStatusOk;
+        *wanna_read  = false;
+        *wanna_write = false;
     }
+
+    return true;
 }
 
 } // namespace flinter

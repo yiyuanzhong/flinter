@@ -35,9 +35,13 @@ public:
     bool ConnectTcp4(const std::string &host, uint16_t port);
     bool ConnectUnix(const std::string &sockname, bool file_based);
 
+    virtual bool Initialize(Action *action,
+                            Action *next_action,
+                            bool *wanna_read,
+                            bool *wanna_write);
+
     virtual Status Write(const void *buffer, size_t length, size_t *retlen);
     virtual Status Read(void *buffer, size_t length, size_t *retlen);
-    virtual Status Initialize(Action *action, Action *next_action);
     virtual Status Shutdown();
     virtual Status Connect();
     virtual Status Accept();

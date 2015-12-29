@@ -25,12 +25,11 @@
 #include "flinter/linkage/linkage_peer.h"
 #include "flinter/linkage/linkage_worker.h"
 
-#include "flinter/thread/mutex.h"
-#include "flinter/thread/mutex_locker.h"
-
 #include "flinter/logger.h"
 #include "flinter/safeio.h"
 #include "flinter/utility.h"
+
+#define INCOMPLETE(x) ((x) == AbstractIo::kStatusWannaRead || (x) == AbstractIo::kStatusWannaWrite)
 
 namespace flinter {
 
@@ -43,8 +42,8 @@ Linkage::Linkage(AbstractIo *io,
                  LinkageHandler *handler,
                  const LinkagePeer &peer,
                  const LinkagePeer &me)
-        : _handler(handler)
-        , _wbuffer_mutex(new Mutex)
+        : _last_writing(0)
+        , _handler(handler)
         , _peer(new LinkagePeer(peer))
         , _me(new LinkagePeer(me))
         , _io(io)
@@ -76,7 +75,6 @@ Linkage::~Linkage()
     delete _io;
     delete _me;
     delete _peer;
-    delete _wbuffer_mutex;
 }
 
 ssize_t Linkage::GetMessageLength(const void *buffer, size_t length)
@@ -109,47 +107,46 @@ void Linkage::AppendSendingBuffer(const void *buffer, size_t length)
     assert(buffer);
     assert(length);
     const unsigned char *p = reinterpret_cast<const unsigned char *>(buffer);
-    MutexLocker locker(_wbuffer_mutex);
     _wbuffer.insert(_wbuffer.end(), p, p + length);
 }
 
-size_t Linkage::PickSendingBuffer(void *buffer, size_t length)
+void Linkage::PickSendingBuffer(const void **buffer, size_t *length)
 {
     assert(buffer);
-    if (!length) {
-        return 0;
-    }
+    assert(length);
 
-    MutexLocker locker(_wbuffer_mutex);
     if (_wbuffer.empty()) {
-        return 0;
+        *buffer = NULL;
+        *length = 0;
+        return;
     }
 
-    size_t len = length < _wbuffer.size() ? length : _wbuffer.size();
-    std::deque<unsigned char>::iterator p = _wbuffer.begin();
-    std::advance(p, static_cast<ssize_t>(len));
-    std::copy(_wbuffer.begin(), p, reinterpret_cast<unsigned char *>(buffer));
-    return len;
+    if (_last_writing) {
+        *length = _last_writing;
+        _last_writing = 0;
+
+    } else {
+        *length = _wbuffer.size();
+    }
+
+    *buffer = &_wbuffer[0];
 }
 
 void Linkage::ConsumeSendingBuffer(size_t length)
 {
-    MutexLocker locker(_wbuffer_mutex);
     assert(length <= _wbuffer.size());
-    std::deque<unsigned char>::iterator p = _wbuffer.begin();
+    std::vector<unsigned char>::iterator p = _wbuffer.begin();
     std::advance(p, static_cast<ssize_t>(length));
     _wbuffer.erase(_wbuffer.begin(), p);
 }
 
 size_t Linkage::GetSendingBufferSize() const
 {
-    MutexLocker locker(_wbuffer_mutex);
     return _wbuffer.size();
 }
 
 void Linkage::DumpSendingBuffer()
 {
-    MutexLocker locker(_wbuffer_mutex);
     _wbuffer.clear();
 }
 
@@ -203,8 +200,9 @@ int Linkage::OnEvent(LinkageWorker *worker,
         }
 
     } else if (action == AbstractIo::kActionWrite) {
-        unsigned char buffer[16384];
-        size_t length = PickSendingBuffer(buffer, sizeof(buffer));
+        size_t length;
+        const void *buffer;
+        PickSendingBuffer(&buffer, &length);
 
         if (length) { // Something to write.
             status = _io->Write(buffer, length, &retlen);
@@ -235,6 +233,9 @@ int Linkage::OnEvent(LinkageWorker *worker,
 
             } else {
                 UpdateLastSent(false, true);
+                if (INCOMPLETE(status)) {
+                    _last_writing = length;
+                }
             }
 
         } else if (_graceful) { // Finished writing.
@@ -268,7 +269,8 @@ int Linkage::OnEvent(LinkageWorker *worker,
         }
     }
 
-    _action = action;
+    // Action incomplete?
+    _action = INCOMPLETE(status) ? action : AbstractIo::kActionNone;
     return AfterEvent(worker, status);
 }
 
@@ -483,16 +485,19 @@ bool Linkage::Attach(LinkageWorker *worker)
     bool wanna_write = false;
     AbstractIo::Action action;
     AbstractIo::Action next_action;
-    AbstractIo::Status status = _io->Initialize(&action, &next_action);
+    if (!_io->Initialize(&action, &next_action, &wanna_read, &wanna_write)) {
+        return false;
+    }
+
     assert(AbstractIo::kActionNone == action     ||
            AbstractIo::kActionNone == next_action);
 
-    if (status == AbstractIo::kStatusWannaRead) {
+    bool connecting = (AbstractIo::kActionNone != action)    ||
+                      (AbstractIo::kActionNone != next_action);
+
+    // Enable reading if connection is established.
+    if (!connecting) {
         wanna_read = true;
-    } else if (status == AbstractIo::kStatusWannaWrite) {
-        wanna_write = true;
-    } else if (status != AbstractIo::kStatusOk) {
-        return false;
     }
 
     if (!DoAttach(worker, _peer->fd(), wanna_read, wanna_write, true)) {
@@ -500,9 +505,6 @@ bool Linkage::Attach(LinkageWorker *worker)
     }
 
     _worker = worker;
-    bool connecting = (AbstractIo::kActionNone != action)    ||
-                      (AbstractIo::kActionNone != next_action);
-
     if (!connecting) {
         if (!DoConnected()) {
             DoDetach(worker);
@@ -515,10 +517,12 @@ bool Linkage::Attach(LinkageWorker *worker)
 
     UpdateConnectJam(true);
     if (action == AbstractIo::kActionNone) {
+        // Wait for events and invoke next_action.
         _action = next_action;
         return true;
     }
 
+    // Invoke action immediately.
     _action = action;
     int ret = OnEvent(worker, action);
     if (ret <= 0) {
@@ -604,18 +608,29 @@ bool Linkage::Send(const void *buffer, size_t length)
     size_t retlen;
     AbstractIo::Status status = _io->Write(buffer, length, &retlen);
     switch (status) {
+    case AbstractIo::kStatusJammed:
+        CLOG.Verbose("Linkage: queued [%lu] bytes for fd = %d", length, _peer->fd());
+        AppendSendingBuffer(buffer, length);
+        _worker->SetWanna(this, false, true);
+        UpdateLastSent(false, true);
+        break;
+
     case AbstractIo::kStatusWannaRead:
         CLOG.Verbose("Linkage: queued [%lu] bytes for fd = %d", length, _peer->fd());
         AppendSendingBuffer(buffer, length);
-        _worker->SetWannaRead(this, true);
+        _action = AbstractIo::kActionWrite;
+        _worker->SetWanna(this, true, false);
         UpdateLastSent(false, true);
+        _last_writing = length;
         break;
 
     case AbstractIo::kStatusWannaWrite:
         CLOG.Verbose("Linkage: queued [%lu] bytes for fd = %d", length, _peer->fd());
         AppendSendingBuffer(buffer, length);
-        _worker->SetWannaWrite(this, true);
+        _action = AbstractIo::kActionWrite;
+        _worker->SetWanna(this, false, true);
         UpdateLastSent(false, true);
+        _last_writing = length;
         break;
 
     case AbstractIo::kStatusOk:

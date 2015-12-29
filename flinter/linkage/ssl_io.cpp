@@ -26,6 +26,7 @@
 
 #include "flinter/linkage/interface.h"
 #include "flinter/linkage/ssl_context.h"
+#include "flinter/linkage/ssl_peer.h"
 #include "flinter/logger.h"
 #include "flinter/safeio.h"
 
@@ -34,8 +35,8 @@ namespace flinter {
 SslIo::SslIo(Interface *i, bool connecting, SslContext *context)
         : _ssl(SSL_new(context->context()))
         , _connecting(connecting)
+        , _peer(NULL)
         , _i(i)
-        , _peer_serial_number(0)
 {
     assert(i);
     assert(i->fd() >= 0);
@@ -49,6 +50,8 @@ SslIo::SslIo(Interface *i, bool connecting, SslContext *context)
 SslIo::~SslIo()
 {
     delete _i;
+    delete _peer;
+    SSL_free(_ssl);
 }
 
 const char *SslIo::GetActionString(const Action &in_progress)
@@ -192,19 +195,26 @@ bool SslIo::OnHandshaked()
     CLOG.Verbose("Linkage: peer certificate detected for fd = %d", fd);
 
     if (!X509_NAME_oneline(X509_get_subject_name(x509), buffer, sizeof(buffer))) {
+        X509_free(x509);
         return false;
     }
 
-    _peer_subject_name = buffer;
-
+    std::string subject_name = buffer;
     if (!X509_NAME_oneline(X509_get_issuer_name(x509), buffer, sizeof(buffer))) {
+        X509_free(x509);
         return false;
     }
 
-    _peer_issuer_name = buffer;
-    _peer_serial_number = static_cast<uint64_t>(ASN1_INTEGER_get(
+    std::string issuer_name = buffer;
+    uint64_t serial_number = static_cast<uint64_t>(ASN1_INTEGER_get(
                 X509_get_serialNumber(x509)));
 
+    X509_free(x509);
+    if (_peer) {
+        delete _peer;
+    }
+
+    _peer = new SslPeer(subject_name, issuer_name, serial_number);
     return true;
 }
 
@@ -273,17 +283,25 @@ AbstractIo::Status SslIo::Shutdown()
     return HandleError(kActionShutdown, ret);
 }
 
-AbstractIo::Status SslIo::Initialize(Action *action, Action *next_action)
+bool SslIo::Initialize(Action *action,
+                       Action *next_action,
+                       bool *wanna_read,
+                       bool *wanna_write)
 {
     if (_connecting) {
-        *action = kActionNone;
+        *action      = kActionNone;
         *next_action = kActionConnect;
-        return kStatusWannaWrite;
+        *wanna_read  = false;
+        *wanna_write = true;
+
     } else {
-        *action = kActionAccept;
+        *action      = kActionAccept;
         *next_action = kActionNone;
-        return kStatusOk;
+        *wanna_read  = false;
+        *wanna_write = false;
     }
+
+    return true;
 }
 
 } // namespace flinter

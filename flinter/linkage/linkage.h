@@ -19,7 +19,6 @@
 #include <sys/types.h>
 #include <stdint.h>
 
-#include <deque>
 #include <string>
 #include <vector>
 
@@ -30,7 +29,6 @@ namespace flinter {
 
 class LinkageHandler;
 class LinkagePeer;
-class Mutex;
 
 class Linkage : public LinkageBase {
 public:
@@ -79,6 +77,11 @@ public:
         return _me;
     }
 
+    LinkageWorker *worker()
+    {
+        return _worker;
+    }
+
     AbstractIo *io()
     {
         return _io;
@@ -117,7 +120,7 @@ private:
     static const char *GetActionString(const AbstractIo::Action &action);
 
     void AppendSendingBuffer(const void *buffer, size_t length);
-    size_t PickSendingBuffer(void *buffer, size_t length);
+    void PickSendingBuffer(const void **buffer, size_t *length);
     void ConsumeSendingBuffer(size_t length);
     size_t GetSendingBufferSize() const;
     void DumpSendingBuffer();
@@ -147,10 +150,12 @@ private:
     std::vector<unsigned char> _rbuffer;
 
     // Only used when kernel send buffer is full.
-    std::deque<unsigned char> _wbuffer;
+    std::vector<unsigned char> _wbuffer;
+
+    // If jammed, find exactly the same length of last write.
+    size_t _last_writing;
 
     LinkageHandler *const _handler;
-    Mutex *const _wbuffer_mutex;
     LinkagePeer *const _peer;
     LinkagePeer *const _me;
     AbstractIo *const _io;
@@ -168,8 +173,9 @@ private:
     AbstractIo::Action _action;
     LinkageWorker *_worker;
     size_t _rlength;
-    bool _graceful;
-    bool _closed;
+
+    volatile bool _graceful;
+    volatile bool _closed;
 
 }; // class Linkage
 

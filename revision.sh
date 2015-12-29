@@ -55,7 +55,7 @@ fi
 VCS_BUILD_HOSTNAME=\"`hostname -f`\"
 VCS_BUILD_TIMESTAMP=`date +%s`
 
-echo "   GEN     ${FILE}"
+echo "   GEN      ${FILE}"
 echo "#include <time.h>"                                                     > ${FILE}
 echo                                                                        >> ${FILE}
 echo "const char *const VCS_NAME              = ${VCS_NAME} ;"              >> ${FILE}

@@ -40,6 +40,7 @@ class LinkageWorker;
 class Listener;
 class Mutex;
 class MutexLocker;
+class SslContext;
 
 class EasyServer {
 public:
@@ -75,6 +76,18 @@ public:
     /// @param easy_factory life span NOT taken, keep it valid.
     bool Listen(uint16_t port, Factory<EasyHandler> *easy_factory);
 
+    /// Call before Initialize().
+    /// @param ssl life span NOT taken, keep it valid.
+    /// @param easy_handler life span NOT taken, keep it valid.
+    bool SslListen(uint16_t port, SslContext *ssl, EasyHandler *easy_handler);
+
+    /// Call before Initialize().
+    /// @param ssl life span NOT taken, keep it valid.
+    /// @param easy_factory life span NOT taken, keep it valid.
+    bool SslListen(uint16_t port,
+                   SslContext *ssl,
+                   Factory<EasyHandler> *easy_factory);
+
     /// Call before Initialize(), change content directly.
     Configure *configure()
     {
@@ -108,6 +121,20 @@ public:
                           uint16_t port,
                           Factory<EasyHandler> *easy_factory);
 
+    /// Allocate channel for outgoing connection.
+    /// @sa Forget()
+    channel_t SslConnectTcp4(const std::string &host,
+                             uint16_t port,
+                             SslContext *ssl,
+                             EasyHandler *easy_handler);
+
+    /// Allocate channel for outgoing connection.
+    /// @sa Forget()
+    channel_t SslConnectTcp4(const std::string &host,
+                             uint16_t port,
+                             SslContext *ssl,
+                             Factory<EasyHandler> *easy_factory);
+
     /// Remove outgoing connection information after disconnected.
     void Forget(channel_t channel);
     void Forget(const EasyContext &context);
@@ -136,9 +163,11 @@ private:
     class OutgoingInformation;
     class ProxyLinkageWorker;
     class ProxyListener;
+    class DisconnectJob;
     class ProxyLinkage;
     class ProxyHandler;
     class JobWorker;
+    class SendJob;
 
     // Locked.
     void ReleaseChannel(channel_t channel);
@@ -161,13 +190,15 @@ private:
     // Locked.
     bool DoListen(uint16_t port,
                   EasyHandler *easy_handler,
-                  Factory<EasyHandler> *easy_factory);
+                  Factory<EasyHandler> *easy_factory,
+                  SslContext *ssl);
 
     // Locked.
     channel_t DoConnectTcp4(const std::string &host,
                             uint16_t port,
                             EasyHandler *easy_handler,
-                            Factory<EasyHandler> *easy_factory);
+                            Factory<EasyHandler> *easy_factory,
+                            SslContext *ssl);
 
     LinkageWorker *GetRandomIoWorker() const;
 

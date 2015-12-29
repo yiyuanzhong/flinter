@@ -26,6 +26,7 @@
 #include <flinter/linkage/linkage_worker.h>
 #include <flinter/linkage/ssl_context.h>
 #include <flinter/linkage/ssl_io.h>
+#include <flinter/linkage/ssl_peer.h>
 #include <flinter/logger.h>
 #include <flinter/signals.h>
 
@@ -126,9 +127,10 @@ public:
         }
 
         flinter::SslIo *ssl = static_cast<flinter::SslIo *>(linkage->io());
-        LOG(INFO) << "SUBJECT: " << ssl->peer_subject_name();
-        LOG(INFO) << "ISSUER: " << ssl->peer_issuer_name();
-        LOG(INFO) << "SERIAL: " << std::hex << ssl->peer_serial_number();
+        const flinter::SslPeer *peer = ssl->peer();
+        LOG(INFO) << "SUBJECT: " << peer->subject_name();
+        LOG(INFO) << "ISSUER: " << peer->issuer_name();
+        LOG(INFO) << "SERIAL: " << std::hex << peer->serial_number();
         return true;
     }
 
