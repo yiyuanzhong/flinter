@@ -128,6 +128,11 @@ private:
     int OnEvent(LinkageWorker *worker,
                 const AbstractIo::Action &idle_action);
 
+    /// @param next_action set to AbstractIo::kActionNone before calling.
+    int OnEventOnce(LinkageWorker *worker,
+                    const AbstractIo::Action &action,
+                    AbstractIo::Action *next_action);
+
     int AfterEvent(LinkageWorker *worker,
                    const AbstractIo::Status &status);
 
@@ -173,9 +178,8 @@ private:
     AbstractIo::Action _action;
     LinkageWorker *_worker;
     size_t _rlength;
-
-    volatile bool _graceful;
-    volatile bool _closed;
+    bool _graceful;
+    bool _closed;
 
 }; // class Linkage
 

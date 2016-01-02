@@ -48,8 +48,13 @@ public:
                             bool *wanna_read,
                             bool *wanna_write) = 0;
 
+    // Some underlying I/O use read buffers internally, if `more` is returned
+    //     true, Read() should be called again immediately because there might
+    //     be no more readable signal on the underlying socket but the internal
+    //     buffer still holds bytes to read.
+    /// @param more set to false before calling.
+    virtual Status Read(void *buffer, size_t length, size_t *retlen, bool *more) = 0;
     virtual Status Write(const void *buffer, size_t length, size_t *retlen) = 0;
-    virtual Status Read(void *buffer, size_t length, size_t *retlen) = 0;
     virtual Status Shutdown() = 0;
     virtual Status Connect() = 0;
     virtual Status Accept() = 0;

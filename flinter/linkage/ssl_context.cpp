@@ -68,6 +68,7 @@ bool SslContext::Initialize()
         }
     }
 
+    SSL_CTX_set_mode(_context, SSL_MODE_ACCEPT_MOVING_WRITE_BUFFER);
     SSL_CTX_set_default_passwd_cb(_context, PasswordCallback);
     SSL_CTX_set_default_passwd_cb_userdata(_context, NULL);
     return true;

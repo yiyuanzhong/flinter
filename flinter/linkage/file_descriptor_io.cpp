@@ -64,7 +64,8 @@ AbstractIo::Status FileDescriptorIo::Write(const void *buffer,
 
 AbstractIo::Status FileDescriptorIo::Read(void *buffer,
                                           size_t length,
-                                          size_t *retlen)
+                                          size_t *retlen,
+                                          bool * /*more*/)
 {
     int fd = _i->fd();
     if (fd < 0) {

@@ -40,8 +40,8 @@ public:
                             bool *wanna_read,
                             bool *wanna_write);
 
+    virtual Status Read(void *buffer, size_t length, size_t *retlen, bool *more);
     virtual Status Write(const void *buffer, size_t length, size_t *retlen);
-    virtual Status Read(void *buffer, size_t length, size_t *retlen);
     virtual Status Shutdown();
     virtual Status Connect();
     virtual Status Accept();

@@ -690,6 +690,32 @@ void EasyServer::DoAppendJob(Runnable *job)
     LOG(VERBOSE) << "EasyServer: appended job [" << job << "]";
 }
 
+std::pair<EasyHandler *, bool> EasyServer::GetEasyHandler(ProxyHandler *proxy_handler)
+{
+    assert(proxy_handler);
+
+    Factory<EasyHandler> *const f = proxy_handler->easy_factory();
+    if (f) {
+        return std::make_pair(f->Create(), true);
+    } else {
+        return std::make_pair(proxy_handler->easy_handler(), false);
+    }
+}
+
+AbstractIo *EasyServer::GetAbstractIo(ProxyHandler *proxy_handler,
+                                      Interface *interface,
+                                      bool connecting)
+{
+    assert(proxy_handler);
+    assert(interface);
+
+    if (proxy_handler->ssl()) {
+        return new SslIo(interface, connecting, proxy_handler->ssl());
+    } else {
+        return new FileDescriptorIo(interface, connecting);
+    }
+}
+
 Linkage *EasyServer::AllocateChannel(const LinkagePeer &peer,
                                      const LinkagePeer &me,
                                      ProxyHandler *proxy_handler)
@@ -705,29 +731,19 @@ Linkage *EasyServer::AllocateChannel(const LinkagePeer &peer,
     channel_t channel = AllocateChannel(true);
     ++_incoming_connections;
 
-    EasyHandler *h = proxy_handler->easy_handler();
-    Factory<EasyHandler> *f = proxy_handler->easy_factory();
-    if (f) {
-        h = f->Create();
-    }
-
     Interface *interface = new Interface;
     if (!interface->Accepted(peer.fd())) {
         delete interface;
         return NULL;
     }
 
-    EasyContext *context = new EasyContext(this, h, f ? true : false,
+    std::pair<EasyHandler *, bool> h = GetEasyHandler(proxy_handler);
+    EasyContext *context = new EasyContext(this, h.first, h.second,
                                            channel, peer, me);
 
-    AbstractIo *io;
-    if (proxy_handler->ssl()) {
-        io = new SslIo(interface, false, proxy_handler->ssl());
-    } else {
-        io = new FileDescriptorIo(interface, false);
-    }
-
+    AbstractIo *io = GetAbstractIo(proxy_handler, interface, false);
     ProxyLinkage *linkage = new ProxyLinkage(context, io, proxy_handler, peer, me);
+
     linkage->set_receive_timeout(_configure.incoming_receive_timeout);
     linkage->set_connect_timeout(_configure.incoming_connect_timeout);
     linkage->set_send_timeout(_configure.incoming_send_timeout);
@@ -883,13 +899,6 @@ EasyServer::ProxyLinkage *EasyServer::DoReconnect(
         channel_t channel,
         const OutgoingInformation *info)
 {
-    SslContext *ssl = info->proxy_handler()->ssl();
-    EasyHandler *h = info->proxy_handler()->easy_handler();
-    Factory<EasyHandler> *f = info->proxy_handler()->easy_factory();
-    if (f) {
-        h = f->Create();
-    }
-
     LinkagePeer me;
     LinkagePeer peer;
     Interface *interface = new Interface;
@@ -898,16 +907,11 @@ EasyServer::ProxyLinkage *EasyServer::DoReconnect(
         return NULL;
     }
 
-    EasyContext *context = new EasyContext(this, h, f ? true : false,
+    std::pair<EasyHandler *, bool> h = GetEasyHandler(info->proxy_handler());
+    EasyContext *context = new EasyContext(this, h.first, h.second,
                                            channel, peer, me);
 
-    AbstractIo *io;
-    if (ssl) {
-        io = new SslIo(interface, true, ssl);
-    } else {
-        io = new FileDescriptorIo(interface, true);
-    }
-
+    AbstractIo *io = GetAbstractIo(info->proxy_handler(), interface, true);
     ProxyLinkage *linkage = new ProxyLinkage(context, io, info->proxy_handler(),
                                              peer, me);
 

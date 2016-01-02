@@ -173,29 +173,53 @@ bool Linkage::DoConnected()
 int Linkage::OnEvent(LinkageWorker *worker,
                      const AbstractIo::Action &idle_action)
 {
+    assert(worker);
+    assert(idle_action != AbstractIo::kActionNone);
+
     AbstractIo::Action action = _action;
     if (action == AbstractIo::kActionNone) {
         action = idle_action;
     }
 
+    int ret;
+    while (true) {
+        AbstractIo::Action next_action = AbstractIo::kActionNone;
+        ret = OnEventOnce(worker, action, &next_action);
+        if (next_action == AbstractIo::kActionNone) {
+            break;
+        }
+
+        CLOG.Verbose("Linkage: OnEventOnce() gives action [%d].", next_action);
+        action = next_action;
+    }
+
+    return ret;
+}
+
+int Linkage::OnEventOnce(LinkageWorker *worker,
+                         const AbstractIo::Action &action,
+                         AbstractIo::Action *next_action)
+{
     errno = 0;
     size_t retlen = 0;
     AbstractIo::Status status = AbstractIo::kStatusBug;
     if (action == AbstractIo::kActionRead) {
+        bool more = false;
         unsigned char buffer[16384];
-        status = _io->Read(buffer, sizeof(buffer), &retlen);
+        status = _io->Read(buffer, sizeof(buffer), &retlen, &more);
         if (status == AbstractIo::kStatusOk) {
             _action = AbstractIo::kActionNone;
             worker->SetWannaRead(this, true);
             int ret = OnReceived(buffer, retlen);
-            if (ret) {
-                return ret;
-            }
+            if (ret == 0) {
+                *next_action = AbstractIo::kActionShutdown;
+                return 1;
+            } else if (ret > 0) {
+                if (more) {
+                    *next_action = AbstractIo::kActionRead;
+                }
 
-            action = AbstractIo::kActionShutdown;
-            ret = Shutdown(&status);
-            if (ret <= 0) {
-                return ret;
+                return 1;
             }
         }
 
@@ -239,11 +263,8 @@ int Linkage::OnEvent(LinkageWorker *worker,
             }
 
         } else if (_graceful) { // Finished writing.
-            action = AbstractIo::kActionShutdown;
-            int ret = Shutdown(&status);
-            if (ret <= 0) {
-                return ret;
-            }
+            *next_action = AbstractIo::kActionShutdown;
+            return 1;
 
         } else { // Nothing to write for now.
             worker->SetWannaWrite(this, false);

@@ -159,7 +159,10 @@ AbstractIo::Status SslIo::Write(const void *buffer, size_t length, size_t *retle
     return HandleError(kActionWrite, ret);
 }
 
-AbstractIo::Status SslIo::Read(void *buffer, size_t length, size_t *retlen)
+AbstractIo::Status SslIo::Read(void *buffer,
+                               size_t length,
+                               size_t *retlen,
+                               bool *more)
 {
     if (length > INT_MAX) {
         return kStatusBug;
@@ -173,6 +176,7 @@ AbstractIo::Status SslIo::Read(void *buffer, size_t length, size_t *retlen)
         }
 
         CLOG.Verbose("Linkage: read [%d] bytes for fd = %d", ret, fd);
+        *more = !!SSL_pending(_ssl);
         return kStatusOk;
     }
 

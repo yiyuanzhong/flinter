@@ -29,11 +29,13 @@
 
 namespace flinter {
 
+class AbstractIo;
 class Condition;
 class EasyContext;
 class EasyHandler;
 class EasyTuner;
 class FixedThreadPool;
+class Interface;
 class Linkage;
 class LinkagePeer;
 class LinkageWorker;
@@ -181,6 +183,11 @@ private:
                              ProxyHandler *proxy_handler);
 
     // Called by EasyServer itself.
+    static std::pair<EasyHandler *, bool> GetEasyHandler(ProxyHandler *proxy_handler);
+    static AbstractIo *GetAbstractIo(ProxyHandler *proxy_handler,
+                                     Interface *interface,
+                                     bool connecting);
+
     channel_t AllocateChannel(bool incoming_or_outgoing);
     bool AttachListeners(LinkageWorker *worker);
     bool DoShutdown(MutexLocker *locker);
