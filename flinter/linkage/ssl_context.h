@@ -29,7 +29,9 @@ public:
 
     bool VerifyPrivateKey();
     bool SetVerifyPeer(bool verify);
+    bool SetSessionTimeout(int seconds);
     bool LoadCertificate(const std::string &filename);
+    bool SetSessionIdContext(const std::string &context);
     bool LoadCertificateChain(const std::string &filename);
     bool AddTrustedCACertificate(const std::string &filename);
     bool LoadPrivateKey(const std::string &filename, const std::string &passphrase);

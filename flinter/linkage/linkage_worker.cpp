@@ -342,7 +342,27 @@ void LinkageWorker::DoRelease(struct client_t *client, bool erase_container)
         _events.erase(p);
     }
 
+    // TODO(yiyuanzhong): dangerous, crash might occur.
+    //
+    // It was originally designed that users should never use the pointer
+    //     `linkage` after OnDisconnected() is called, which is correct if
+    //     users are within the same thread as LinkageWorker. However if
+    //     they call SendCommand() from another thread, which adds a job
+    //     referring to the pointer, the job might be executed after the
+    //     pointer has been released.
+    //
+    // There're two possible fixes, one is to eliminate all jobs referring
+    //     the pointer before releasing it, simple as it sounds, there's no
+    //     way I can tell jobs from each other, unless I design a different
+    //     command queue.
+    //
+    // Another way is to defer releasing linkages, which requires additional
+    //     variables and memory can be held longer than usual. Also if you're
+    //     debugging you might find it inconvenient.
+    //
+    // I'm still thinking about it.
     client->linkage->OnDisconnected();
+
     if (client->auto_release) {
         CLOG.Verbose("Linkage: closed linkage [%p], auto released.", client->linkage);
         delete client->linkage;

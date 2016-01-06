@@ -209,8 +209,16 @@ private:
 
     LinkageWorker *GetRandomIoWorker() const;
 
-    ProxyLinkage *DoReconnect(channel_t channel,
+    ProxyLinkage *DoReconnect(flinter::LinkageWorker *worker,
+                              channel_t channel,
                               const OutgoingInformation *info);
+
+    // Called by jobs from I/O workers.
+    void DoRealDisconnect(channel_t channel, bool finish_write);
+    void DoRealSend(flinter::LinkageWorker *worker,
+                    channel_t channel,
+                    const void *buffer,
+                    size_t length);
 
     static const Configure kDefaultConfigure;
 
@@ -225,6 +233,8 @@ private:
     std::list<JobWorker *> _job_workers;
     std::list<Listener *> _listeners;
     std::queue<Runnable *> _jobs;
+
+    // For efficiency, these variables are not lock protected.
     size_t _workers;
     size_t _slots;
 

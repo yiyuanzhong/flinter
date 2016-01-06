@@ -168,6 +168,8 @@ TEST(sumServer, TestSslListen)
     ASSERT_TRUE(ssl->LoadCertificate("ssl.pem"));
     ASSERT_TRUE(ssl->LoadPrivateKey("ssl.key","1234"));
     ASSERT_TRUE(ssl->VerifyPrivateKey());
+    ASSERT_TRUE(ssl->SetSessionIdContext("helloWORLD"));
+    ASSERT_TRUE(ssl->SetSessionTimeout(60));
 
     Factory factory("1");
     Handler handler("2");

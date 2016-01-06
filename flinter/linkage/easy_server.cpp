@@ -197,6 +197,10 @@ public:
     Job(const shared_ptr<EasyContext> &context,
         const void *buffer, size_t length);
 
+    static void Execute(const EasyContext &context,
+                        const void *buffer,
+                        size_t length);
+
     virtual ~Job() {}
     virtual bool Run();
 
@@ -208,26 +212,37 @@ private:
 
 class EasyServer::DisconnectJob : public flinter::Runnable {
 public:
-    DisconnectJob(flinter::LinkageBase *linkage, bool finish_write)
-            : _linkage(linkage), _finish_write(finish_write) {}
+    DisconnectJob(EasyServer *easy_server,
+                  channel_t channel,
+                  bool finish_write) : _easy_server(easy_server)
+                                     , _channel(channel)
+                                     , _finish_write(finish_write) {}
 
     virtual ~DisconnectJob() {}
     virtual bool Run()
     {
-        _linkage->Disconnect(_finish_write);
+        _easy_server->DoRealDisconnect(_channel, _finish_write);
         return true;
     }
 
 private:
-    flinter::LinkageBase *const _linkage;
+    EasyServer *const _easy_server;
+    const channel_t _channel;
     const bool _finish_write;
 
 }; // class EasyServer::DisconnectJob
 
 class EasyServer::SendJob : public flinter::Runnable {
 public:
-    SendJob(flinter::Linkage *linkage, const void *buffer, size_t length)
-            : _linkage(linkage), _length(length), _buffer(malloc(length))
+    SendJob(EasyServer *easy_server,
+            flinter::LinkageWorker *worker,
+            channel_t channel,
+            const void *buffer,
+            size_t length) : _worker(worker)
+                           , _easy_server(easy_server)
+                           , _channel(channel)
+                           , _length(length)
+                           , _buffer(malloc(length))
     {
         if (_buffer) {
             memcpy(_buffer, buffer, length);
@@ -241,7 +256,7 @@ public:
 
     virtual bool Run()
     {
-        _linkage->Send(_buffer, _length);
+        _easy_server->DoRealSend(_worker, _channel, _buffer, _length);
         return true;
     }
 
@@ -251,7 +266,9 @@ public:
     }
 
 private:
-    flinter::Linkage *const _linkage;
+    flinter::LinkageWorker *const _worker;
+    EasyServer *const _easy_server;
+    const channel_t _channel;
     const size_t _length;
     void *const _buffer;
 
@@ -304,8 +321,18 @@ int EasyServer::ProxyHandler::OnMessage(Linkage *linkage,
     ProxyLinkage *l = static_cast<ProxyLinkage *>(linkage);
     EasyServer *s = l->context()->easy_server();
 
-    JobWorker::Job *job = new JobWorker::Job(l->context(), buffer, length);
-    s->QueueOrExecuteJob(job);
+    // Don't call QueueOrExecute() since I have to copy the buffer.
+
+    // _workers are only set in single threaded environment,
+    // skip locking to get better performance.
+    if (s->_workers) {
+        JobWorker::Job *job = new JobWorker::Job(l->context(), buffer, length);
+        MutexLocker locker(s->_mutex);
+        s->DoAppendJob(job);
+        return 1;
+    }
+
+    JobWorker::Job::Execute(*l->context(), buffer, length);
     return 1;
 }
 
@@ -383,19 +410,25 @@ bool EasyServer::JobWorker::Run()
 bool EasyServer::JobWorker::Job::Run()
 {
     LOG(VERBOSE) << "JobWorker: executing [" << this << "]";
-    EasyHandler *h = _context->easy_handler();
-    EasyServer *s = _context->easy_server();
+    Execute(*_context, _message.data(), _message.length());
+    return true;
+}
 
-    int ret = h->OnMessage(*_context, _message.data(), _message.length());
+void EasyServer::JobWorker::Job::Execute(const EasyContext &context,
+                                         const void *buffer,
+                                         size_t length)
+{
+    EasyHandler *h = context.easy_handler();
+    EasyServer *s = context.easy_server();
+
+    int ret = h->OnMessage(context, buffer, length);
     if (ret < 0) {
-        h->OnError(*_context, true, errno);
-        s->Disconnect(_context->channel(), false);
+        h->OnError(context, true, errno);
+        s->Disconnect(context.channel(), false);
 
     } else if (ret == 0) {
-        s->Disconnect(_context->channel(), true);
+        s->Disconnect(context.channel(), true);
     }
-
-    return true;
 }
 
 EasyServer::EasyServer()
@@ -426,7 +459,6 @@ bool EasyServer::DoListen(uint16_t port,
                           Factory<EasyHandler> *easy_factory,
                           SslContext *ssl)
 {
-    MutexLocker locker(_mutex);
     ProxyHandler *proxy_handler = new ProxyHandler(easy_handler,
                                                    easy_factory,
                                                    ssl);
@@ -439,6 +471,7 @@ bool EasyServer::DoListen(uint16_t port,
         return false;
     }
 
+    MutexLocker locker(_mutex);
     _listen_proxy_handlers.push_back(proxy_handler);
     _listeners.push_back(listener);
     return true;
@@ -530,13 +563,19 @@ bool EasyServer::Initialize(size_t slots,
         return false;
     }
 
-    MutexLocker locker(_mutex);
     size_t total = slots + workers;
     if (!_pool->Initialize(total)) {
         LOG(ERROR) << "EasyServer: failed to initialize thread pool.";
         return false;
     }
 
+    // Set constants before going multi-threaded.
+    // DoShutdown() will reset them if anything bad happens.
+    _workers = workers;
+    _slots = slots;
+
+    // Now multi-threading.
+    MutexLocker locker(_mutex);
     for (size_t i = 0; i < slots; ++i) {
         LinkageWorker *worker = new ProxyLinkageWorker(easy_tuner);
         _io_workers.push_back(worker);
@@ -574,8 +613,6 @@ bool EasyServer::Initialize(size_t slots,
         p = _timers.erase(p);
     }
 
-    _workers = workers;
-    _slots = slots;
     return true;
 }
 
@@ -609,7 +646,8 @@ bool EasyServer::DoShutdown(MutexLocker *locker)
     // Job workers and I/O workers are released as well.
     locker->Unlock();
     _pool->Shutdown();
-    locker->Relock();
+
+    // Now back into single threaded mode, don't lock again.
 
     for (std::list<ProxyHandler *>::iterator p = _listen_proxy_handlers.begin();
          p != _listen_proxy_handlers.end(); ++p) {
@@ -782,13 +820,14 @@ void EasyServer::QueueOrExecuteJob(Runnable *job)
         return;
     }
 
-    MutexLocker locker(_mutex);
+    // _workers are only set in single threaded environment,
+    // skip locking to get better performance.
     if (_workers) {
+        MutexLocker locker(_mutex);
         DoAppendJob(job);
         return;
     }
 
-    locker.Unlock();
     job->Run();
     delete job;
 }
@@ -832,7 +871,7 @@ void EasyServer::Disconnect(channel_t channel, bool finish_write)
 
     ProxyLinkage *linkage = p->second;
     flinter::LinkageWorker *worker = linkage->worker();
-    DisconnectJob *job = new DisconnectJob(linkage, finish_write);
+    DisconnectJob *job = new DisconnectJob(this, channel, finish_write);
     worker->SendCommand(job);
 }
 
@@ -841,7 +880,22 @@ void EasyServer::Disconnect(const EasyContext &context, bool finish_write)
     Disconnect(context.channel(), finish_write);
 }
 
-bool EasyServer::Send(channel_t channel, const void *buffer, size_t length)
+void EasyServer::DoRealDisconnect(channel_t channel, bool finish_write)
+{
+    MutexLocker locker(_mutex);
+    channel_map_t::iterator p = _channel_linkages.find(channel);
+    if (p == _channel_linkages.end()) {
+        return;
+    }
+
+    ProxyLinkage *linkage = p->second;
+    linkage->Disconnect(finish_write);
+}
+
+void EasyServer::DoRealSend(flinter::LinkageWorker *worker,
+                            channel_t channel,
+                            const void *buffer,
+                            size_t length)
 {
     MutexLocker locker(_mutex);
     ProxyLinkage *linkage = NULL;
@@ -852,21 +906,38 @@ bool EasyServer::Send(channel_t channel, const void *buffer, size_t length)
 
     } else if (IsOutgoingChannel(channel)) {
         outgoing_map_t::const_iterator q = _outgoing_informations.find(channel);
-        if (q == _outgoing_informations.end()) {
-            return true;
+        if (q != _outgoing_informations.end()) {
+            linkage = DoReconnect(worker, channel, q->second);
         }
+    }
 
-        linkage = DoReconnect(channel, q->second);
-        if (!linkage) {
-            return false;
+    if (!linkage) {
+        return;
+    }
+
+    linkage->Send(buffer, length);
+}
+
+bool EasyServer::Send(channel_t channel, const void *buffer, size_t length)
+{
+    MutexLocker locker(_mutex);
+    flinter::LinkageWorker *worker = NULL;
+    channel_map_t::iterator p = _channel_linkages.find(channel);
+    if (p != _channel_linkages.end()) {
+        worker = p->second->worker();
+
+    } else if (IsOutgoingChannel(channel)) {
+        outgoing_map_t::const_iterator q = _outgoing_informations.find(channel);
+        if (q != _outgoing_informations.end()) {
+            worker = GetRandomIoWorker();
         }
+    }
 
-    } else {
+    if (!worker) {
         return true;
     }
 
-    flinter::LinkageWorker *worker = linkage->worker();
-    SendJob *job = new SendJob(linkage, buffer, length);
+    SendJob *job = new SendJob(this, worker, channel, buffer, length);
     if (!*job) {
         LOG(ERROR) << "EasyServer: memory allocation failed for "
                    << length << " bytes.";
@@ -896,6 +967,7 @@ LinkageWorker *EasyServer::GetRandomIoWorker() const
 }
 
 EasyServer::ProxyLinkage *EasyServer::DoReconnect(
+        flinter::LinkageWorker *worker,
         channel_t channel,
         const OutgoingInformation *info)
 {
@@ -915,7 +987,6 @@ EasyServer::ProxyLinkage *EasyServer::DoReconnect(
     ProxyLinkage *linkage = new ProxyLinkage(context, io, info->proxy_handler(),
                                              peer, me);
 
-    LinkageWorker *worker = GetRandomIoWorker();
     if (!linkage->Attach(worker)) {
         delete linkage;
         return NULL;
@@ -948,7 +1019,7 @@ EasyServer::channel_t EasyServer::DoConnectTcp4(
 
     channel_t c = AllocateChannel(false);
     if (!_io_workers.empty()) {
-        ProxyLinkage *linkage = DoReconnect(c, info);
+        ProxyLinkage *linkage = DoReconnect(GetRandomIoWorker(), c, info);
         if (!linkage) {
             delete info;
             delete proxy_handler;

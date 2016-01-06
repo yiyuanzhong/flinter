@@ -72,29 +72,6 @@ TEST_SOURCES := $(patsubst ./%,%,$(foreach subdir,$(SUBDIRS),$(wildcard $(subdir
 TEST := $(foreach test,$(TEST_SOURCES),$(TARGET)/$(patsubst ./%,%,$(dir $(test)))$(notdir $(patsubst %.cpp,%,$(test))))
 TESTd := $(foreach test,$(TEST_SOURCES),$(TARGET)/$(patsubst ./%,%,$(dir $(test)))$(notdir $(patsubst %.cpp,%_debug,$(test))))
 
-CLEANS_REL := $(sort $(foreach subdir,$(SUBDIRS),$(subdir)/.libs/*.release.o) \
-                     $(foreach subdir,$(SUBDIRS),$(subdir)/.libs/*.release.deps) \
-                     $(foreach test,$(TEST_SOURCES),$(TARGET)/$(basename $(test))) \
-                     $(GOAL))
-
-CLEANS_DBG := $(sort $(foreach subdir,$(SUBDIRS),$(subdir)/.libs/*.debug.o) \
-                     $(foreach subdir,$(SUBDIRS),$(subdir)/.libs/*.debug.deps) \
-                     $(foreach test,$(TEST_SOURCES),$(TARGET)/$(basename $(test))_debug) \
-                     $(GOALd))
-
-ifeq ($(GOAL),$(EXECUTABLE))
-CLEANS_REL += $(GOAL).syms
-endif
-
-ifeq ($(GOAL),$(SHLIBRARY))
-CLEANS_REL += $(SHLIBRARYREAL)
-endif
-
-CLEANS := $(CLEANS_REL) $(CLEANS_DBG) .libs \
-          $(foreach subdir,$(SUBDIRS),$(subdir)/gen-cpp) \
-          $(foreach subdir,$(SUBDIRS),$(subdir)/*.pb.*) \
-          $(foreach subdir,$(SUBDIRS),$(subdir)/.libs)
-
 # Same as .libs/Makefile.dep, remember to synchronize.
 .PRECIOUS: $(foreach proto,$(PROTOS),$(dir $(proto)).libs/../$(notdir $(basename $(proto))).pb.h) \
            $(foreach proto,$(PROTOS),$(dir $(proto)).libs/../$(notdir $(basename $(proto))).pb.cc) \
@@ -309,6 +286,31 @@ SHLIBRARYREAL       := $(patsubst ./%,%,$(dir $(TARGET)))lib$(basename $(notdir 
 SHLIBRARYd          := $(patsubst ./%,%,$(dir $(TARGET)))lib$(basename $(notdir $(TARGET)))_debug.so
 SHLIBRARYNAME       := lib$(basename $(notdir $(TARGET))).so.0
 SHLIBRARYREALNAME   := lib$(basename $(notdir $(TARGET))).so
+
+# Now GOAL and GOALd is defined.
+
+CLEANS_REL := $(sort $(foreach subdir,$(SUBDIRS),$(subdir)/.libs/*.release.o) \
+                     $(foreach subdir,$(SUBDIRS),$(subdir)/.libs/*.release.deps) \
+                     $(foreach test,$(TEST_SOURCES),$(TARGET)/$(basename $(test))) \
+                     $(GOAL))
+
+CLEANS_DBG := $(sort $(foreach subdir,$(SUBDIRS),$(subdir)/.libs/*.debug.o) \
+                     $(foreach subdir,$(SUBDIRS),$(subdir)/.libs/*.debug.deps) \
+                     $(foreach test,$(TEST_SOURCES),$(TARGET)/$(basename $(test))_debug) \
+                     $(GOALd))
+
+ifeq ($(GOAL),$(EXECUTABLE))
+CLEANS_REL += $(GOAL).syms
+endif
+
+ifeq ($(GOAL),$(SHLIBRARY))
+CLEANS_REL += $(SHLIBRARYREAL)
+endif
+
+CLEANS := $(CLEANS_REL) $(CLEANS_DBG) .libs \
+          $(foreach subdir,$(SUBDIRS),$(subdir)/gen-cpp) \
+          $(foreach subdir,$(SUBDIRS),$(subdir)/*.pb.*) \
+          $(foreach subdir,$(SUBDIRS),$(subdir)/.libs)
 
 COLORFUL = 0
 ifeq ($(TERM),linux)

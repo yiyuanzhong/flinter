@@ -211,6 +211,36 @@ bool SslContext::AddTrustedCACertificate(const std::string &filename)
     return true;
 }
 
+bool SslContext::SetSessionIdContext(const std::string &context)
+{
+    if (context.empty() || context.length() > SSL_MAX_SSL_SESSION_ID_LENGTH) {
+        return false;
+    } else if (!Initialize()) {
+        return false;
+    }
+
+    if (SSL_CTX_set_session_id_context(_context,
+            reinterpret_cast<const unsigned char *>(context.data()),
+            static_cast<unsigned int>(context.length())) != 1) {
+
+        return false;
+    }
+
+    return true;
+}
+
+bool SslContext::SetSessionTimeout(int seconds)
+{
+    if (!seconds) {
+        return false;
+    } else if (!Initialize()) {
+        return false;
+    }
+
+    SSL_CTX_set_timeout(_context, seconds);
+    return true;
+}
+
 } // namespace flinter
 
 #endif // HAVE_OPENSSL_OPENSSLV_H
