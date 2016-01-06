@@ -136,7 +136,7 @@ static void on_signal_quit(int /*signum*/)
 
 int main()
 {
-    flinter::Logger::SetFilter(flinter::Logger::kLevelDebug);
+    flinter::Logger::SetFilter(flinter::Logger::kLevelVerbose);
     signals_set_handler(SIGQUIT, on_signal_quit);
     signals_set_handler(SIGTERM, on_signal_quit);
     signals_set_handler(SIGHUP, on_signal_quit);
@@ -162,7 +162,7 @@ int main()
         return EXIT_FAILURE;
     }
 
-    if (!s.Initialize(1, 1)) {
+    if (!s.Initialize(3, 7)) {
         return EXIT_FAILURE;
     }
 
