@@ -889,6 +889,9 @@ void EasyServer::DoRealDisconnect(channel_t channel, bool finish_write)
     }
 
     ProxyLinkage *linkage = p->second;
+
+    // Same thread, no need to prevent pointer being freed.
+    locker.Unlock();
     linkage->Disconnect(finish_write);
 }
 
@@ -910,6 +913,9 @@ void EasyServer::DoRealSend(flinter::LinkageWorker *worker,
             linkage = DoReconnect(worker, channel, q->second);
         }
     }
+
+    // Same thread, no need to prevent pointer being freed.
+    locker.Unlock();
 
     if (!linkage) {
         return;
