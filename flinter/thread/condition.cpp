@@ -155,7 +155,7 @@ bool Condition::Wait(Mutex *mutex, int milliseconds)
     struct timespec abstime;
     int64_t now = get_wall_clock_timestamp();
     now += static_cast<int64_t>(milliseconds) * 1000000;
-    abstime.tv_nsec += now % 1000000000LL;
+    abstime.tv_nsec = now % 1000000000LL;
     abstime.tv_sec = now / 1000000000LL;
 
     pthread_mutex_t *mutex_handle = reinterpret_cast<pthread_mutex_t *>(mutex->_context);
