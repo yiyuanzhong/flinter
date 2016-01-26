@@ -37,13 +37,15 @@
     (size_t)(!(sizeof(a) % sizeof(*(a)))))
 
 #ifdef __cplusplus
+namespace flinter {
 namespace internal {
 template <bool>
 struct CompileAssert {
 };
 } // namespace internal
+} // namespace flinter
 #define COMPILE_TIME_ASSERT(expr, msg) \
-    typedef ::internal::CompileAssert<(bool(expr))> msg[bool(expr) ? 1 : -1]
+    typedef ::flinter::internal::CompileAssert<(bool(expr))> msg[bool(expr) ? 1 : -1]
 #else
 #define COMPILE_TIME_ASSERT(expr, msg) typedef int msg[(int)(expr) ? 1 : -1]
 #endif

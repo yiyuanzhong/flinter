@@ -38,6 +38,7 @@
 
 #include "flinter/runnable.h"
 #include "flinter/logger.h"
+#include "flinter/utility.h"
 
 #include "config.h"
 #if HAVE_OPENSSL_OPENSSLV_H
@@ -210,7 +211,7 @@ private:
 
 }; // class EasyServer::JobWorker::Job
 
-class EasyServer::DisconnectJob : public flinter::Runnable {
+class EasyServer::DisconnectJob : public Runnable {
 public:
     DisconnectJob(EasyServer *easy_server,
                   channel_t channel,
@@ -232,14 +233,14 @@ private:
 
 }; // class EasyServer::DisconnectJob
 
-class EasyServer::SendJob : public flinter::Runnable {
+class EasyServer::SendJob : public Runnable {
 public:
     SendJob(EasyServer *easy_server,
-            flinter::LinkageWorker *worker,
+            LinkageWorker *worker,
             channel_t channel,
             const void *buffer,
-            size_t length) : _worker(worker)
-                           , _easy_server(easy_server)
+            size_t length) : _easy_server(easy_server)
+                           , _worker(worker)
                            , _channel(channel)
                            , _length(length)
                            , _buffer(malloc(length))
@@ -266,8 +267,8 @@ public:
     }
 
 private:
-    flinter::LinkageWorker *const _worker;
     EasyServer *const _easy_server;
+    LinkageWorker *const _worker;
     const channel_t _channel;
     const size_t _length;
     void *const _buffer;
@@ -742,15 +743,21 @@ std::pair<EasyHandler *, bool> EasyServer::GetEasyHandler(ProxyHandler *proxy_ha
 
 AbstractIo *EasyServer::GetAbstractIo(ProxyHandler *proxy_handler,
                                       Interface *interface,
-                                      bool connecting)
+                                      bool client_or_server,
+                                      bool socket_connecting)
 {
     assert(proxy_handler);
     assert(interface);
 
     if (proxy_handler->ssl()) {
-        return new SslIo(interface, connecting, proxy_handler->ssl());
+        return new SslIo(interface,
+                         client_or_server,
+                         socket_connecting,
+                         proxy_handler->ssl());
+
     } else {
-        return new FileDescriptorIo(interface, connecting);
+        return new FileDescriptorIo(interface,
+                                    socket_connecting);
     }
 }
 
@@ -779,7 +786,7 @@ Linkage *EasyServer::AllocateChannel(const LinkagePeer &peer,
     EasyContext *context = new EasyContext(this, h.first, h.second,
                                            channel, peer, me);
 
-    AbstractIo *io = GetAbstractIo(proxy_handler, interface, false);
+    AbstractIo *io = GetAbstractIo(proxy_handler, interface, false, false);
     ProxyLinkage *linkage = new ProxyLinkage(context, io, proxy_handler, peer, me);
 
     linkage->set_receive_timeout(_configure.incoming_receive_timeout);
@@ -861,23 +868,31 @@ void EasyServer::Forget(const EasyContext &context)
     Forget(context.channel());
 }
 
-void EasyServer::Disconnect(channel_t channel, bool finish_write)
+bool EasyServer::Disconnect(channel_t channel, bool finish_write)
 {
+    int64_t tid = get_current_thread_id();
     MutexLocker locker(_mutex);
     channel_map_t::iterator p = _channel_linkages.find(channel);
     if (p == _channel_linkages.end()) {
-        return;
+        return true;
     }
 
     ProxyLinkage *linkage = p->second;
-    flinter::LinkageWorker *worker = linkage->worker();
+    LinkageWorker *worker = linkage->worker();
+    locker.Unlock();
+
+    if (tid > 0 && tid == worker->running_thread_id()) {
+        int ret = linkage->Disconnect(finish_write);
+        return ret >= 0;
+    }
+
     DisconnectJob *job = new DisconnectJob(this, channel, finish_write);
-    worker->SendCommand(job);
+    return worker->SendCommand(job);
 }
 
-void EasyServer::Disconnect(const EasyContext &context, bool finish_write)
+bool EasyServer::Disconnect(const EasyContext &context, bool finish_write)
 {
-    Disconnect(context.channel(), finish_write);
+    return Disconnect(context.channel(), finish_write);
 }
 
 void EasyServer::DoRealDisconnect(channel_t channel, bool finish_write)
@@ -895,7 +910,7 @@ void EasyServer::DoRealDisconnect(channel_t channel, bool finish_write)
     linkage->Disconnect(finish_write);
 }
 
-void EasyServer::DoRealSend(flinter::LinkageWorker *worker,
+void EasyServer::DoRealSend(LinkageWorker *worker,
                             channel_t channel,
                             const void *buffer,
                             size_t length)
@@ -926,23 +941,38 @@ void EasyServer::DoRealSend(flinter::LinkageWorker *worker,
 
 bool EasyServer::Send(channel_t channel, const void *buffer, size_t length)
 {
+    int64_t tid = get_current_thread_id();
     MutexLocker locker(_mutex);
-    flinter::LinkageWorker *worker = NULL;
+    LinkageWorker *worker = NULL;
     channel_map_t::iterator p = _channel_linkages.find(channel);
     if (p != _channel_linkages.end()) {
         worker = p->second->worker();
+        if (tid > 0 && tid == worker->running_thread_id()) {
+            locker.Unlock();
+            return p->second->Send(buffer, length);
+        }
 
     } else if (IsOutgoingChannel(channel)) {
         outgoing_map_t::const_iterator q = _outgoing_informations.find(channel);
         if (q != _outgoing_informations.end()) {
             worker = GetRandomIoWorker();
+            if (!worker) {
+                return false;
+            }
+
+            if (tid > 0 && tid == worker->running_thread_id()) {
+                Linkage *linkage = DoReconnect(worker, channel, q->second);
+                if (!linkage) {
+                    return false;
+                }
+
+                locker.Unlock();
+                return linkage->Send(buffer, length);
+            }
         }
     }
 
-    if (!worker) {
-        return true;
-    }
-
+    locker.Unlock();
     SendJob *job = new SendJob(this, worker, channel, buffer, length);
     if (!*job) {
         LOG(ERROR) << "EasyServer: memory allocation failed for "
@@ -952,8 +982,7 @@ bool EasyServer::Send(channel_t channel, const void *buffer, size_t length)
         return false;
     }
 
-    worker->SendCommand(job);
-    return true;
+    return worker->SendCommand(job);
 }
 
 bool EasyServer::Send(const EasyContext &context, const void *buffer, size_t length)
@@ -973,7 +1002,7 @@ LinkageWorker *EasyServer::GetRandomIoWorker() const
 }
 
 EasyServer::ProxyLinkage *EasyServer::DoReconnect(
-        flinter::LinkageWorker *worker,
+        LinkageWorker *worker,
         channel_t channel,
         const OutgoingInformation *info)
 {
@@ -989,7 +1018,7 @@ EasyServer::ProxyLinkage *EasyServer::DoReconnect(
     EasyContext *context = new EasyContext(this, h.first, h.second,
                                            channel, peer, me);
 
-    AbstractIo *io = GetAbstractIo(info->proxy_handler(), interface, true);
+    AbstractIo *io = GetAbstractIo(info->proxy_handler(), interface, true, true);
     ProxyLinkage *linkage = new ProxyLinkage(context, io, info->proxy_handler(),
                                              peer, me);
 

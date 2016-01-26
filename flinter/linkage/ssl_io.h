@@ -32,7 +32,11 @@ class SslIo : public AbstractIo {
 public:
     /// @param i life span TAKEN.
     /// @param context life span NOT taken.
-    SslIo(Interface *i, bool connecting, SslContext *context);
+    SslIo(Interface *i,
+          bool client_or_server,
+          bool socket_connecting,
+          SslContext *context);
+
     virtual ~SslIo();
 
     virtual bool Initialize(Action *action,
@@ -61,10 +65,11 @@ private:
     Status DoShutdown();
     Status DoConnect();
 
-    struct ssl_st *_ssl;
+    struct ssl_st *const _ssl;
+    const bool _client_mode;
+    Interface *const _i;
     bool _connecting;
     SslPeer *_peer;
-    Interface *_i;
 
 }; // class SslIo
 

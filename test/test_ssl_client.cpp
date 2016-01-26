@@ -106,7 +106,7 @@ TEST(sslClient, TestConnect)
     flinter::Interface *i = new flinter::Interface;
     ASSERT_TRUE(i->ConnectTcp4("127.0.0.1", 5566, &peer, &me));
 
-    flinter::SslIo *io = new flinter::SslIo(i, true, ssl);
+    flinter::SslIo *io = new flinter::SslIo(i, true, true, ssl);
     flinter::Linkage *l = new flinter::Linkage(io, &handler, peer, me);
 
     flinter::LinkageWorker worker;

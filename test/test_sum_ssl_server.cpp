@@ -148,7 +148,7 @@ protected:
 
         flinter::Interface *i = new flinter::Interface;
         i->Accepted(peer.fd());
-        flinter::AbstractIo *io = new flinter::SslIo(i, false, g_ssl);
+        flinter::AbstractIo *io = new flinter::SslIo(i, false, false, g_ssl);
         flinter::Linkage *l = new I(io, g_handler, peer, me);
         l->set_receive_timeout(5000000000);
         l->set_connect_timeout(2000000000);

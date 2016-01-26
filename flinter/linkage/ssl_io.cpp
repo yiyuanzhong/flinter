@@ -32,11 +32,15 @@
 
 namespace flinter {
 
-SslIo::SslIo(Interface *i, bool connecting, SslContext *context)
+SslIo::SslIo(Interface *i,
+             bool client_or_server,
+             bool socket_connecting,
+             SslContext *context)
         : _ssl(SSL_new(context->context()))
-        , _connecting(connecting)
-        , _peer(NULL)
+        , _client_mode(client_or_server)
         , _i(i)
+        , _connecting(socket_connecting)
+        , _peer(NULL)
 {
     assert(i);
     assert(i->fd() >= 0);
@@ -252,6 +256,13 @@ AbstractIo::Status SslIo::Connect()
 AbstractIo::Status SslIo::Accept()
 {
     int fd = _i->fd();
+    if (_connecting) {
+        if (safe_test_if_connected(fd)) {
+            return kStatusError;
+        }
+    }
+
+    _connecting = false;
     CLOG.Verbose("Linkage: SSL handshaking for fd = %d", fd);
     int ret = SSL_accept(_ssl);
     if (ret == 1) { // Handshake completed.
@@ -294,12 +305,12 @@ bool SslIo::Initialize(Action *action,
 {
     if (_connecting) {
         *action      = kActionNone;
-        *next_action = kActionConnect;
+        *next_action = _client_mode ? kActionConnect : kActionAccept;
         *wanna_read  = false;
         *wanna_write = true;
 
     } else {
-        *action      = kActionAccept;
+        *action      = _client_mode ? kActionConnect : kActionAccept;
         *next_action = kActionNone;
         *wanna_read  = false;
         *wanna_write = false;

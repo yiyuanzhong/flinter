@@ -63,6 +63,11 @@ public:
 
     virtual bool Run();
 
+    int64_t running_thread_id() const
+    {
+        return _running_thread_id;
+    }
+
 protected:
     virtual bool OnInitialize();
     virtual void OnShutdown();
@@ -102,8 +107,9 @@ private:
     volatile bool _quit;
 
     std::list<Runnable *> _commands;
+    int64_t _running_thread_id;
     struct ev_async *_async;
-    flinter::Mutex *_mutex;
+    Mutex *_mutex;
 
     // Health checking related.
     bool OnHealthCheck(int64_t now);

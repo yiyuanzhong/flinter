@@ -119,7 +119,7 @@ private:
     Mode _mode;
 
     // For SpawnFastCGI()
-    flinter::FixedThreadPool *_sfc_pool;
+    FixedThreadPool *_sfc_pool;
     TLS *_sfc_tls;
 
 }; // class Dispatcher

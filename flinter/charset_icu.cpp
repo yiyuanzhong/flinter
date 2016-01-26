@@ -26,7 +26,7 @@ namespace {
 
 template <class F>
 int charset_icu_load(const F &input,
-                     flinter::AutoBuffer<UChar> *output,
+                     AutoBuffer<UChar> *output,
                      const char *encoding,
                      size_t *length)
 {
@@ -77,7 +77,7 @@ int charset_icu_load(const F &input,
 }
 
 template <class T>
-int charset_icu_save(const flinter::AutoBuffer<UChar> &input,
+int charset_icu_save(const AutoBuffer<UChar> &input,
                      T *output,
                      const char *encoding,
                      size_t length)
@@ -145,7 +145,7 @@ int charset_icu(const F &input,
         return 0;
     }
 
-    flinter::AutoBuffer<UChar> i;
+    AutoBuffer<UChar> i;
     size_t length;
     int ret;
 

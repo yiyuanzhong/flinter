@@ -286,6 +286,8 @@ int Linkage::OnEventOnce(LinkageWorker *worker,
     } else if (action == AbstractIo::kActionShutdown) {
         int ret = Shutdown(&status);
         if (ret <= 0) {
+            // In case that I'm not called by I/O engine, enable reading.
+            worker->SetWannaRead(this, true);
             return ret;
         }
     }

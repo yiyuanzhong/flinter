@@ -129,7 +129,7 @@ int Dispatcher::main(int argc, char *argv[])
 Dispatcher::Dispatcher() : _default_factory(&g_default_factory)
                          , _listen_fd(STDIN_FILENO)
                          , _mode(kModeAutomatic)
-                         , _sfc_pool(new flinter::FixedThreadPool)
+                         , _sfc_pool(new FixedThreadPool)
                          , _sfc_tls(new TLS)
 {
     // Intended left blank.
@@ -569,7 +569,7 @@ bool Dispatcher::SpawnFastCGI(size_t threads)
 
     Dispatcher *instance = Dispatcher::GetInstance();
     instance->InitializeFastCGI();
-    flinter::FixedThreadPool *pool = instance->_sfc_pool;
+    FixedThreadPool *pool = instance->_sfc_pool;
 
     if (!pool->Initialize(threads)) {
         pool->Shutdown();

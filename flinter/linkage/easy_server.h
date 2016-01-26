@@ -103,8 +103,8 @@ public:
                     size_t workers,
                     EasyTuner *easy_tuner = NULL);
 
-    void Disconnect(channel_t channel, bool finish_write = true);
-    void Disconnect(const EasyContext &context, bool finish_write = true);
+    bool Disconnect(channel_t channel, bool finish_write = true);
+    bool Disconnect(const EasyContext &context, bool finish_write = true);
 
     /// For disconnected incoming connections, message is silently dropped.
     /// For disconnected outgoing connections, new connection is made and sent.
@@ -186,7 +186,8 @@ private:
     static std::pair<EasyHandler *, bool> GetEasyHandler(ProxyHandler *proxy_handler);
     static AbstractIo *GetAbstractIo(ProxyHandler *proxy_handler,
                                      Interface *interface,
-                                     bool connecting);
+                                     bool client_or_server,
+                                     bool socket_connecting);
 
     channel_t AllocateChannel(bool incoming_or_outgoing);
     bool AttachListeners(LinkageWorker *worker);
@@ -209,13 +210,13 @@ private:
 
     LinkageWorker *GetRandomIoWorker() const;
 
-    ProxyLinkage *DoReconnect(flinter::LinkageWorker *worker,
+    ProxyLinkage *DoReconnect(LinkageWorker *worker,
                               channel_t channel,
                               const OutgoingInformation *info);
 
     // Called by jobs from I/O workers.
     void DoRealDisconnect(channel_t channel, bool finish_write);
-    void DoRealSend(flinter::LinkageWorker *worker,
+    void DoRealSend(LinkageWorker *worker,
                     channel_t channel,
                     const void *buffer,
                     size_t length);

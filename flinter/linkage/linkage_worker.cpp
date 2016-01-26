@@ -73,8 +73,9 @@ private:
 
 LinkageWorker::LinkageWorker() : _loop(ev_loop_new(0))
                                , _quit(false)
+                               , _running_thread_id(0)
                                , _async(new struct ev_async)
-                               , _mutex(new flinter::Mutex)
+                               , _mutex(new Mutex)
 {
     if (!_loop) {
         throw std::runtime_error("LinkageWorker: failed to initialize loop.");
@@ -165,6 +166,8 @@ bool LinkageWorker::Run()
         return false;
     }
 
+    _running_thread_id = get_current_thread_id();
+    LOG(VERBOSE) << "Linkage: enter event loop [" << _running_thread_id << "]";
     bool result = true;
     while (!_quit) {
         if (!ev_run(_loop, 0)) {
@@ -173,6 +176,8 @@ bool LinkageWorker::Run()
             break;
         }
     }
+    LOG(VERBOSE) << "Linkage: leave event loop [" << _running_thread_id << "]";
+    _running_thread_id = 0;
 
     OnShutdown();
 
@@ -196,7 +201,7 @@ bool LinkageWorker::Shutdown()
 
 bool LinkageWorker::SendCommand(Runnable *command)
 {
-    flinter::MutexLocker locker(_mutex);
+    MutexLocker locker(_mutex);
     _commands.push_back(command);
     locker.Unlock();
 
@@ -207,7 +212,7 @@ bool LinkageWorker::SendCommand(Runnable *command)
 void LinkageWorker::OnCommand()
 {
     std::list<Runnable *> q;
-    flinter::MutexLocker locker(_mutex);
+    MutexLocker locker(_mutex);
     q.swap(_commands);
     locker.Unlock();
 

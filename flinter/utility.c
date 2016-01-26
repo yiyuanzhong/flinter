@@ -29,14 +29,20 @@
 #elif defined(__unix__)
 #include <sys/resource.h>
 #include <sys/socket.h>
+#include <sys/syscall.h>
 #include <sys/time.h>
 #include <sys/wait.h>
+#include <pthread.h>
 #include <fcntl.h>
 #include <unistd.h>
 
 #if defined(__MACH__)
 #include <mach/clock.h>
 #include <mach/mach.h>
+#endif
+
+#if defined(__FreeBSD__)
+#include <pthread_np.h>
 #endif
 
 #include "flinter/msleep.h"
@@ -654,5 +660,22 @@ int set_close_on_exec(int fd)
 
     ret |= FD_CLOEXEC;
     return fcntl(fd, F_SETFD, ret);
+}
+
+int64_t get_current_thread_id(void)
+{
+#if defined(__APPLE__)
+    __uint64_t tid;
+    return pthread_threadid_np(NULL, &tid) ? -1 : (int64_t)tid;
+#elif defined(__linux__)
+    return (int64_t)syscall(SYS_gettid);
+#elif defined(__FreeBSD__)
+    return (int64_t)pthread_getthreadid_np();
+#elif defined(__sun)
+    return = (int64_t)pthread_self();
+#else
+    errno = ENOSYS;
+    return -1;
+#endif
 }
 #endif /* __unix__ */

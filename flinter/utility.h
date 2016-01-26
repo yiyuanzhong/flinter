@@ -72,6 +72,8 @@ extern time_t get_monotonic_time(void);
 extern char *make_clean_path(const char *path, int trim);
 
 #if defined(__unix__) || defined(__MACH__)
+extern int64_t get_current_thread_id(void);
+
 /** Add fd to set, return new max_fd */
 extern int add_to_set(int max_fd, int fd, fd_set *set);
 
