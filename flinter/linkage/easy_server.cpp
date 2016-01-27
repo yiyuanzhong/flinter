@@ -956,10 +956,6 @@ bool EasyServer::Send(channel_t channel, const void *buffer, size_t length)
         outgoing_map_t::const_iterator q = _outgoing_informations.find(channel);
         if (q != _outgoing_informations.end()) {
             worker = GetRandomIoWorker();
-            if (!worker) {
-                return false;
-            }
-
             if (tid > 0 && tid == worker->running_thread_id()) {
                 Linkage *linkage = DoReconnect(worker, channel, q->second);
                 if (!linkage) {
@@ -973,6 +969,10 @@ bool EasyServer::Send(channel_t channel, const void *buffer, size_t length)
     }
 
     locker.Unlock();
+    if (!worker) {
+        return true;
+    }
+
     SendJob *job = new SendJob(this, worker, channel, buffer, length);
     if (!*job) {
         LOG(ERROR) << "EasyServer: memory allocation failed for "
