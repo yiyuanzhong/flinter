@@ -205,7 +205,7 @@ int Linkage::OnEventOnce(LinkageWorker *worker,
     AbstractIo::Status status = AbstractIo::kStatusBug;
     if (action == AbstractIo::kActionRead) {
         bool more = false;
-        unsigned char buffer[16384];
+        unsigned char buffer[65536];
         status = _io->Read(buffer, sizeof(buffer), &retlen, &more);
         if (status == AbstractIo::kStatusOk) {
             _action = AbstractIo::kActionNone;
@@ -214,12 +214,16 @@ int Linkage::OnEventOnce(LinkageWorker *worker,
             if (ret == 0) {
                 *next_action = AbstractIo::kActionShutdown;
                 return 1;
+
             } else if (ret > 0) {
                 if (more) {
                     *next_action = AbstractIo::kActionRead;
                 }
 
                 return 1;
+
+            } else { // This is not a I/O error, don't fall into AfterEvent().
+                return -1;
             }
         }
 
@@ -348,7 +352,7 @@ const char *Linkage::GetActionString(const AbstractIo::Action &action)
 
 int Linkage::OnReceived(const void *buffer, size_t length)
 {
-    const unsigned char *buf = reinterpret_cast<const unsigned char *>(buffer);
+    const unsigned char *ptr = reinterpret_cast<const unsigned char *>(buffer);
     if (!buffer) {
         return -1;
     } else if (!length) {
@@ -361,11 +365,79 @@ int Linkage::OnReceived(const void *buffer, size_t length)
     }
 
     CLOG.Verbose("Linkage: received [%lu] bytes for fd = %d", length, _peer->fd());
-    _rbuffer.insert(_rbuffer.end(), buf, buf + length);
 
-    while (true) {
+    // No need to move buffer.
+    if (_rbuffer.empty()) {
+        size_t consumed;
+        int ret = DoReceived(ptr, length, &consumed);
+        if (ret <= 0) {
+            return ret;
+        }
+
+        if (consumed != length) {
+            _rbuffer.insert(_rbuffer.end(), ptr + consumed, ptr + length);
+        }
+
+    // Buffer moving unavoidable, but I already know the minimum bytes to move.
+    } else if (_rlength && _rlength <= _rbuffer.size() + length) {
+        size_t last = _rbuffer.size();
+        assert(_rlength > last);
+
+        _rbuffer.insert(_rbuffer.end(), ptr, ptr + (_rlength - last));
+        assert(_rbuffer.size() == _rlength);
+
+        size_t consumed;
+        int ret = DoReceived(&_rbuffer[0], _rlength, &consumed);
+        if (ret <= 0) {
+            return ret;
+        }
+
+        // Everything must have been extracted.
+        _rbuffer.clear();
+
+        // Now the remaining buffer.
+        ptr += consumed - last;
+        length -= consumed - last;
+        if (length) {
+            ret = DoReceived(ptr, length, &consumed);
+            if (ret <= 0) {
+                return ret;
+            }
+
+            if (consumed != length) {
+                _rbuffer.insert(_rbuffer.end(), ptr + consumed, ptr + length);
+            }
+        }
+
+    // The worst case, all the buffer must be moved.
+    } else {
+        _rbuffer.insert(_rbuffer.end(), ptr, ptr + length);
+
+        size_t consumed;
+        int ret = DoReceived(&_rbuffer[0], _rbuffer.size(), &consumed);
+        if (ret <= 0) {
+            return ret;
+        }
+
+        if (consumed) {
+            std::vector<unsigned char>::iterator p = _rbuffer.begin();
+            std::advance(p, consumed);
+            _rbuffer.erase(_rbuffer.begin(), p);
+        }
+    }
+
+    return 1;
+}
+
+int Linkage::DoReceived(const void *buffer, size_t length, size_t *consumed)
+{
+    const unsigned char *ptr = reinterpret_cast<const unsigned char *>(buffer);
+    size_t remaining = length;
+
+    *consumed = 0;
+    while (remaining) {
         if (!_rlength) {
-            ssize_t ret = GetMessageLength(&_rbuffer[0], _rbuffer.size());
+            ssize_t ret = GetMessageLength(ptr, remaining);
             if (ret < 0) {
                 CLOG.Verbose("Linkage: failed to get message length for "
                              "fd = %d", _peer->fd());
@@ -385,7 +457,7 @@ int Linkage::OnReceived(const void *buffer, size_t length)
                          _rlength, _peer->fd());
         }
 
-        if (_rbuffer.size() < _rlength) {
+        if (remaining < _rlength) {
             UpdateReceiveJam(true);
             break;
         }
@@ -394,29 +466,24 @@ int Linkage::OnReceived(const void *buffer, size_t length)
         CLOG.Verbose("Linkage: processing message of length [%lu] for fd = %d",
                      _rlength, _peer->fd());
 
-        int next = OnMessage(&_rbuffer[0], _rlength);
+        int next = OnMessage(ptr, _rlength);
         if (next < 0) {
             CLOG.Verbose("Linkage: failed to process message of length [%lu] "
                          "for fd = %d", _rlength, _peer->fd());
 
             return -1;
+
         } else if (next == 0) {
             CLOG.Verbose("Linkage: processing message of length [%lu] but "
                          "instructed to shutdown for fd = %d", _rlength, _peer->fd());
 
-            _rbuffer.clear();
-            _rlength = 0;
             return 0;
         }
 
-        std::vector<unsigned char>::iterator p = _rbuffer.begin();
-        std::advance(p, static_cast<ssize_t>(_rlength));
+        remaining -= _rlength;
+        *consumed += _rlength;
+        ptr += _rlength;
         _rlength = 0;
-
-        _rbuffer.erase(_rbuffer.begin(), p);
-        if (_rbuffer.empty()) {
-            break;
-        }
     }
 
     return 1;

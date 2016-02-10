@@ -198,10 +198,6 @@ public:
     Job(const shared_ptr<EasyContext> &context,
         const void *buffer, size_t length);
 
-    static void Execute(const EasyContext &context,
-                        const void *buffer,
-                        size_t length);
-
     virtual ~Job() {}
     virtual bool Run();
 
@@ -333,8 +329,9 @@ int EasyServer::ProxyHandler::OnMessage(Linkage *linkage,
         return 1;
     }
 
-    JobWorker::Job::Execute(*l->context(), buffer, length);
-    return 1;
+    // Same thread, handle events to LinkageWorker.
+    EasyContext &c = *l->context();
+    return c.easy_handler()->OnMessage(c, buffer, length);
 }
 
 void EasyServer::ProxyHandler::OnDisconnected(Linkage *linkage)
@@ -410,26 +407,23 @@ bool EasyServer::JobWorker::Run()
 
 bool EasyServer::JobWorker::Job::Run()
 {
+    EasyServer *s = _context->easy_server();
+    EasyHandler *h = _context->easy_handler();
+
     LOG(VERBOSE) << "JobWorker: executing [" << this << "]";
-    Execute(*_context, _message.data(), _message.length());
-    return true;
-}
+    int ret = h->OnMessage(*_context, _message.data(), _message.length());
+    LOG(VERBOSE) << "JobWorker: job [" << this << "] returned " << ret;
 
-void EasyServer::JobWorker::Job::Execute(const EasyContext &context,
-                                         const void *buffer,
-                                         size_t length)
-{
-    EasyHandler *h = context.easy_handler();
-    EasyServer *s = context.easy_server();
-
-    int ret = h->OnMessage(context, buffer, length);
+    // Simulate LinkageWorker since we're running on our own.
     if (ret < 0) {
-        h->OnError(context, true, errno);
-        s->Disconnect(context.channel(), false);
+        h->OnError(*_context, true, errno);
+        s->Disconnect(_context->channel(), false);
 
     } else if (ret == 0) {
-        s->Disconnect(context.channel(), true);
+        s->Disconnect(_context->channel(), true);
     }
+
+    return true;
 }
 
 EasyServer::EasyServer()
