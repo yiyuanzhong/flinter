@@ -106,9 +106,8 @@ int Listener::OnReadable(LinkageWorker *worker)
     }
 
     if (!linkage->Attach(worker)) {
-        CLOG.Error("Listener: failed to attach client for fd = %d", peer.fd());
+        CLOG.Verbose("Listener: failed to attach client for fd = %d", peer.fd());
         delete linkage;
-        return -1;
     }
 
     return 1;

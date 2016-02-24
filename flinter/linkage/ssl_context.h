@@ -30,6 +30,7 @@ public:
     bool VerifyPrivateKey();
     bool SetVerifyPeer(bool verify);
     bool SetSessionTimeout(int seconds);
+    bool LoadDHParam(const std::string &filename);
     bool LoadCertificate(const std::string &filename);
     bool SetSessionIdContext(const std::string &context);
     bool LoadCertificateChain(const std::string &filename);
