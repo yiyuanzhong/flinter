@@ -67,24 +67,34 @@ class EasyServer::OutgoingInformation {
 public:
     OutgoingInformation(ProxyHandler *proxy_handler,
                         const std::string &host,
-                        uint16_t port) : _proxy_handler(proxy_handler)
-                                       , _host(host), _port(port) {}
+                        uint16_t port,
+                        int thread_id) : _proxy_handler(proxy_handler)
+                                       , _host(host), _port(port)
+                                       , _thread_id(thread_id) {}
 
     ProxyHandler *proxy_handler() const { return _proxy_handler; }
     const std::string &host() const     { return _host;          }
     uint16_t port() const               { return _port;          }
+    int thread_id() const               { return _thread_id;     }
 
 private:
     ProxyHandler *const _proxy_handler;
     const std::string _host;
     const uint16_t _port;
+    const int _thread_id;
 
 }; // class OutgoingInformation
 
 class EasyServer::ProxyLinkageWorker : public LinkageWorker {
 public:
-    explicit ProxyLinkageWorker(EasyTuner *tuner) : _tuner(tuner) {}
     virtual ~ProxyLinkageWorker() {}
+    ProxyLinkageWorker(EasyTuner *tuner, int thread_id)
+            : _tuner(tuner), _thread_id(thread_id) {}
+
+    int thread_id() const
+    {
+        return _thread_id;
+    }
 
 protected:
     virtual bool OnInitialize();
@@ -92,6 +102,7 @@ protected:
 
 private:
     EasyTuner *const _tuner;
+    const int _thread_id;
 
 }; // class EasyServer::ProxyLinkageWorker
 
@@ -178,14 +189,17 @@ private:
 
 class EasyServer::JobWorker : public Runnable {
 public:
-    JobWorker(EasyServer *easy_server, EasyTuner *easy_tuner)
-            : _easy_tuner(easy_tuner), _easy_server(easy_server) {}
+    JobWorker(EasyServer *easy_server, EasyTuner *easy_tuner, int thread_id)
+            : _thread_id(thread_id)
+            , _easy_tuner(easy_tuner)
+            , _easy_server(easy_server) {}
 
     virtual ~JobWorker() {}
     virtual bool Run();
     class Job;
 
 private:
+    const int _thread_id;
     EasyTuner *const _easy_tuner;
     EasyServer *const _easy_server;
 
@@ -232,11 +246,11 @@ private:
 class EasyServer::SendJob : public Runnable {
 public:
     SendJob(EasyServer *easy_server,
-            LinkageWorker *worker,
+            ProxyLinkageWorker *worker,
             channel_t channel,
             const void *buffer,
-            size_t length) : _easy_server(easy_server)
-                           , _worker(worker)
+            size_t length) : _worker(worker)
+                           , _easy_server(easy_server)
                            , _channel(channel)
                            , _length(length)
                            , _buffer(malloc(length))
@@ -263,8 +277,8 @@ public:
     }
 
 private:
+    ProxyLinkageWorker *const _worker;
     EasyServer *const _easy_server;
-    LinkageWorker *const _worker;
     const channel_t _channel;
     const size_t _length;
     void *const _buffer;
@@ -538,7 +552,7 @@ bool EasyServer::RegisterTimer(int64_t interval, Runnable *timer)
         return true;
     }
 
-    LinkageWorker *worker = GetRandomIoWorker();
+    LinkageWorker *worker = GetIoWorker(-1);
     if (!worker->RegisterTimer(interval, timer, true)) {
         LOG(ERROR) << "EasyServer: failed to register timer.";
         return false;
@@ -572,9 +586,10 @@ bool EasyServer::Initialize(size_t slots,
     // Now multi-threading.
     MutexLocker locker(_mutex);
     for (size_t i = 0; i < slots; ++i) {
-        LinkageWorker *worker = new ProxyLinkageWorker(easy_tuner);
-        _io_workers.push_back(worker);
+        ProxyLinkageWorker *worker =
+                new ProxyLinkageWorker(easy_tuner, static_cast<int>(i));
 
+        _io_workers.push_back(worker);
         if (!AttachListeners(worker)        ||
             !_pool->AppendJob(worker, true) ){
 
@@ -585,7 +600,7 @@ bool EasyServer::Initialize(size_t slots,
     }
 
     for (size_t i = 0; i < workers; ++i) {
-        JobWorker *worker = new JobWorker(this, easy_tuner);
+        JobWorker *worker = new JobWorker(this, easy_tuner, static_cast<int>(i));
         _job_workers.push_back(worker);
 
         if (!_pool->AppendJob(worker, true)) {
@@ -598,7 +613,7 @@ bool EasyServer::Initialize(size_t slots,
     for (std::list<std::pair<Runnable *, int64_t> >::iterator
          p = _timers.begin(); p != _timers.end();) {
 
-        LinkageWorker *worker = GetRandomIoWorker();
+        LinkageWorker *worker = GetIoWorker(-1);
         if (!worker->RegisterTimer(p->second, p->first, true)) {
             LOG(ERROR) << "EasyServer: failed to initialize timers.";
             DoShutdown(&locker);
@@ -632,8 +647,8 @@ bool EasyServer::DoShutdown(MutexLocker *locker)
         DoAppendJob(NULL);
     }
 
-    for (std::list<LinkageWorker *>::const_iterator p = _io_workers.begin();
-         p != _io_workers.end(); ++p) {
+    for (std::list<ProxyLinkageWorker *>::const_iterator
+         p = _io_workers.begin(); p != _io_workers.end(); ++p) {
 
         (*p)->Shutdown();
     }
@@ -904,7 +919,7 @@ void EasyServer::DoRealDisconnect(channel_t channel, bool finish_write)
     linkage->Disconnect(finish_write);
 }
 
-void EasyServer::DoRealSend(LinkageWorker *worker,
+void EasyServer::DoRealSend(ProxyLinkageWorker *worker,
                             channel_t channel,
                             const void *buffer,
                             size_t length)
@@ -937,10 +952,10 @@ bool EasyServer::Send(channel_t channel, const void *buffer, size_t length)
 {
     int64_t tid = get_current_thread_id();
     MutexLocker locker(_mutex);
-    LinkageWorker *worker = NULL;
+    ProxyLinkageWorker *worker = NULL;
     channel_map_t::iterator p = _channel_linkages.find(channel);
     if (p != _channel_linkages.end()) {
-        worker = p->second->worker();
+        worker = static_cast<ProxyLinkageWorker *>(p->second->worker());
         if (tid > 0 && tid == worker->running_thread_id()) {
             locker.Unlock();
             return p->second->Send(buffer, length);
@@ -949,7 +964,7 @@ bool EasyServer::Send(channel_t channel, const void *buffer, size_t length)
     } else if (IsOutgoingChannel(channel)) {
         outgoing_map_t::const_iterator q = _outgoing_informations.find(channel);
         if (q != _outgoing_informations.end()) {
-            worker = GetRandomIoWorker();
+            worker = GetIoWorker(q->second->thread_id());
             if (tid > 0 && tid == worker->running_thread_id()) {
                 Linkage *linkage = DoReconnect(worker, channel, q->second);
                 if (!linkage) {
@@ -984,10 +999,15 @@ bool EasyServer::Send(const EasyContext &context, const void *buffer, size_t len
     return Send(context.channel(), buffer, length);
 }
 
-LinkageWorker *EasyServer::GetRandomIoWorker() const
+EasyServer::ProxyLinkageWorker *EasyServer::GetIoWorker(int thread_id) const
 {
-    std::list<LinkageWorker *>::const_iterator p = _io_workers.begin();
-    int r = rand() % static_cast<int>(_io_workers.size());
+    std::list<ProxyLinkageWorker *>::const_iterator p = _io_workers.begin();
+
+    int r = thread_id;
+    if (r < 0 || static_cast<size_t>(r) >= _io_workers.size()) {
+        r = rand() % static_cast<int>(_io_workers.size());
+    }
+
     if (r) {
         std::advance(p, r);
     }
@@ -996,7 +1016,7 @@ LinkageWorker *EasyServer::GetRandomIoWorker() const
 }
 
 EasyServer::ProxyLinkage *EasyServer::DoReconnect(
-        LinkageWorker *worker,
+        ProxyLinkageWorker *worker,
         channel_t channel,
         const OutgoingInformation *info)
 {
@@ -1036,7 +1056,8 @@ EasyServer::channel_t EasyServer::DoConnectTcp4(
         uint16_t port,
         EasyHandler *easy_handler,
         Factory<EasyHandler> *easy_factory,
-        SslContext *ssl)
+        SslContext *ssl,
+        int thread_id)
 {
     MutexLocker locker(_mutex);
     ProxyHandler *proxy_handler = new ProxyHandler(easy_handler,
@@ -1044,11 +1065,12 @@ EasyServer::channel_t EasyServer::DoConnectTcp4(
                                                    ssl);
 
     OutgoingInformation *info =
-            new OutgoingInformation(proxy_handler, host, port);
+            new OutgoingInformation(proxy_handler, host, port, thread_id);
 
     channel_t c = AllocateChannel(false);
     if (!_io_workers.empty()) {
-        ProxyLinkage *linkage = DoReconnect(GetRandomIoWorker(), c, info);
+        ProxyLinkageWorker *worker = GetIoWorker(thread_id);
+        ProxyLinkage *linkage = DoReconnect(worker, c, info);
         if (!linkage) {
             delete info;
             delete proxy_handler;
@@ -1064,21 +1086,23 @@ EasyServer::channel_t EasyServer::DoConnectTcp4(
 EasyServer::channel_t EasyServer::ConnectTcp4(
         const std::string &host,
         uint16_t port,
-        EasyHandler *easy_handler)
+        EasyHandler *easy_handler,
+        int thread_id)
 {
     if (!easy_handler) {
         LOG(FATAL) << "EasyServer: BUG: no handler configured.";
         return kInvalidChannel;
     }
 
-    return DoConnectTcp4(host, port, easy_handler, NULL, NULL);
+    return DoConnectTcp4(host, port, easy_handler, NULL, NULL, thread_id);
 }
 
 EasyServer::channel_t EasyServer::SslConnectTcp4(
         const std::string &host,
         uint16_t port,
         SslContext *ssl,
-        EasyHandler *easy_handler)
+        EasyHandler *easy_handler,
+        int thread_id)
 {
     if (!ssl) {
         LOG(FATAL) << "EasyServer: BUG: no SSL context configured.";
@@ -1090,27 +1114,29 @@ EasyServer::channel_t EasyServer::SslConnectTcp4(
         return kInvalidChannel;
     }
 
-    return DoConnectTcp4(host, port, easy_handler, NULL, ssl);
+    return DoConnectTcp4(host, port, easy_handler, NULL, ssl, thread_id);
 }
 
 EasyServer::channel_t EasyServer::ConnectTcp4(
         const std::string &host,
         uint16_t port,
-        Factory<EasyHandler> *easy_factory)
+        Factory<EasyHandler> *easy_factory,
+        int thread_id)
 {
     if (!easy_factory) {
         LOG(FATAL) << "EasyServer: BUG: no handler factory configured.";
         return kInvalidChannel;
     }
 
-    return DoConnectTcp4(host, port, NULL, easy_factory, NULL);
+    return DoConnectTcp4(host, port, NULL, easy_factory, NULL, thread_id);
 }
 
 EasyServer::channel_t EasyServer::SslConnectTcp4(
         const std::string &host,
         uint16_t port,
         SslContext *ssl,
-        Factory<EasyHandler> *easy_factory)
+        Factory<EasyHandler> *easy_factory,
+        int thread_id)
 {
     if (!ssl) {
         LOG(FATAL) << "EasyServer: BUG: no SSL context configured.";
@@ -1122,7 +1148,7 @@ EasyServer::channel_t EasyServer::SslConnectTcp4(
         return kInvalidChannel;
     }
 
-    return DoConnectTcp4(host, port, NULL, easy_factory, ssl);
+    return DoConnectTcp4(host, port, NULL, easy_factory, ssl, thread_id);
 }
 
 EasyServer::channel_t EasyServer::AllocateChannel(bool incoming_or_outgoing)

@@ -33,21 +33,28 @@ public:
     ~Crawler();
 
     // Only verify peer if set.
-    bool SetCertificateAuthorityFile(const std::string &filename);
+    void SetCertificateAuthorityFile(const std::string &filename);
 
     bool Get(std::string *result);
     bool Post(std::string *result);
+
+    // Nothing in Set() will be used, however SetHeader() still works.
     bool PostRaw(const std::string &content_type,
                  const std::string &raw,
                  std::string *result);
 
-    // Remove all POST fields.
+    // Remove all POST fields and custom headers.
     void Clear();
 
     template <class T>
     void Set(const std::string &key, const T &value);
     void Set(const std::string &key, const char *value);
     void Set(const std::string &key, const std::string &value);
+
+    template <class T>
+    void SetHeader(const std::string &key, const T &value);
+    void SetHeader(const std::string &key, const char *value);
+    void SetHeader(const std::string &key, const std::string &value);
 
     const std::string &effective_url() const
     {
@@ -68,11 +75,13 @@ private:
     class Context;
 
     static size_t WriteFunction(char *ptr, size_t size, size_t nmemb, void *userdata);
+    static bool IsBlacklisted(const std::string &header);
 
     bool Initialize(const std::string &content_type = std::string());
     bool Request(std::string *result);
     bool SetMethod(bool get_or_post);
 
+    std::map<std::string, std::string> _headers;
     std::map<std::string, std::string> _posts;
     std::deque<char> _result;
     std::string _hostname;
@@ -93,6 +102,14 @@ void Crawler::Set(const std::string &key, const T &value)
     std::ostringstream s;
     s << value;
     Set(key, s.str());
+}
+
+template <class T>
+void Crawler::SetHeader(const std::string &key, const T &value)
+{
+    std::ostringstream s;
+    s << value;
+    SetHeader(key, s.str());
 }
 
 } // namespace flinter

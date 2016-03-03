@@ -115,27 +115,31 @@ public:
     /// @sa Forget()
     channel_t ConnectTcp4(const std::string &host,
                           uint16_t port,
-                          EasyHandler *easy_handler);
+                          EasyHandler *easy_handler,
+                          int thread_id = -1);
 
     /// Allocate channel for outgoing connection.
     /// @sa Forget()
     channel_t ConnectTcp4(const std::string &host,
                           uint16_t port,
-                          Factory<EasyHandler> *easy_factory);
+                          Factory<EasyHandler> *easy_factory,
+                          int thread_id = -1);
 
     /// Allocate channel for outgoing connection.
     /// @sa Forget()
     channel_t SslConnectTcp4(const std::string &host,
                              uint16_t port,
                              SslContext *ssl,
-                             EasyHandler *easy_handler);
+                             EasyHandler *easy_handler,
+                             int thread_id = -1);
 
     /// Allocate channel for outgoing connection.
     /// @sa Forget()
     channel_t SslConnectTcp4(const std::string &host,
                              uint16_t port,
                              SslContext *ssl,
-                             Factory<EasyHandler> *easy_factory);
+                             Factory<EasyHandler> *easy_factory,
+                             int thread_id = -1);
 
     /// Remove outgoing connection information after disconnected.
     void Forget(channel_t channel);
@@ -206,17 +210,18 @@ private:
                             uint16_t port,
                             EasyHandler *easy_handler,
                             Factory<EasyHandler> *easy_factory,
-                            SslContext *ssl);
+                            SslContext *ssl,
+                            int thread_id);
 
-    LinkageWorker *GetRandomIoWorker() const;
+    ProxyLinkageWorker *GetIoWorker(int thread_id) const;
 
-    ProxyLinkage *DoReconnect(LinkageWorker *worker,
+    ProxyLinkage *DoReconnect(ProxyLinkageWorker *worker,
                               channel_t channel,
                               const OutgoingInformation *info);
 
     // Called by jobs from I/O workers.
     void DoRealDisconnect(channel_t channel, bool finish_write);
-    void DoRealSend(LinkageWorker *worker,
+    void DoRealSend(ProxyLinkageWorker *worker,
                     channel_t channel,
                     const void *buffer,
                     size_t length);
@@ -229,7 +234,7 @@ private:
 
     std::list<std::pair<Runnable *, int64_t> > _timers;
     std::list<ProxyHandler *> _listen_proxy_handlers;
-    std::list<LinkageWorker *> _io_workers;
+    std::list<ProxyLinkageWorker *> _io_workers;
     connect_map_t _connect_proxy_handlers;
     std::list<JobWorker *> _job_workers;
     std::list<Listener *> _listeners;

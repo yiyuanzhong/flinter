@@ -36,7 +36,11 @@ public:
     virtual ~ObjectMap();
 
     /// Might rewind GetNext().
-    void SetAll(const std::set<K> &keys);
+    template <class C>
+    void SetAll(const C &keys);
+
+    template <class iterator>
+    void SetAll(iterator begin, iterator end);
 
     /// Shouldn't SetAll() nor Add() when calling this.
     /// Might rewind GetNext().
@@ -316,12 +320,18 @@ inline T *ObjectMap<K, T>::GetRandom()
 }
 
 template <class K, class T>
-inline void ObjectMap<K, T>::SetAll(const std::set<K> &keys)
+template <class C>
+inline void ObjectMap<K, T>::SetAll(const C &keys)
+{
+    SetAll(keys.begin(), keys.end());
+}
+
+template <class K, class T>
+template <class iterator>
+inline void ObjectMap<K, T>::SetAll(iterator begin, iterator end)
 {
     MutexLocker locker(&_mutex);
-    for (typename std::set<K>::const_iterator
-         p = keys.begin(); p != keys.end(); ++p) {
-
+    for (iterator p = begin; p != end; ++p) {
         if (_map.find(*p) == _map.end()) {
             DoAdd(*p);
         }
@@ -331,7 +341,7 @@ inline void ObjectMap<K, T>::SetAll(const std::set<K> &keys)
     for (typename std::map<K, V>::iterator
          p = _map.begin(); p != _map.end(); ++p) {
 
-        if (keys.find(p->first) == keys.end()) {
+        if (std::find(begin, end, p->first) == end) {
             gone.push_back(p->first);
         }
     }

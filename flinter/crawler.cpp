@@ -16,12 +16,26 @@
 #include "flinter/crawler.h"
 
 #include <assert.h>
+#include <ctype.h>
 
 #include <curl/curl.h>
+
+#include <algorithm>
+#include <set>
 
 #include "flinter/logger.h"
 
 namespace flinter {
+
+static const char *kBlacklistRaw[] = {
+    "host",
+    "content-type",
+    "content-length",
+};
+
+static const std::set<std::string> kBlacklist(
+        kBlacklistRaw,
+        kBlacklistRaw + sizeof(kBlacklistRaw) / sizeof(*kBlacklistRaw));
 
 class Crawler::Context {
 public:
@@ -165,6 +179,7 @@ bool Crawler::PostRaw(const std::string &content_type,
 
 void Crawler::Clear()
 {
+    _headers.clear();
     _posts.clear();
 }
 
@@ -186,6 +201,13 @@ size_t Crawler::WriteFunction(char *ptr, size_t size, size_t nmemb, void *userda
 
     result.insert(result.end(), ptr, ptr + length);
     return length;
+}
+
+bool Crawler::IsBlacklisted(const std::string &header)
+{
+    std::string h(header);
+    std::transform(h.begin(), h.end(), h.begin(), ::tolower);
+    return kBlacklist.find(h) != kBlacklist.end();
 }
 
 bool Crawler::Initialize(const std::string &content_type)
@@ -213,6 +235,16 @@ bool Crawler::Initialize(const std::string &content_type)
         return false;
     }
 
+    if (!_cainfo.empty()) {
+        if (curl_easy_setopt(curl, CURLOPT_CAINFO, _cainfo.c_str())    ||
+            curl_easy_setopt(curl, CURLOPT_SSL_VERIFYHOST, 2L)         ||
+            curl_easy_setopt(curl, CURLOPT_SSL_VERIFYPEER, 1L)         ){
+
+            curl_easy_cleanup(curl);
+            return false;
+        }
+    }
+
     struct curl_slist *slist = NULL;
     if (!_hostname.empty()) {
         std::ostringstream s;
@@ -223,6 +255,18 @@ bool Crawler::Initialize(const std::string &content_type)
     if (!content_type.empty()) {
         std::ostringstream s;
         s << "Content-Type: " << content_type;
+        slist = curl_slist_append(slist, s.str().c_str());
+    }
+
+    for (std::map<std::string, std::string>::const_iterator
+         p = _headers.begin(); p != _headers.end(); ++p) {
+
+        if (IsBlacklisted(p->first)) {
+            continue;
+        }
+
+        std::ostringstream s;
+        s << p->first << ": " << p->second;
         slist = curl_slist_append(slist, s.str().c_str());
     }
 
@@ -251,22 +295,19 @@ bool Crawler::SetMethod(bool get_or_post)
     return true;
 }
 
-bool Crawler::SetCertificateAuthorityFile(const std::string &filename)
+void Crawler::SetCertificateAuthorityFile(const std::string &filename)
 {
-    if (!_context->curl) {
-        return false;
-    }
-
     _cainfo = filename;
-    CURL *curl = _context->curl;
-    if (curl_easy_setopt(curl, CURLOPT_SSL_VERIFYHOST, 1L)      ||
-        curl_easy_setopt(curl, CURLOPT_SSL_VERIFYPEER, 1L)      ||
-        curl_easy_setopt(curl, CURLOPT_CAINFO, _cainfo.c_str()) ){
+}
 
-        return false;
-    }
+void Crawler::SetHeader(const std::string &key, const char *value)
+{
+    _headers[key] = value;
+}
 
-    return true;
+void Crawler::SetHeader(const std::string &key, const std::string &value)
+{
+    _headers[key] = value;
 }
 
 } // namespace flinter
