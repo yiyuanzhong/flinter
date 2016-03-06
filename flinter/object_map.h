@@ -92,7 +92,7 @@ protected:
 
 private:
     void DoErase(const K &key);
-    T *DoAdd(const K &key);
+    T *DoAdd(const K &key, size_t init);
 
     mutable Mutex _mutex;
     mutable Condition _condition;
@@ -161,11 +161,11 @@ template <class K, class T>
 inline T *ObjectMap<K, T>::Add(const K &key)
 {
     MutexLocker locker(&_mutex);
-    return DoAdd(key);
+    return DoAdd(key, 1);
 }
 
 template <class K, class T>
-inline T *ObjectMap<K, T>::DoAdd(const K &key)
+inline T *ObjectMap<K, T>::DoAdd(const K &key, size_t init)
 {
     typename std::map<K, V>::iterator p = _map.find(key);
     if (p != _map.end()) {
@@ -178,7 +178,7 @@ inline T *ObjectMap<K, T>::DoAdd(const K &key)
         return NULL;
     }
 
-    _map.insert(std::make_pair(key, V(object, 1)));
+    _map.insert(std::make_pair(key, V(object, init)));
     _ptr = _map.end();
     return object;
 }
@@ -333,7 +333,7 @@ inline void ObjectMap<K, T>::SetAll(iterator begin, iterator end)
     MutexLocker locker(&_mutex);
     for (iterator p = begin; p != end; ++p) {
         if (_map.find(*p) == _map.end()) {
-            DoAdd(*p);
+            DoAdd(*p, 0);
         }
     }
 

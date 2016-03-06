@@ -120,7 +120,8 @@ class L : public flinter::Listener {
 public:
     virtual ~L() {}
 protected:
-    virtual flinter::LinkageBase *CreateLinkage(const flinter::LinkagePeer &peer,
+    virtual flinter::LinkageBase *CreateLinkage(flinter::LinkageWorker * /*worker*/,
+                                                const flinter::LinkagePeer &peer,
                                                 const flinter::LinkagePeer &me)
     {
         LOG(INFO) << "Accept: " << me.ip_str() << ":" << me.port()

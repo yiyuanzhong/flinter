@@ -98,7 +98,7 @@ int Listener::OnReadable(LinkageWorker *worker)
         return 1;
     }
 
-    LinkageBase *linkage = CreateLinkage(peer, me);
+    LinkageBase *linkage = CreateLinkage(worker, peer, me);
     if (!linkage) {
         CLOG.Warn("Listener: failed to create client from fd = %d", peer.fd());
         safe_close(peer.fd());

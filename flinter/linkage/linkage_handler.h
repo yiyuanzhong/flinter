@@ -17,6 +17,7 @@
 #define __FLINTER_LINKAGE_LINKAGE_HANDLER_H__
 
 #include <sys/types.h>
+#include <stdint.h>
 
 namespace flinter {
 
@@ -48,6 +49,8 @@ public:
     virtual void OnError(Linkage *linkage,
                          bool reading_or_writing,
                          int errnum);
+
+    virtual bool Cleanup(Linkage *linkage, int64_t now);
 
 }; // class LinkageHandler
 

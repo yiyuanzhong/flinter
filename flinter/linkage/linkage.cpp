@@ -421,7 +421,7 @@ int Linkage::OnReceived(const void *buffer, size_t length)
 
         if (consumed) {
             std::vector<unsigned char>::iterator p = _rbuffer.begin();
-            std::advance(p, consumed);
+            std::advance(p, static_cast<ssize_t>(consumed));
             _rbuffer.erase(_rbuffer.begin(), p);
         }
     }
@@ -560,7 +560,7 @@ bool Linkage::Cleanup(int64_t now)
         return false;
     }
 
-    return true;
+    return _handler->Cleanup(this, now);
 }
 
 bool Linkage::Attach(LinkageWorker *worker)

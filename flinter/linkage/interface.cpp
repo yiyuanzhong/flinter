@@ -112,7 +112,7 @@ int Interface::BindIPv6(uint16_t port, bool loopback)
         memcpy(&addr6.sin6_addr, &in6addr_any, sizeof(addr6.sin6_addr));
     }
 
-    if (set_socket_address_reuse(s) ||
+    if (set_socket_reuse_address(s) ||
         bind(s, reinterpret_cast<struct sockaddr *>(&addr6), sizeof(addr6))) {
 
         safe_close(s);
@@ -139,7 +139,7 @@ int Interface::BindIPv4(uint16_t port, bool loopback)
         addr.sin_addr.s_addr = htonl(INADDR_ANY);
     }
 
-    if (set_socket_address_reuse(s) ||
+    if (set_socket_reuse_address(s) ||
         bind(s, reinterpret_cast<struct sockaddr *>(&addr), sizeof(addr))) {
 
         safe_close(s);

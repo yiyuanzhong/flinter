@@ -58,6 +58,9 @@ public:
                          bool reading_or_writing,
                          int errnum);
 
+    /// Called within I/O threads.
+    virtual bool Cleanup(const EasyContext &context, int64_t now);
+
 }; // class EasyHandler
 
 } // namespace flinter

@@ -84,7 +84,13 @@ extern int set_non_blocking_mode(int fd);
 extern int set_blocking_mode(int fd);
 
 /** Allow socket to re-use binding addresses. */
-extern int set_socket_address_reuse(int sockfd);
+extern int set_socket_reuse_address(int sockfd);
+
+/** Allow TCP defered accept. */
+extern int set_tcp_defer_accept(int sockfd);
+
+/** Allow socket to send keep-alive packets. */
+extern int set_socket_keepalive(int sockfd);
 
 /** Set CLOEXEC on fd. */
 extern int set_close_on_exec(int fd);

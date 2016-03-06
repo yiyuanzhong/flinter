@@ -27,6 +27,8 @@
 #include <WinCrypt.h>
 #pragma comment (lib, "Advapi32.lib")
 #elif defined(__unix__)
+#include <netinet/in.h>
+#include <netinet/tcp.h>
 #include <sys/resource.h>
 #include <sys/socket.h>
 #include <sys/syscall.h>
@@ -446,10 +448,28 @@ int set_blocking_mode(int fd)
     return 0;
 }
 
-int set_socket_address_reuse(int sockfd)
+int set_socket_reuse_address(int sockfd)
 {
     static const int one = 1;
     return setsockopt(sockfd, SOL_SOCKET, SO_REUSEADDR, &one, (socklen_t)sizeof(one));
+}
+
+int set_socket_keepalive(int sockfd)
+{
+    static const int one = 1;
+    return setsockopt(sockfd, SOL_SOCKET, SO_KEEPALIVE, &one, (socklen_t)sizeof(one));
+}
+
+int set_tcp_defer_accept(int sockfd)
+{
+#if __linux__
+    static const int one = 1;
+    return setsockopt(sockfd, IPPROTO_TCP, TCP_DEFER_ACCEPT, &one, (socklen_t)sizeof(one));
+#else
+    (void)sockfd;
+    errno = ENOSYS;
+    return -1;
+#endif
 }
 
 int set_alarm_timer(int milliseconds)

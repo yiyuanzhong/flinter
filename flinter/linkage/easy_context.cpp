@@ -26,7 +26,8 @@ EasyContext::EasyContext(EasyServer *easy_server,
                          bool auto_release_handler,
                          uint64_t channel,
                          const LinkagePeer &peer,
-                         const LinkagePeer &me)
+                         const LinkagePeer &me,
+                         int io_thread_id)
         : _easy_server(easy_server)
         , _easy_handler(easy_handler)
         , _auto_release_handler(auto_release_handler)
@@ -34,6 +35,7 @@ EasyContext::EasyContext(EasyServer *easy_server,
         , _peer(peer)
         , _me(me)
         , _ssl_peer(NULL)
+        , _io_thread_id(io_thread_id)
 {
     // Intended left blank.
 }

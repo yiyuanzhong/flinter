@@ -50,4 +50,12 @@ bool LinkageHandler::OnConnected(Linkage *linkage)
     return true;
 }
 
+bool LinkageHandler::Cleanup(Linkage *linkage, int64_t now)
+{
+    (void)linkage;
+    (void)now;
+
+    return true;
+}
+
 } // namespace flinter

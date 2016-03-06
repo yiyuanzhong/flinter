@@ -182,7 +182,8 @@ private:
     Runnable *GetJob();
 
     // Called by ProxyListener.
-    Linkage *AllocateChannel(const LinkagePeer &peer,
+    Linkage *AllocateChannel(LinkageWorker *worker,
+                             const LinkagePeer &peer,
                              const LinkagePeer &me,
                              ProxyHandler *proxy_handler);
 

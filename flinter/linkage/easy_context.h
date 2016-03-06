@@ -35,7 +35,8 @@ public:
                 bool auto_release_handler,
                 channel_t channel,
                 const LinkagePeer &peer,
-                const LinkagePeer &me);
+                const LinkagePeer &me,
+                int io_thread_id);
 
     ~EasyContext();
 
@@ -69,6 +70,11 @@ public:
         return _ssl_peer;
     }
 
+    int io_thread_id() const
+    {
+        return _io_thread_id;
+    }
+
     // Don't call this.
     void set_ssl_peer(const SslPeer *ssl_peer);
 
@@ -80,6 +86,7 @@ private:
     const LinkagePeer _peer;
     const LinkagePeer _me;
     const SslPeer *_ssl_peer;
+    const int _io_thread_id;
 
 }; // class EasyContext
 

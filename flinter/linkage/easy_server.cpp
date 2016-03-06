@@ -112,7 +112,8 @@ public:
             : _easy_server(easy_server), _proxy_handler(proxy_handler) {}
     virtual ~ProxyListener() {}
 
-    virtual LinkageBase *CreateLinkage(const LinkagePeer &peer,
+    virtual LinkageBase *CreateLinkage(LinkageWorker *worker,
+                                       const LinkagePeer &peer,
                                        const LinkagePeer &me);
 
 private:
@@ -144,6 +145,8 @@ public:
     virtual void OnError(Linkage *linkage,
                          bool reading_or_writing,
                          int errnum);
+
+    virtual bool Cleanup(Linkage *linkage, int64_t now);
 
     SslContext *ssl() const
     {
@@ -189,9 +192,8 @@ private:
 
 class EasyServer::JobWorker : public Runnable {
 public:
-    JobWorker(EasyServer *easy_server, EasyTuner *easy_tuner, int thread_id)
-            : _thread_id(thread_id)
-            , _easy_tuner(easy_tuner)
+    JobWorker(EasyServer *easy_server, EasyTuner *easy_tuner)
+            : _easy_tuner(easy_tuner)
             , _easy_server(easy_server) {}
 
     virtual ~JobWorker() {}
@@ -199,7 +201,6 @@ public:
     class Job;
 
 private:
-    const int _thread_id;
     EasyTuner *const _easy_tuner;
     EasyServer *const _easy_server;
 
@@ -380,10 +381,18 @@ void EasyServer::ProxyHandler::OnError(Linkage *linkage,
     return h->OnError(*l->context(), reading_or_writing, errnum);
 }
 
-LinkageBase *EasyServer::ProxyListener::CreateLinkage(const LinkagePeer &peer,
+bool EasyServer::ProxyHandler::Cleanup(Linkage *linkage, int64_t now)
+{
+    ProxyLinkage *l = static_cast<ProxyLinkage *>(linkage);
+    EasyHandler *h = l->context()->easy_handler();
+    return h->Cleanup(*l->context(), now);
+}
+
+LinkageBase *EasyServer::ProxyListener::CreateLinkage(LinkageWorker *worker,
+                                                      const LinkagePeer &peer,
                                                       const LinkagePeer &me)
 {
-    return _easy_server->AllocateChannel(peer, me, _proxy_handler);
+    return _easy_server->AllocateChannel(worker, peer, me, _proxy_handler);
 }
 
 bool EasyServer::JobWorker::Run()
@@ -600,7 +609,7 @@ bool EasyServer::Initialize(size_t slots,
     }
 
     for (size_t i = 0; i < workers; ++i) {
-        JobWorker *worker = new JobWorker(this, easy_tuner, static_cast<int>(i));
+        JobWorker *worker = new JobWorker(this, easy_tuner);
         _job_workers.push_back(worker);
 
         if (!_pool->AppendJob(worker, true)) {
@@ -770,10 +779,13 @@ AbstractIo *EasyServer::GetAbstractIo(ProxyHandler *proxy_handler,
     }
 }
 
-Linkage *EasyServer::AllocateChannel(const LinkagePeer &peer,
+Linkage *EasyServer::AllocateChannel(LinkageWorker *worker,
+                                     const LinkagePeer &peer,
                                      const LinkagePeer &me,
                                      ProxyHandler *proxy_handler)
 {
+    ProxyLinkageWorker *const w = static_cast<ProxyLinkageWorker *>(worker);
+
     MutexLocker locker(_mutex);
     if (_incoming_connections >= _configure.maximum_incoming_connections) {
         LOG(VERBOSE) << "EasyServer: incoming connections over limit: "
@@ -793,7 +805,8 @@ Linkage *EasyServer::AllocateChannel(const LinkagePeer &peer,
 
     std::pair<EasyHandler *, bool> h = GetEasyHandler(proxy_handler);
     EasyContext *context = new EasyContext(this, h.first, h.second,
-                                           channel, peer, me);
+                                           channel, peer, me,
+                                           w->thread_id());
 
     AbstractIo *io = GetAbstractIo(proxy_handler, interface, false, false);
     ProxyLinkage *linkage = new ProxyLinkage(context, io, proxy_handler, peer, me);
@@ -1030,7 +1043,8 @@ EasyServer::ProxyLinkage *EasyServer::DoReconnect(
 
     std::pair<EasyHandler *, bool> h = GetEasyHandler(info->proxy_handler());
     EasyContext *context = new EasyContext(this, h.first, h.second,
-                                           channel, peer, me);
+                                           channel, peer, me,
+                                           worker->thread_id());
 
     AbstractIo *io = GetAbstractIo(info->proxy_handler(), interface, true, true);
     ProxyLinkage *linkage = new ProxyLinkage(context, io, info->proxy_handler(),

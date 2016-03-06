@@ -52,7 +52,8 @@ public:
     virtual bool Cleanup(int64_t now);
 
 protected:
-    virtual LinkageBase *CreateLinkage(const LinkagePeer &peer,
+    virtual LinkageBase *CreateLinkage(LinkageWorker *worker,
+                                       const LinkagePeer &peer,
                                        const LinkagePeer &me) = 0;
 
     virtual int OnReadable(LinkageWorker *worker);

@@ -28,7 +28,7 @@ SUBDIRS = .
 
 # "d" will be appended for each STATICS, ABC will become -lABC_debug eventually
 STATICS =
-LIBRARIES = crypto dl ev flinter iconv jsoncpp neo_cgi neo_cs neo_utl icuuc icudata \
+LIBRARIES = crypto dl ev flinter iconv jsoncpp lzma neo_cgi neo_cs neo_utl icuuc icudata \
             pthread rt ssl xml2 z zookeeper_mt mysqlclient ssl crypto gtest gmock gmock_main
 PKGCONFIGS =
 

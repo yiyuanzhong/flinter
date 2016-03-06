@@ -50,4 +50,12 @@ bool EasyHandler::OnConnected(const EasyContext &context)
     return true;
 }
 
+bool EasyHandler::Cleanup(const EasyContext &context, int64_t now)
+{
+    (void)context;
+    (void)now;
+
+    return true;
+}
+
 } // namespace flinter
