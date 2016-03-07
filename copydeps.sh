@@ -23,7 +23,7 @@ linux()
 {
     export LD_LIBRARY_PATH="${THIRDPARTY}:${FLINTER}:${LIBDIR}:${LD_LIBRARY_PATH}"
 
-    list=`ldd "${1}"` || return 1
+    list=`ldd "${BINNAME}"` || return 1
     files=`echo "${list}" | awk '{
         if (match($3, "^'"${ROOT}"'")) {
             print $3;
@@ -34,12 +34,12 @@ linux()
 
     for i in ${files}; do
         r=`readlink -e "${i}"` || return 1
-        if [ ! "${r}" -ef "${2}"/`basename "${r}"` ]; then
-            cp -af "${r}" "${2}" || return 1
+        if [ ! "${r}" -ef "${LIBDIR}"/`basename "${r}"` ]; then
+            cp -af "${r}" "${LIBDIR}" || return 1
         fi
-        strip -S "${2}"/`basename "${r}"` || return 1
+        strip -S "${LIBDIR}"/`basename "${r}"` || return 1
         if [ -L "${i}" ]; then
-            ln -sf `basename "${r}"` "${2}"/`basename "${i}"` || return 1
+            ln -sf `basename "${r}"` "${LIBDIR}"/`basename "${i}"` || return 1
         fi
     done
 
