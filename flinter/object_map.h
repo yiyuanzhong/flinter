@@ -69,12 +69,12 @@ public:
     /// Increases reference count.
     /// @warning might return NULL.
     /// @warning low efficiency.
-    T *GetRandom();
+    T *GetRandom(K *key = NULL);
 
     /// Get objects in order.
     /// Increases reference count.
     /// @warning might return NULL.
-    T *GetNext();
+    T *GetNext(K *key = NULL);
 
     /// Decreases reference count.
     /// Objects no longer in the map with 0 reference count will be released.
@@ -282,7 +282,7 @@ inline T *ObjectMap<K, T>::Get(const K &key)
 }
 
 template <class K, class T>
-inline T *ObjectMap<K, T>::GetNext()
+inline T *ObjectMap<K, T>::GetNext(K *key)
 {
     MutexLocker locker(&_mutex);
     if (_map.empty()) {
@@ -297,12 +297,16 @@ inline T *ObjectMap<K, T>::GetNext()
         _ptr = _map.begin();
     }
 
+    if (key) {
+        *key = _ptr->first;
+    }
+
     ++_ptr->second.second;
     return _ptr->second.first;
 }
 
 template <class K, class T>
-inline T *ObjectMap<K, T>::GetRandom()
+inline T *ObjectMap<K, T>::GetRandom(K *key)
 {
     MutexLocker locker(&_mutex);
     typename std::map<K, T *>::iterator p = _map.begin();
@@ -313,6 +317,10 @@ inline T *ObjectMap<K, T>::GetRandom()
     int index = ranged_rand(_map.size());
     if (index) {
         std::advance(p, index);
+    }
+
+    if (key) {
+        *key = p->first;
     }
 
     ++p->second.second;

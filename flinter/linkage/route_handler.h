@@ -22,14 +22,15 @@
 
 namespace flinter {
 
-template <class task_t, class seq_t = uint64_t, class channel_t = uint64_t>
+template <class key_t,
+          class task_t,
+          class seq_t = uint64_t,
+          class channel_t = uint64_t>
 class RouteHandler {
 public:
     virtual ~RouteHandler() {}
 
-    virtual bool Create(const std::string &host,
-                        uint16_t port,
-                        channel_t *channel) = 0;
+    virtual bool Create(const key_t &key, channel_t *channel) = 0;
 
     virtual bool Destroy(const channel_t &channel) = 0;
 
@@ -37,8 +38,8 @@ public:
 
 }; // class RouteHandler
 
-template <class T, class S, class C>
-inline void RouteHandler<T, S, C>::OnTimeout(const S & /*seq*/, T * /*task*/)
+template <class K, class T, class S, class C>
+inline void RouteHandler<K, T, S, C>::OnTimeout(const S & /*seq*/, T * /*task*/)
 {
     // Intended left blank.
 }

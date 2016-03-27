@@ -483,10 +483,15 @@ int Interface::ConnectTcp4(const std::string &hostname,
     return ret == 0 ? 0 : 1;
 }
 
-bool Interface::WaitUntilConnected(int milliseconds)
+bool Interface::WaitUntilConnected(int64_t timeout)
 {
     if (_socket < 0) {
         return false;
+    }
+
+    int milliseconds = -1;
+    if (timeout >= 0) {
+        milliseconds = static_cast<int>(timeout / 1000000LL);
     }
 
     return safe_wait_until_connected(_socket, milliseconds) == 0;

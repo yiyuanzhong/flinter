@@ -49,7 +49,7 @@ public:
      * @param hosts in the form of host:port,host:port...
      * @return ZOK if good.
      */
-    int Initialize(const std::string &hosts, int timeout = kDefaultTimeout);
+    int Initialize(const std::string &hosts, int64_t timeout = kDefaultTimeout);
 
     /// Might block.
     int Shutdown();
@@ -60,7 +60,8 @@ public:
     int state() const;
 
     /// Might be unreliable if connected then immediately disconnected.
-    bool WaitUntilConnected(int milliseconds = 0) const;
+    /// @param timeout to wait, <0 for infinity.
+    bool WaitUntilConnected(int64_t timeout = -1) const;
 
     /// Might be unreliable if connected then immediately disconnected.
     /// @retval <0 for error, 0 for connected, >0 for pending.
@@ -173,7 +174,7 @@ public:
                          ZooKeeperCallback *zkc,
                          ZooKeeperWatcher *watcher = NULL);
 
-    static const int kDefaultTimeout = 10000; ///< 10s
+    static const int64_t kDefaultTimeout = 10000000000LL; ///< 10s
 
 private:
     enum Operation {
@@ -320,7 +321,7 @@ private:
     std::string _hosts;             ///< ZooKeeper servers.
     zhandle_t *_handle;             ///< ZooKeeper handle.
     bool _connecting;               ///< If true, don't try to alter connection handle.
-    int _timeout;                   ///< ZooKeeper default timeout.
+    int64_t _timeout;               ///< ZooKeeper default timeout.
 
     mutable Mutex _mutex;           ///< Global lock.
 

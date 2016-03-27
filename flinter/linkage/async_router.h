@@ -27,18 +27,25 @@
 
 namespace flinter {
 
-template <class task_t, class seq_t = uint64_t, class channel_t = uint64_t>
+template <class key_t,
+          class task_t,
+          class seq_t = uint64_t,
+          class channel_t = uint64_t>
 class AsyncRouter {
 public:
     /// @param route_handler life span NOT taken.
     /// @param default_timeout 5s if <= 0.
-    explicit AsyncRouter(RouteHandler<task_t, seq_t, channel_t> *route_handler,
-                         int64_t default_timeout = 0);
+    explicit AsyncRouter(
+            RouteHandler<key_t, task_t, seq_t, channel_t> *route_handler,
+            int64_t default_timeout = 0);
 
     ~AsyncRouter();
 
-    void Add(const std::string &host, uint16_t port, int64_t expire = 0);
-    void Del(const std::string &host, uint16_t port);
+    void Add(const key_t &host);
+    void Del(const key_t &host);
+
+    template <class all_t>
+    void SetAll(const all_t &hosts);
 
     /// @param seq to identify this call in a multiplex connection.
     /// @param task can be NULL, can be retrieved in Put(). If timed out, it's
@@ -62,33 +69,20 @@ public:
     void Clear();
 
 private:
-    struct server_t {
-        bool operator < (const server_t &o) const
-        {
-            int c = host.compare(o.host);
-            return c < 0 || (c == 0 && port < o.port);
-        }
-
-        std::string host;
-        uint16_t port;
-
-    }; // struct server_t
-
     struct context_t {
-        int64_t expire;
+        key_t key;
         size_t pendings;
-        server_t server;
         channel_t channel;
         int64_t last_active;
 
     }; // struct context_t
 
-    class Map : public ObjectMap<server_t, context_t> {
+    class Map : public ObjectMap<key_t, context_t> {
     public:
         explicit Map(AsyncRouter *router) : _router(router) {}
         virtual ~Map() {}
 
-        virtual context_t *Create(const server_t &key)
+        virtual context_t *Create(const key_t &key)
         {
             return _router->CreateConnection(key);
         }
@@ -137,22 +131,26 @@ private:
     }; // class Track
 
     // Called by Map.
-    context_t *CreateConnection(const server_t &key);
+    context_t *CreateConnection(const key_t &key);
     void DestroyConnection(context_t *context);
 
     // Called by Track.
     void OnTimeout(Track *track);
 
-    RouteHandler<task_t, seq_t, channel_t> *const _route_handler;
+    RouteHandler<key_t, task_t, seq_t, channel_t> *const _route_handler;
     TimeoutPool<seq_t, Track *> _timeout;
     Map *const _map;
     bool _clearing;
 
+    AsyncRouter &operator = (const AsyncRouter &);
+    explicit AsyncRouter(const AsyncRouter &);
+
 }; // class AsyncRouter
 
-template <class T, class S, class C>
-inline AsyncRouter<T, S, C>::AsyncRouter(RouteHandler<T, S, C> *route_handler,
-                                         int64_t default_timeout)
+template <class K, class T, class S, class C>
+inline AsyncRouter<K, T, S, C>::AsyncRouter(
+        RouteHandler<K, T, S, C> *route_handler,
+        int64_t default_timeout)
         : _route_handler(route_handler)
         , _timeout(default_timeout > 0 ? default_timeout : 5000000000LL)
         , _map(new Map(this))
@@ -161,18 +159,18 @@ inline AsyncRouter<T, S, C>::AsyncRouter(RouteHandler<T, S, C> *route_handler,
     // Intended left blank.
 }
 
-template <class T, class S, class C>
-inline AsyncRouter<T, S, C>::~AsyncRouter()
+template <class K, class T, class S, class C>
+inline AsyncRouter<K, T, S, C>::~AsyncRouter()
 {
     Clear();
     delete _map;
 }
 
-template <class T, class S, class C>
-inline bool AsyncRouter<T, S, C>::Get(const S &seq,
-                                      T *task,
-                                      C *channel,
-                                      int64_t timeout)
+template <class K, class T, class S, class C>
+inline bool AsyncRouter<K, T, S, C>::Get(const S &seq,
+                                         T *task,
+                                         C *channel,
+                                         int64_t timeout)
 {
     context_t *c = _map->GetNext();
     if (!c) {
@@ -184,8 +182,8 @@ inline bool AsyncRouter<T, S, C>::Get(const S &seq,
     return true;
 }
 
-template <class T, class S, class C>
-inline bool AsyncRouter<T, S, C>::Put(const S &seq, int rc, T **task)
+template <class K, class T, class S, class C>
+inline bool AsyncRouter<K, T, S, C>::Put(const S &seq, int rc, T **task)
 {
     Track *track = _timeout.Erase(seq);
     if (!track) {
@@ -200,7 +198,7 @@ inline bool AsyncRouter<T, S, C>::Put(const S &seq, int rc, T **task)
         *task = track->_task;
     }
 
-    _map->Release(track->_context->server, track->_context);
+    _map->Release(track->_context->key, track->_context);
     track->Done();
 
     // Don't delete task, give it back.
@@ -208,8 +206,8 @@ inline bool AsyncRouter<T, S, C>::Put(const S &seq, int rc, T **task)
     return true;
 }
 
-template <class T, class S, class C>
-inline void AsyncRouter<T, S, C>::Clear()
+template <class K, class T, class S, class C>
+inline void AsyncRouter<K, T, S, C>::Clear()
 {
     _clearing = true;
     _timeout.Clear();
@@ -217,21 +215,21 @@ inline void AsyncRouter<T, S, C>::Clear()
     _clearing = false;
 }
 
-template <class T, class S, class C>
-inline void AsyncRouter<T, S, C>::Shutdown()
+template <class K, class T, class S, class C>
+inline void AsyncRouter<K, T, S, C>::Shutdown()
 {
     _timeout.Clear();
     _map->EraseAll(true);
 }
 
-template <class T, class S, class C>
-inline void AsyncRouter<T, S, C>::Cleanup()
+template <class K, class T, class S, class C>
+inline void AsyncRouter<K, T, S, C>::Cleanup()
 {
     _timeout.Check();
 }
 
-template <class T, class S, class C>
-inline void AsyncRouter<T, S, C>::OnTimeout(Track *track)
+template <class K, class T, class S, class C>
+inline void AsyncRouter<K, T, S, C>::OnTimeout(Track *track)
 {
     // Don't lock!
     if (_clearing) {
@@ -239,56 +237,52 @@ inline void AsyncRouter<T, S, C>::OnTimeout(Track *track)
     }
 
     _route_handler->OnTimeout(track->_seq, track->_task);
-    _map->Release(track->_context->server, track->_context);
+    _map->Release(track->_context->key, track->_context);
     delete track->_task;
 }
 
-template <class T, class S, class C>
-inline void AsyncRouter<T, S, C>::Add(const std::string &host,
-                                      uint16_t port,
-                                      int64_t expire)
+template <class K, class T, class S, class C>
+inline void AsyncRouter<K, T, S, C>::Add(const K &host)
 {
-    server_t s;
-    s.host = host;
-    s.port = port;
-
-    context_t *c = _map->Add(s);
+    context_t *c = _map->Add(host);
     if (!c) {
         return;
     }
 
-    c->expire = expire; // The callback didn't fill it in.
-    _map->Release(s, c);
+    _map->Release(host, c);
 }
 
-template <class T, class S, class C>
-inline void AsyncRouter<T, S, C>::Del(const std::string &host, uint16_t port)
+template <class K, class T, class S, class C>
+inline void AsyncRouter<K, T, S, C>::Del(const K &host)
 {
-    server_t s;
-    s.host = host;
-    s.port = port;
-    _map->Erase(s);
+    _map->Erase(host);
 }
 
-template <class T, class S, class channel_t>
-inline typename AsyncRouter<T, S, channel_t>::context_t *
-AsyncRouter<T, S, channel_t>::CreateConnection(const server_t &key)
+template <class K, class T, class S, class C>
+template <class A>
+inline void AsyncRouter<K, T, S, C>::SetAll(const A &hosts)
+{
+    _map->SetAll(hosts);
+}
+
+template <class K, class T, class S, class C>
+inline typename AsyncRouter<K, T, S, C>::context_t *
+AsyncRouter<K, T, S, C>::CreateConnection(const K &key)
 {
     // Don't lock!
-    channel_t channel;
-    if (!_route_handler->Create(key.host, key.port, &channel)) {
+    C channel;
+    if (!_route_handler->Create(key, &channel)) {
         return NULL;
     }
 
     context_t *c = new context_t;
     c->channel = channel;
-    c->server = key;
-    c->expire = 0; // Not yet known, will be filled in outside callback.
+    c->key = key;
     return c;
 }
 
-template <class T, class S, class C>
-inline void AsyncRouter<T, S, C>::DestroyConnection(context_t *value)
+template <class K, class T, class S, class C>
+inline void AsyncRouter<K, T, S, C>::DestroyConnection(context_t *value)
 {
     // Don't lock!
     _route_handler->Destroy(value->channel);

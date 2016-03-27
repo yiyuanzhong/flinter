@@ -102,11 +102,11 @@ bool Condition::Wait(Mutex *mutex)
 #endif
 }
 
-bool Condition::Wait(Mutex *mutex, int milliseconds)
+bool Condition::Wait(Mutex *mutex, int64_t timeout)
 {
 #ifdef WIN32
     HANDLE mutex_handle = *reinterpret_cast<HANDLE *>(mutex->_context);
-    DWORD timeout = milliseconds >= 0 ? milliseconds : INFINITE;
+    DWORD timeout = timeout >= 0 ? static_cast<int>(timeout / 1000000LL) : INFINITE;
     size_t generation;
     bool result;
     bool wake;
@@ -148,15 +148,14 @@ bool Condition::Wait(Mutex *mutex, int milliseconds)
     CALL(WaitForSingleObject(mutex_handle, INFINITE) == WAIT_OBJECT_0, "Wait()");
     return result;
 #else
-    if (milliseconds < 0) {
+    if (timeout < 0) {
         return Wait(mutex);
     }
 
     struct timespec abstime;
-    int64_t now = get_wall_clock_timestamp();
-    now += static_cast<int64_t>(milliseconds) * 1000000;
-    abstime.tv_nsec = now % 1000000000LL;
-    abstime.tv_sec = now / 1000000000LL;
+    int64_t deadline = get_wall_clock_timestamp() + timeout;
+    abstime.tv_nsec = deadline % 1000000000LL;
+    abstime.tv_sec = deadline / 1000000000LL;
 
     pthread_mutex_t *mutex_handle = reinterpret_cast<pthread_mutex_t *>(mutex->_context);
     int ret = pthread_cond_timedwait(reinterpret_cast<pthread_cond_t *>(_context),

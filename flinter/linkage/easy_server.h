@@ -145,8 +145,12 @@ public:
     void Forget(channel_t channel);
     void Forget(const EasyContext &context);
 
+    /// Run job in any job threads, or current thread if there's none.
     /// @param job will be released after executed.
     void QueueOrExecuteJob(Runnable *job);
+
+    /// Queue job in specified I/O thread, assertion if thread_id is invalid.
+    bool QueueIo(Runnable *job, int thread_id);
 
     /// Thread safe.
     bool Shutdown();

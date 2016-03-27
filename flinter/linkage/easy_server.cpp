@@ -17,6 +17,8 @@
 
 #include <assert.h>
 
+#include <stdexcept>
+
 #include "flinter/linkage/easy_context.h"
 #include "flinter/linkage/easy_handler.h"
 #include "flinter/linkage/easy_tuner.h"
@@ -256,9 +258,11 @@ public:
                            , _length(length)
                            , _buffer(malloc(length))
     {
-        if (_buffer) {
-            memcpy(_buffer, buffer, length);
+        if (!_buffer) {
+            throw std::bad_alloc();
         }
+
+        memcpy(_buffer, buffer, length);
     }
 
     virtual ~SendJob()
@@ -861,6 +865,22 @@ void EasyServer::QueueOrExecuteJob(Runnable *job)
     delete job;
 }
 
+bool EasyServer::QueueIo(Runnable *job, int thread_id)
+{
+    if (!job) {
+        return true;
+    }
+
+    MutexLocker locker(_mutex);
+    std::list<ProxyLinkageWorker *>::iterator p = _io_workers.begin();
+    if (thread_id) {
+        std::advance(p, thread_id);
+    }
+
+    ProxyLinkageWorker *worker = *p;
+    return worker->SendCommand(job);
+}
+
 void EasyServer::Forget(channel_t channel)
 {
     MutexLocker locker(_mutex);
@@ -901,9 +921,9 @@ bool EasyServer::Disconnect(channel_t channel, bool finish_write)
 
     ProxyLinkage *linkage = p->second;
     LinkageWorker *worker = linkage->worker();
-    locker.Unlock();
 
     if (tid > 0 && tid == worker->running_thread_id()) {
+        locker.Unlock();
         int ret = linkage->Disconnect(finish_write);
         return ret >= 0;
     }
@@ -996,14 +1016,6 @@ bool EasyServer::Send(channel_t channel, const void *buffer, size_t length)
     }
 
     SendJob *job = new SendJob(this, worker, channel, buffer, length);
-    if (!*job) {
-        LOG(ERROR) << "EasyServer: memory allocation failed for "
-                   << length << " bytes.";
-
-        delete job;
-        return false;
-    }
-
     return worker->SendCommand(job);
 }
 
@@ -1036,7 +1048,12 @@ EasyServer::ProxyLinkage *EasyServer::DoReconnect(
     LinkagePeer me;
     LinkagePeer peer;
     Interface *interface = new Interface;
-    if (!interface->ConnectTcp4(info->host(), info->port(), &peer, &me)) {
+    int ret = interface->ConnectTcp4(info->host(), info->port(), &peer, &me);
+    if (ret < 0) {
+        CLOG.Verbose("EasyServer: failed to connect to [%s:%u]: %d: %s",
+                     info->host().c_str(), info->port(),
+                     errno, strerror(errno));
+
         delete interface;
         return NULL;
     }
@@ -1046,11 +1063,16 @@ EasyServer::ProxyLinkage *EasyServer::DoReconnect(
                                            channel, peer, me,
                                            worker->thread_id());
 
-    AbstractIo *io = GetAbstractIo(info->proxy_handler(), interface, true, true);
+    AbstractIo *io = GetAbstractIo(info->proxy_handler(),
+                                   interface,
+                                   true,
+                                   ret > 0 ? true : false);
+
     ProxyLinkage *linkage = new ProxyLinkage(context, io, info->proxy_handler(),
                                              peer, me);
 
     if (!linkage->Attach(worker)) {
+        h.first->OnError(*context, false, errno);
         delete linkage;
         return NULL;
     }

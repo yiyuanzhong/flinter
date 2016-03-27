@@ -921,9 +921,14 @@ int ZooKeeper::ReconnectNolock()
         CLOG.Info("ZooKeeper: starting new session...");
     }
 
+    int milliseconds = -1;
+    if (_timeout >= 0) {
+        milliseconds = static_cast<int>(_timeout / 1000000LL);
+    }
+
     zhandle_t *zh = zookeeper_init(_hosts.c_str(),
                                    GlobalWatcher,
-                                   _timeout,
+                                   milliseconds,
                                    &_client_id,
                                    &_session_pending,
                                    0);
@@ -939,7 +944,7 @@ int ZooKeeper::ReconnectNolock()
     return ZOK;
 }
 
-int ZooKeeper::Initialize(const std::string &hosts, int timeout)
+int ZooKeeper::Initialize(const std::string &hosts, int64_t timeout)
 {
     MutexLocker locker(&_mutex);
     if (_handle) {
@@ -1133,12 +1138,11 @@ int ZooKeeper::is_connected() const
     }
 }
 
-bool ZooKeeper::WaitUntilConnected(int milliseconds) const
+bool ZooKeeper::WaitUntilConnected(int64_t timeout) const
 {
     int64_t deadline = -1;
-    if (milliseconds > 0) {
-        deadline = get_monotonic_timestamp() +
-                   static_cast<int64_t>(milliseconds) * 1000000;
+    if (timeout >= 0) {
+        deadline = get_monotonic_timestamp() + timeout;
     }
 
     while (true) {

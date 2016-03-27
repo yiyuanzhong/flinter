@@ -81,9 +81,9 @@ public:
                     LinkagePeer *peer = NULL,
                     LinkagePeer *me = NULL);
 
-    /// @param milliseconds to wait, <0 for infinity.
+    /// @param timeout to wait, <0 for infinity.
     /// @warning only call to this method if connect() gives "in progress".
-    bool WaitUntilConnected(int milliseconds);
+    bool WaitUntilConnected(int64_t timeout);
 
     /// @warning only call to this method if connect() gives "in progress" and the fd is
     ///          writable for the first time.

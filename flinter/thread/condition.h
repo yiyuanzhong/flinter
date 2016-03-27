@@ -16,6 +16,8 @@
 #ifndef __FLINTER_THREAD_CONDITION_H__
 #define __FLINTER_THREAD_CONDITION_H__
 
+#include <stdint.h>
+
 #include <flinter/common.h>
 
 namespace flinter {
@@ -32,7 +34,7 @@ public:
     void WakeAll();                             ///< Wake all waiters.
 
     bool Wait(Mutex *mutex);                    ///< Mutex must be locked.
-    bool Wait(Mutex *mutex, int milliseconds);  ///< Mutex must be locked, <0 means infinity.
+    bool Wait(Mutex *mutex, int64_t timeout);   ///< Mutex must be locked, <0 means infinity.
 
 private:
     class Context;                              ///< Internally used.
