@@ -30,29 +30,33 @@ int charset_utf8_to_json(const std::string &utf, std::string *json)
     }
 
     json->clear();
-    std::vector<int32_t> w;
-    if (charset_utf8_to_cp(utf, &w)) {
+    std::basic_string<uint16_t> w;
+    if (charset_utf8_to_utf16(utf, &w)) {
         return -1;
     }
 
-    char buffer[32];
-    for (std::vector<int32_t>::const_iterator p = w.begin(); p != w.end(); ++p) {
-        if (*p < 0) {
-            return -1;
+    char buffer[8];
+    for (std::basic_string<uint16_t>::const_iterator p = w.begin();
+         p != w.end(); ++p) {
 
-        } else if (*p > 0x1f && *p < 0x7f) {
+        switch (*p) {
+        case 0x22: json->append("\\\""); continue;
+        case 0x5C: json->append("\\\\"); continue;
+        case 0x2F: json->append("\\/");  continue;
+        case 0x08: json->append("\\b");  continue;
+        case 0x0C: json->append("\\f");  continue;
+        case 0x0A: json->append("\\n");  continue;
+        case 0x0D: json->append("\\r");  continue;
+        case 0x09: json->append("\\t");  continue;
+        default:
+            break;
+        };
+
+        if (*p >= 0x20 && *p <= 0x7E) {
             buffer[0] = static_cast<char>(*p);
             buffer[1] = '\0';
-
-        } else if (*p <= 0xffff) {
-            if (snprintf(buffer, sizeof(buffer), "\\u%04x", *p) != 6) {
-                return -1;
-            }
-
         } else {
-            if (snprintf(buffer, sizeof(buffer), "\\U%08x", *p) != 10) {
-                return -1;
-            }
+            sprintf(buffer, "\\u%04X", *p);
         }
 
         json->append(buffer);

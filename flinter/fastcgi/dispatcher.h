@@ -64,6 +64,11 @@ public:
     // Don't guess, do what I say.
     static void set_forced_mode(const Mode &mode);
 
+    // If true, all requests are sent to the only handler even if URI mismatches.
+    // Ignored if there's more than one handlers are registered.
+    // Default yes.
+    static void set_single_handler_mode(bool single_handler_mode);
+
     // Helper method to try to determine mode and call methods above.
     static int main(int argc, char *argv[]);
 
@@ -96,6 +101,7 @@ private:
     static int   EmulatedIterenv(void *context, int i, char **key, char **value);
 
     static bool _handle_signals_internally;
+    static bool _single_handler_mode;
     static bool _run;
 
     void ProcessException(const CGI *cgi, const HttpException &e);

@@ -61,6 +61,7 @@ include_flinter_HEADERS = babysitter.h \
 
 include_types_HEADERS = types/atomic.h \
                         types/auto_buffer.h \
+                        types/decimal.h \
                         types/read_only_map.h \
                         types/scoped_ptr.h \
                         types/shared_ptr.h \
@@ -164,6 +165,11 @@ libflinter_la_SOURCES = $(libflinter_core_la_SOURCES) \
 libflinter_la_LIBADD += @JSONCPP_LIBS@
 libflinter_la_LIBADD += @EV_LIBS@
 
+if WITH_MULTIPRECISION
+libflinter_la_SOURCES += types/decimal.cpp
+libflinter_la_LIBADD += -lgmp
+endif
+
 if WITH_OPENSSL
 libflinter_core_la_SOURCES += hash_c.c pkcs7.c
 libflinter_core_la_LIBADD += ${openssl_LIBS}
@@ -190,6 +196,7 @@ libflinter_la_SOURCES += charset_icu.cpp
 libflinter_la_LIBADD += ${icu_LIBS}
 else
 libflinter_la_SOURCES += charset_iconv.cpp
+libflinter_la_LIBADD += -liconv
 endif
 
 if WITH_ZOOKEEPER

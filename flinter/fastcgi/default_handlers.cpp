@@ -61,13 +61,24 @@ static void RunStandardHandler(CGI *cgi, int status_code)
         BODY << "<p>The document has moved <a href=\"" << final << "\">here</a>.</p>\n";
         break;
 
+    case 303:
+        BODY << "<p>The answer to your request is located <a href=\"" << final
+             << "\">here</a>.</p>\n";
+        break;
+
+    case 305:
+        BODY << "<p>This resource is only accessible through the proxy\n" << final
+             << "<br />\nYou will need to configure your client to use that proxy.</p>\n";
+        break;
+
     case 400:
         BODY << "<p>Your browser sent a request that this server could not understand.<br />\n";
         break;
 
     case 403:
-        BODY << "<p>You don't have permission to access " << final << "\n"
-                "on this server.</p>\n";
+    case 407:
+        BODY << "<p>You don't have permission to access " << final
+             << "\non this server.<br /></p>\n";
         break;
 
     case 404:
@@ -77,6 +88,51 @@ static void RunStandardHandler(CGI *cgi, int status_code)
     case 405:
         BODY << "<p>The requested method " << method
              << " is not allowed for the URL " << final << ".</p>\n";
+        break;
+
+    case 406:
+        BODY << "<p>An appropriate representation of the requested resource "
+             << final << " could not be found on this server.</p>\n";
+        break;
+
+    case 412:
+        BODY << "<p>The precondition on the request for the URL " << final
+             << " evaluated to false.</p>\n";
+        break;
+
+    case 415:
+        BODY << "<p>The supplied request data is not in a format\n"
+                 "acceptable for processing by this resource.</p>\n";
+        break;
+
+    case 416:
+        BODY << "<p>None of the range-specifier values in the Range\n"
+                "request-header field overlap the current extent\n"
+                "of the selected resource.</p>\n";
+        break;
+
+    case 428:
+        BODY << "<p>The request is required to be conditional.</p>\n";
+        break;
+
+    case 501:
+        BODY << "<p>" << method << " to " << final << " not supported.<br /></p>\n";
+        break;
+
+    case 502:
+        BODY << "<p>The proxy server received an invalid\n"
+                "response from an upstream server.<br /></p>\n";
+        break;
+
+    case 503:
+        BODY << "<p>The server is temporarily unable to service your\n"
+                "request due to maintenance downtime or capacity\n"
+                "problems. Please try again later.</p>\n";
+        break;
+
+    case 504:
+        BODY << "<p>The gateway did not receive a timely response\n"
+                "from the upstream server or application.</p>\n";
         break;
 
     case 500:

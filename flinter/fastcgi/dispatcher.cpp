@@ -53,6 +53,7 @@ const std::map<std::string, const Factory<CGI> *> Dispatcher::kSystemFactories(
 );
 
 bool Dispatcher::_handle_signals_internally = true;
+bool Dispatcher::_single_handler_mode = true;
 bool Dispatcher::_run = true;
 
 class Dispatcher::Worker : public Runnable {
@@ -99,6 +100,7 @@ void Dispatcher::set_site_root(const std::string &site_root)
 {
     assert(!site_root.empty());
     assert(site_root[0] == '/');
+    assert(site_root[site_root.length() - 1] == '/');
     GetInstance()->_site_root = site_root;
 }
 
@@ -116,6 +118,11 @@ void Dispatcher::set_handle_signals_internally(bool handle_internally)
     _handle_signals_internally = handle_internally;
 }
 
+void Dispatcher::set_single_handler_mode(bool single_handler_mode)
+{
+    _single_handler_mode = single_handler_mode;
+}
+
 void Dispatcher::set_forced_mode(const Mode &mode)
 {
     GetInstance()->_mode = mode;
@@ -127,6 +134,7 @@ int Dispatcher::main(int argc, char *argv[])
 }
 
 Dispatcher::Dispatcher() : _default_factory(&g_default_factory)
+                         , _site_root("/")
                          , _listen_fd(STDIN_FILENO)
                          , _mode(kModeAutomatic)
                          , _sfc_pool(new FixedThreadPool)
@@ -349,7 +357,7 @@ int Dispatcher::Run(int argc, char *argv[])
 
 CGI *Dispatcher::GetHandler()
 {
-    if (_factories.size() == 1) {
+    if (_single_handler_mode && _factories.size() == 1) {
         return _factories.begin()->second->Create();
     }
 
@@ -377,12 +385,11 @@ CGI *Dispatcher::GetHandler()
     std::string rpath = path;
     free(path);
 
-    if (rpath.length() > _site_root.length()                    &&
-        rpath[_site_root.length()] == '/'                       &&
+    if (rpath.length() >= _site_root.length()                   &&
         rpath.compare(0, _site_root.length(), _site_root) == 0  ){
 
         std::map<std::string, const Factory<CGI> *>::const_iterator p;
-        rpath = rpath.substr(_site_root.length());
+        rpath = rpath.substr(_site_root.length() - 1);
         p = _factories.find(rpath);
         if (p != _factories.end()) {
             return p->second->Create();

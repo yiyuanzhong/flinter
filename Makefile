@@ -5,7 +5,7 @@ STAGING := $(THIRDPARTY)/staging
 TOOLS := $(THIRDPARTY)/tools
 
 PKG_CONFIG_PATH := $(STAGING)/lib/pkgconfig:$(PKG_CONFIG_PATH)
-CPPFLAGS := -I$(STAGING)/include $(CPPFLAGS)
+CPPFLAGS := -isystem$(STAGING)/include $(CPPFLAGS)
 PATH := $(STAGING)/bin:$(TOOLS)/bin:$(PATH)
 LDFLAGS := -L$(STAGING)/lib $(LDFLAGS)
 LC_ALL = C
@@ -19,9 +19,6 @@ else
 CONFIGURE_FLAGS := ${CONFIGURE_FLAGS} --enable-silent-rules
 STRIP = strip
 endif
-
-# ICU module is not yet completed.
-CONFIGURE_FLAGS := $(CONFIGURE_FLAGS) --without-icu
 
 SYSTEM := $(shell uname -s)
 ifeq ($(SYSTEM),Darwin)

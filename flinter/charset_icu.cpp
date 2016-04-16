@@ -117,7 +117,7 @@ int charset_icu_save(const AutoBuffer<UChar> &input,
 
         outpos = target - out;
         if (error == U_ZERO_ERROR) {
-            output->resize(outpos / sizeof(typename T::value_type));
+            output->resize(static_cast<size_t>(outpos) / sizeof(typename T::value_type));
             break;
         } else if (error != U_BUFFER_OVERFLOW_ERROR) {
             ucnv_close(conv);
@@ -170,26 +170,35 @@ int charset_##f##_to_##t(const std::string &from, std::string *to) \
     return charset_icu(from, to, ef, et); \
 }
 
-#define CHARSET_I(f,t,ef,et) \
-int charset_##f##_to_##t(const std::vector<int32_t> &from, std::string *to) \
+#define CHARSET_I(tp,f,t,ef,et) \
+int charset_##f##_to_##t(const std::basic_string<tp> &from, std::string *to) \
 { \
     return charset_icu(from, to, ef, et); \
 }
 
-#define CHARSET_O(f,t,ef,et) \
-int charset_##f##_to_##t(const std::string &from, std::vector<int32_t> *to) \
+#define CHARSET_O(tp,f,t,ef,et) \
+int charset_##f##_to_##t(const std::string &from, std::basic_string<tp> *to) \
 { \
     return charset_icu(from, to, ef, et); \
 }
 
-CHARSET(utf8,    gbk,     "UTF-8",                "GBK");
-CHARSET(gbk,     utf8,    "GBK",                  "UTF-8");
-CHARSET(utf8,    gb18030, "UTF-8",                "GB18030");
-CHARSET(gb18030, utf8,    "GB18030",              "UTF-8");
+#define CHARSET_IO(tp1,tp2,f,t,ef,et) \
+int charset_##f##_to_##t(const std::basic_string<tp1> &from, std::basic_string<tp2> *to) \
+{ \
+    return charset_icu(from, to, ef, et); \
+}
 
-CHARSET_O(utf8,  cp,      "UTF-8",                "UTF32_PlatformEndian");
-CHARSET_I(cp,    utf8,    "UTF32_PlatformEndian", "UTF-8");
-CHARSET_O(gbk,   cp,      "GBK",                  "UTF32_PlatformEndian");
-CHARSET_I(cp,    gbk,     "UTF32_PlatformEndian", "GBK");
+CHARSET(utf8,    gbk,     "UTF-8",   "GBK"    );
+CHARSET(gbk,     utf8,    "GBK",     "UTF-8"  );
+CHARSET(utf8,    gb18030, "UTF-8",   "GB18030");
+CHARSET(gb18030, utf8,    "GB18030", "UTF-8"  );
+
+CHARSET_O(uint16_t, utf8,  utf16, "UTF-8", "UTF16_PlatformEndian");
+CHARSET_O(uint32_t, utf8,  utf32, "UTF-8", "UTF32_PlatformEndian");
+CHARSET_I(uint16_t, utf16, utf8,  "UTF16_PlatformEndian", "UTF-8");
+CHARSET_I(uint32_t, utf32, utf8,  "UTF32_PlatformEndian", "UTF-8");
+
+CHARSET_IO(uint16_t, uint32_t, utf16, utf32, "UTF16_PlatformEndian", "UTF32_PlatformEndian");
+CHARSET_IO(uint32_t, uint16_t, utf32, utf16, "UTF32_PlatformEndian", "UTF16_PlatformEndian");
 
 } // namespace flinter

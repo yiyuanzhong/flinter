@@ -262,16 +262,19 @@ bool SslContext::VerifyPrivateKey()
     return true;
 }
 
-bool SslContext::SetVerifyPeer(bool verify)
+bool SslContext::SetVerifyPeer(bool verify, bool required)
 {
     if (!Initialize()) {
         return false;
     }
 
-    int mode = verify ? SSL_VERIFY_FAIL_IF_NO_PEER_CERT
-                      | SSL_VERIFY_CLIENT_ONCE
+    int mode = verify ? SSL_VERIFY_CLIENT_ONCE
                       | SSL_VERIFY_PEER
                       : SSL_VERIFY_NONE;
+
+    if (required) {
+        mode |= SSL_VERIFY_FAIL_IF_NO_PEER_CERT;
+    }
 
     SSL_CTX_set_verify(_context, mode, NULL);
     return true;

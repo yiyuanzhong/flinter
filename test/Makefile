@@ -22,14 +22,14 @@ DisableStackProtector = 0
 
 TARGET = ../test-bin
 MODULEROOT = ../..
-MODULEPATH = flinter
+MODULEPATH = flinter/test
 
 SUBDIRS = .
 
 # "d" will be appended for each STATICS, ABC will become -lABC_debug eventually
-STATICS =
-LIBRARIES = crypto dl ev flinter iconv jsoncpp lzma neo_cgi neo_cs neo_utl icuuc icudata \
-            pthread rt ssl xml2 z zookeeper_mt mysqlclient ssl crypto gtest gmock gmock_main
+STATICS = flinter/output/lib/flinter
+LIBRARIES = crypto dl ev gmp iconv icudata icuuc jsoncpp lzma neo_cgi neo_cs \
+            neo_utl pthread ssl xml2 z zookeeper_mt gtest gmock gmock_main
 PKGCONFIGS =
 
 BINPATH =
@@ -37,8 +37,7 @@ BINPATH =
 SEARCHPATH = thirdparty/staging/include \
              flinter/output/include
 
-LIBRARYPATH = thirdparty/staging/lib \
-              flinter/output/lib
+LIBRARYPATH = thirdparty/staging/lib
 
 # Installing related
 DESTDIR =

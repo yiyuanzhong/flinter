@@ -89,52 +89,41 @@ static int charset_iconv(const F &input,
 
 } // anonymous namespace
 
-int charset_utf8_to_wide(const std::string &utf, std::wstring *wide)
-{
-    return charset_iconv(utf, wide, "UTF-8", "WCHAR_T");
-}
-
-int charset_wide_to_utf8(const std::wstring &wide, std::string *utf)
-{
-    return charset_iconv(wide, utf, "WCHAR_T", "UTF-8");
-}
-
-int charset_gbk_to_wide(const std::string &gbk, std::wstring *wide)
-{
-    return charset_iconv(gbk, wide, "GBK", "WCHAR_T");
-}
-
-int charset_wide_to_gbk(const std::wstring &wide, std::string *gbk)
-{
-    return charset_iconv(wide, gbk, "WCHAR_T", "GBK");
-}
-
 #define CHARSET(f,t,ef,et) \
 int charset_##f##_to_##t(const std::string &from, std::string *to) \
 { \
     return charset_iconv(from, to, ef, et); \
 }
 
-#define CHARSET_I(f,t,ef,et) \
-int charset_##f##_to_##t(const std::vector<int32_t> &from, std::string *to) \
+#define CHARSET_I(tp,f,t,ef,et) \
+int charset_##f##_to_##t(const std::basic_string<tp> &from, std::string *to) \
 { \
     return charset_iconv(from, to, ef, et); \
 }
 
-#define CHARSET_O(f,t,ef,et) \
-int charset_##f##_to_##t(const std::string &from, std::vector<int32_t> *to) \
+#define CHARSET_O(tp,f,t,ef,et) \
+int charset_##f##_to_##t(const std::string &from, std::basic_string<tp> *to) \
 { \
     return charset_iconv(from, to, ef, et); \
 }
 
-CHARSET(utf8,    gbk,     "UTF-8",          "GBK");
-CHARSET(gbk,     utf8,    "GBK",            "UTF-8");
-CHARSET(utf8,    gb18030, "UTF-8",          "GB18030");
-CHARSET(gb18030, utf8,    "GB18030",        "UTF-8");
+#define CHARSET_IO(tp1,tp2,f,t,ef,et) \
+int charset_##f##_to_##t(const std::basic_string<tp1> &from, std::basic_string<tp2> *to) \
+{ \
+    return charset_iconv(from, to, ef, et); \
+}
 
-CHARSET_O(utf8,  cp,      "UTF-8",          "UCS-4-INTERNAL");
-CHARSET_I(cp,    utf8,    "UCS-4-INTERNAL", "UTF-8");
-CHARSET_O(gbk,   cp,      "GBK",            "UCS-4-INTERNAL");
-CHARSET_I(cp,    gbk,     "UCS-4-INTERNAL", "GBK");
+CHARSET(utf8,    gbk,     "UTF-8",   "GBK"    );
+CHARSET(gbk,     utf8,    "GBK",     "UTF-8"  );
+CHARSET(utf8,    gb18030, "UTF-8",   "GB18030");
+CHARSET(gb18030, utf8,    "GB18030", "UTF-8"  );
+
+CHARSET_O(uint16_t, utf8,  utf16, "UTF-8", "UCS-2-INTERNAL");
+CHARSET_O(uint32_t, utf8,  utf32, "UTF-8", "UCS-4-INTERNAL");
+CHARSET_I(uint16_t, utf16, utf8,  "UCS-2-INTERNAL", "UTF-8");
+CHARSET_I(uint32_t, utf32, utf8,  "UCS-4-INTERNAL", "UTF-8");
+
+CHARSET_IO(uint16_t, uint32_t, utf16, utf32, "UCS-2-INTERNAL", "UCS-4-INTERNAL");
+CHARSET_IO(uint32_t, uint16_t, utf32, utf16, "UCS-4-INTERNAL", "UCS-2-INTERNAL");
 
 } // namespace flinter

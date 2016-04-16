@@ -24,12 +24,24 @@ namespace flinter {
 
 class SslPeer {
 public:
-    SslPeer(const std::string &subject_name,
+    SslPeer(const std::string &version,
+            const std::string &cipher)
+            : _serial_number(0)
+            , _version(version)
+            , _cipher(cipher)
+            , _certificate(false) {}
+
+    SslPeer(const std::string &version,
+            const std::string &cipher,
+            const std::string &subject_name,
             const std::string &issuer_name,
             uint64_t serial_number)
             : _subject_name(subject_name)
             , _issuer_name(issuer_name)
-            , _serial_number(serial_number) {}
+            , _serial_number(serial_number)
+            , _version(version)
+            , _cipher(cipher)
+            , _certificate(true) {}
 
     const std::string &subject_name() const
     {
@@ -46,10 +58,28 @@ public:
         return _serial_number;
     }
 
+    const std::string &version() const
+    {
+        return _version;
+    }
+
+    const std::string &cipher() const
+    {
+        return _cipher;
+    }
+
+    bool certificate() const
+    {
+        return _certificate;
+    }
+
 private:
     std::string _subject_name;
     std::string _issuer_name;
     uint64_t _serial_number;
+    std::string _version;
+    std::string _cipher;
+    bool _certificate;
 
 }; // class SslPeer
 

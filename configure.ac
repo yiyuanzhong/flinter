@@ -44,6 +44,14 @@ AC_ARG_ENABLE([debug],
 
 AM_CONDITIONAL([ENABLE_DEBUG], [test x"${enable_debug}" = x"yes"])
 
+# GMP, MPFR and MPC
+AC_ARG_WITH([multiprecision],
+            [AC_HELP_STRING([--without-multiprecision],
+                            [enable multiprecision libraries [default=yes]])])
+
+AM_CONDITIONAL([WITH_MULTIPRECISION], [test x"${with_multiprecision}" != x"no"])
+AS_IF([test x"${with_multiprecision}" != x"no"], [AC_CHECK_HEADERS([gmp.h])])
+
 # OpenSSL
 AC_ARG_WITH([openssl],
             [AC_HELP_STRING([--without-openssl],
@@ -94,8 +102,7 @@ AC_ARG_WITH([icu],
 
 AM_CONDITIONAL([WITH_ICU], [test x"${with_icu}" != x"no"])
 AS_IF([test x"${with_icu}" != x"no"],
-      [PKG_CHECK_MODULES([icu], [icu-uc])],
-      [AC_SEARCH_LIBS([libiconv], [iconv])])
+      [PKG_CHECK_MODULES([icu], [icu-uc])])
 
 # libzookeeper
 AC_ARG_WITH([zookeeper],

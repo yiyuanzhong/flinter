@@ -53,6 +53,17 @@ private:
     std::set<std::string> _methods;
 }; // class AllowedMethodsFilter
 
+// Only allow given content type, like "text/plain", regardless of charset.
+class AllowedContentTypeFilter : public Filter {
+public:
+    explicit AllowedContentTypeFilter(const std::string &allowed)
+            : _allowed(allowed) {}
+    virtual ~AllowedContentTypeFilter() {}
+    virtual Result Process(CGI *cgi);
+private:
+    std::string _allowed;
+}; // class AllowedContentTypeFilter
+
 // Deny given methods and allow all others.
 class DeniedMethodsFilter : public Filter {
 public:

@@ -93,4 +93,18 @@ Filter::Result DeniedMethodsFilter::Process(CGI *cgi)
     return kResultPass;
 }
 
+Filter::Result AllowedContentTypeFilter::Process(CGI *cgi)
+{
+    const size_t alen = _allowed.length();
+    const std::string &t = cgi->_SERVER["CONTENT_TYPE"];
+    if (t.length() < alen                                       ||
+        (t.length() > alen && t[alen] != ';')                   ||
+        t.substr(0, _allowed.length()).compare(_allowed)        ){
+
+        throw HttpException(400);
+    }
+
+    return kResultPass;
+}
+
 } // namespace flinter

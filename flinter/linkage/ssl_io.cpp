@@ -190,12 +190,15 @@ AbstractIo::Status SslIo::Read(void *buffer,
 bool SslIo::OnHandshaked()
 {
     int fd = _i->fd();
-    CLOG.Verbose("Linkage: SSL handshaked with cipher [%s] for fd = %d",
-                 SSL_get_cipher(_ssl), fd);
+    std::string version = SSL_get_version(_ssl);
+    std::string cipher = SSL_get_cipher_name(_ssl);
+    CLOG.Verbose("Linkage: SSL handshaked with [%s/%s] for fd = %d",
+                 version.c_str(), cipher.c_str(), fd);
 
     X509 *x509 = SSL_get_peer_certificate(_ssl);
     if (!x509) {
         CLOG.Verbose("Linkage: no peer certificate for fd = %d", fd);
+        _peer = new SslPeer(version, cipher);
         return true;
     }
 
@@ -218,11 +221,9 @@ bool SslIo::OnHandshaked()
                 X509_get_serialNumber(x509)));
 
     X509_free(x509);
-    if (_peer) {
-        delete _peer;
-    }
+    _peer = new SslPeer(version, cipher,
+                        subject_name, issuer_name, serial_number);
 
-    _peer = new SslPeer(subject_name, issuer_name, serial_number);
     return true;
 }
 

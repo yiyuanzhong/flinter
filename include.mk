@@ -211,6 +211,11 @@ endif
 CFLAGS_ALL += $(foreach path,$(filter-out thirdparty/%,$(SEARCHPATH)),-I$(MODULEROOT)/$(path))
 CFLAGS_ALL += $(foreach path,$(filter thirdparty/%,$(SEARCHPATH)),-isystem$(MODULEROOT)/$(path))
 
+# Special treatment for `libhugetlbfs` in `thirdparty`.
+ifneq ($(wildcard $(MODULEROOT)/thirdparty/staging/share/libhugetlbfs/ld),)
+LDFLAGS_ALL += -B $(MODULEROOT)/thirdparty/staging/share/libhugetlbfs
+endif
+
 ifeq ($(strip $(EnableProfiling)),1)
 CFLAGS_DBG += -pg
 LDFLAGS_DBG += -pg
