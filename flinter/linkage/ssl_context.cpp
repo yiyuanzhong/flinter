@@ -347,6 +347,21 @@ bool SslContext::SetSessionTimeout(int seconds)
     return true;
 }
 
+bool SslContext::SetAllowTlsTicket(bool allow)
+{
+    if (!Initialize()) {
+        return false;
+    }
+
+    if (allow) {
+        SSL_CTX_clear_options(_context, SSL_OP_NO_TICKET);
+    } else {
+        SSL_CTX_set_options(_context, SSL_OP_NO_TICKET);
+    }
+
+    return true;
+}
+
 } // namespace flinter
 
 #endif // HAVE_OPENSSL_OPENSSLV_H

@@ -138,18 +138,27 @@ bool LinkageWorker::RegisterTimer(int64_t interval,
                                   Runnable *runnable,
                                   bool auto_release)
 {
-    if (!interval || !runnable) {
+    return RegisterTimer(interval, interval, runnable, auto_release);
+}
+
+bool LinkageWorker::RegisterTimer(int64_t after,
+                                  int64_t repeat,
+                                  Runnable *runnable,
+                                  bool auto_release)
+{
+    if (after < 0 || repeat <= 0 || !runnable) {
         return false;
     }
 
-    double i = static_cast<double>(interval) / 1000000000;
+    double r = static_cast<double>(repeat) / 1000000000;
+    double a = static_cast<double>(after) / 1000000000;
     struct timer_t *timer = new struct timer_t;
     struct ev_timer *t = &timer->ev_timer;
-    ev_timer_init(t, timer_cb, i, i);
     timer->auto_release = auto_release;
     timer->runnable = runnable;
     _timers.insert(timer);
 
+    ev_timer_init(t, timer_cb, a, r);
     ev_timer_start(_loop, &timer->ev_timer);
     return true;
 }

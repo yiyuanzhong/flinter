@@ -224,6 +224,34 @@ private:
 
 }; // class EasyServer::JobWorker::Job
 
+class EasyServer::RegisterTimerJob : public Runnable {
+public:
+    RegisterTimerJob(EasyServer *easy_server,
+                     int thread_id,
+                     int64_t after,
+                     int64_t repeat,
+                     Runnable *timer) : _easy_server(easy_server)
+                                      , _thread_id(thread_id)
+                                      , _after(after)
+                                      , _repeat(repeat)
+                                      , _timer(timer) {}
+
+    virtual ~RegisterTimerJob() {}
+    virtual bool Run()
+    {
+        _easy_server->DoRealRegisterTimer(_thread_id, _after, _repeat, _timer);
+        return true;
+    }
+
+private:
+    EasyServer *const _easy_server;
+    const int _thread_id;
+    const int64_t _after;
+    const int64_t _repeat;
+    Runnable *const _timer;
+
+}; // class EasyServer::RegisterTimerJob
+
 class EasyServer::DisconnectJob : public Runnable {
 public:
     DisconnectJob(EasyServer *easy_server,
@@ -555,23 +583,36 @@ bool EasyServer::SslListen(uint16_t port,
 
 bool EasyServer::RegisterTimer(int64_t interval, Runnable *timer)
 {
-    if (interval <= 0 || !timer) {
+    return RegisterTimer(interval, interval, timer);
+}
+
+bool EasyServer::RegisterTimer(int64_t after, int64_t repeat, Runnable *timer)
+{
+    if (after < 0 || repeat <= 0 || !timer) {
         return false;
     }
 
+    int64_t tid = get_current_thread_id();
     MutexLocker locker(_mutex);
     if (_io_workers.empty()) {
-        _timers.push_back(std::make_pair(timer, interval));
+        _timers.push_back(std::make_pair(timer, std::make_pair(after, repeat)));
         return true;
     }
 
-    LinkageWorker *worker = GetIoWorker(-1);
-    if (!worker->RegisterTimer(interval, timer, true)) {
-        LOG(ERROR) << "EasyServer: failed to register timer.";
-        return false;
+    int id;
+    LinkageWorker *worker = GetIoWorker(-1, &id);
+    if (tid > 0 && tid == worker->running_thread_id()) {
+        locker.Unlock();
+        if (!worker->RegisterTimer(after, repeat, timer, true)) {
+            LOG(ERROR) << "EasyServer: failed to register timer.";
+            return false;
+        }
+
+        return true;
     }
 
-    return true;
+    Runnable *job = new RegisterTimerJob(this, id, after, repeat, timer);
+    return worker->SendCommand(job);
 }
 
 bool EasyServer::Initialize(size_t slots,
@@ -623,11 +664,11 @@ bool EasyServer::Initialize(size_t slots,
         }
     }
 
-    for (std::list<std::pair<Runnable *, int64_t> >::iterator
+    for (std::list<std::pair<Runnable *, std::pair<int64_t, int64_t> > >::iterator
          p = _timers.begin(); p != _timers.end();) {
 
         LinkageWorker *worker = GetIoWorker(-1);
-        if (!worker->RegisterTimer(p->second, p->first, true)) {
+        if (!worker->RegisterTimer(p->second.first, p->second.second, p->first, true)) {
             LOG(ERROR) << "EasyServer: failed to initialize timers.";
             DoShutdown(&locker);
             return false;
@@ -696,7 +737,7 @@ bool EasyServer::DoShutdown(MutexLocker *locker)
         delete p->second;
     }
 
-    for (std::list<std::pair<Runnable *, int64_t> >::iterator
+    for (std::list<std::pair<Runnable *, std::pair<int64_t, int64_t> > >::iterator
          p = _timers.begin(); p != _timers.end(); ++p) {
 
         delete p->first;
@@ -928,13 +969,25 @@ bool EasyServer::Disconnect(channel_t channel, bool finish_write)
         return ret >= 0;
     }
 
-    DisconnectJob *job = new DisconnectJob(this, channel, finish_write);
+    Runnable *job = new DisconnectJob(this, channel, finish_write);
     return worker->SendCommand(job);
 }
 
 bool EasyServer::Disconnect(const EasyContext &context, bool finish_write)
 {
     return Disconnect(context.channel(), finish_write);
+}
+
+void EasyServer::DoRealRegisterTimer(int thread_id,
+                                     int64_t after,
+                                     int64_t repeat,
+                                     Runnable *timer)
+{
+    MutexLocker locker(_mutex);
+    LinkageWorker *worker = GetIoWorker(thread_id);
+    if (!worker->RegisterTimer(after, repeat, timer, true)) {
+        LOG(ERROR) << "EasyServer: failed to register timer.";
+    }
 }
 
 void EasyServer::DoRealDisconnect(channel_t channel, bool finish_write)
@@ -1015,7 +1068,7 @@ bool EasyServer::Send(channel_t channel, const void *buffer, size_t length)
         return true;
     }
 
-    SendJob *job = new SendJob(this, worker, channel, buffer, length);
+    Runnable *job = new SendJob(this, worker, channel, buffer, length);
     return worker->SendCommand(job);
 }
 
@@ -1024,7 +1077,8 @@ bool EasyServer::Send(const EasyContext &context, const void *buffer, size_t len
     return Send(context.channel(), buffer, length);
 }
 
-EasyServer::ProxyLinkageWorker *EasyServer::GetIoWorker(int thread_id) const
+EasyServer::ProxyLinkageWorker *EasyServer::GetIoWorker(int thread_id,
+                                                        int *actual_id) const
 {
     std::list<ProxyLinkageWorker *>::const_iterator p = _io_workers.begin();
 
@@ -1035,6 +1089,10 @@ EasyServer::ProxyLinkageWorker *EasyServer::GetIoWorker(int thread_id) const
 
     if (r) {
         std::advance(p, r);
+    }
+
+    if (actual_id) {
+        *actual_id = r;
     }
 
     return *p;

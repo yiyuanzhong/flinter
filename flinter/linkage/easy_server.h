@@ -70,6 +70,11 @@ public:
     /// @param timer will be released after executed.
     bool RegisterTimer(int64_t interval, Runnable *timer);
 
+    /// @param after nanoseconds.
+    /// @param repeat nanoseconds.
+    /// @param timer will be released after executed.
+    bool RegisterTimer(int64_t after, int64_t repeat, Runnable *timer);
+
     /// Call before Initialize().
     /// @param easy_handler life span NOT taken, keep it valid.
     bool Listen(uint16_t port, EasyHandler *easy_handler);
@@ -172,6 +177,7 @@ public:
 private:
     class OutgoingInformation;
     class ProxyLinkageWorker;
+    class RegisterTimerJob;
     class ProxyListener;
     class DisconnectJob;
     class ProxyLinkage;
@@ -218,7 +224,9 @@ private:
                             SslContext *ssl,
                             int thread_id);
 
-    ProxyLinkageWorker *GetIoWorker(int thread_id) const;
+    // thread_id can be out of range so a random one is picked.
+    ProxyLinkageWorker *GetIoWorker(int thread_id,
+                                    int *actual_id = NULL) const;
 
     ProxyLinkage *DoReconnect(ProxyLinkageWorker *worker,
                               channel_t channel,
@@ -231,13 +239,18 @@ private:
                     const void *buffer,
                     size_t length);
 
+    void DoRealRegisterTimer(int thread_id,
+                             int64_t after,
+                             int64_t repeat,
+                             Runnable *timer);
+
     static const Configure kDefaultConfigure;
 
     typedef std::unordered_map<channel_t, OutgoingInformation *> outgoing_map_t;
     typedef std::unordered_map<channel_t, ProxyLinkage *> channel_map_t;
     typedef std::unordered_map<channel_t, ProxyHandler *> connect_map_t;
 
-    std::list<std::pair<Runnable *, int64_t> > _timers;
+    std::list<std::pair<Runnable *, std::pair<int64_t, int64_t> > > _timers;
     std::list<ProxyHandler *> _listen_proxy_handlers;
     std::list<ProxyLinkageWorker *> _io_workers;
     connect_map_t _connect_proxy_handlers;

@@ -24,18 +24,39 @@ class Decimal {
 public:
     Decimal();
     ~Decimal();
+
+    enum Rounding {
+        kRoundingTiesToEven             , // Best accuracy
+        kRoundingTiesAwayFromZero       , // Round up
+        kRoundingTowardsZero            , // Truncate
+        kRoundingTowardsPositiveInfinity, // Ceil
+        kRoundingTowardsNegativeInfinity, // Floor
+    };
+
+    // Always pass in valid strings or you crash.
     /* explicit */Decimal(const std::string &s);
+
+    // Always pass in valid strings or you crash.
+    /* explicit */Decimal(const char *s);
+
     /* explicit */Decimal(unsigned long long s);
     /* explicit */Decimal(unsigned short s);
     /* explicit */Decimal(unsigned char s);
     /* explicit */Decimal(unsigned long s);
     /* explicit */Decimal(unsigned int s);
-    /* explicit */Decimal(const char *s);
     /* explicit */Decimal(long long s);
     /* explicit */Decimal(short s);
     /* explicit */Decimal(char s);
     /* explicit */Decimal(long s);
     /* explicit */Decimal(int s);
+
+    // When str() doesn't specify scale, or you're using / operator.
+    void set_default_scale(int default_scale);
+    int default_scale() const;
+
+    // When str() or you're using / operator.
+    void set_default_rounding(const Rounding &default_rounding);
+    const Rounding &default_rounding() const;
 
     bool Parse(const std::string &s);
     std::string str(int scale = -1) const;
@@ -43,7 +64,8 @@ public:
     /// @retval <0 result is lesser than actual value.
     /// @retval  0 result is exact.
     /// @retval >0 result is greater than actual value.
-    int Serialize(std::string *s, int scale) const;
+    int Serialize(std::string *s, int scale,
+                  const Rounding &rounding = kRoundingTiesToEven) const;
 
     bool zero() const;
     bool positive() const;
@@ -56,7 +78,8 @@ public:
     /// @retval <0 result is lesser than actual value.
     /// @retval  0 result is exact.
     /// @retval >0 result is greater than actual value.
-    int Div(const Decimal &o, int scale);
+    int Div(const Decimal &o, int scale,
+            const Rounding &rounding = kRoundingTiesToEven);
 
     Decimal &operator += (const Decimal &o);
     Decimal &operator -= (const Decimal &o);
@@ -81,16 +104,13 @@ public:
     int scale() const;
 
 protected:
-    /// @retval <0 truncate
-    /// @retval  0 exact
-    /// @retval >0 round
-    static int TestRoundingTiesToEven(char last, const char *tail);
     static void PrintOne(std::string *s, bool negative, int scale);
     static void PrintZero(std::string *s, int scale);
 
-    int SerializeWithTruncating(std::string *s, int scale) const;
+    int SerializeWithRounding(std::string *s, int scale,
+                              const Rounding &rounding) const;
+
     int SerializeWithAppending(std::string *s, int scale) const;
-    int SerializeWithRounding(std::string *s, int scale) const;
     void Upscale(int s);
     void Cleanup();
 

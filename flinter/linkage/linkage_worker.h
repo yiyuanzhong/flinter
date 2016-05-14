@@ -45,8 +45,17 @@ public:
 
     // Methods below can be called from another thread.
 
+    /// @param after in nanoseconds.
+    /// @param repeat in nanoseconds.
+    bool RegisterTimer(int64_t after,
+                       int64_t repeat,
+                       Runnable *runnable,
+                       bool auto_release);
+
     /// @param interval in nanoseconds.
-    bool RegisterTimer(int64_t interval, Runnable *runnable, bool auto_release);
+    bool RegisterTimer(int64_t interval,
+                       Runnable *runnable,
+                       bool auto_release);
 
     /// @param command runs in the thread of worker asynchronously,
     ///                auto released when done.

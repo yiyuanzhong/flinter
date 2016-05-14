@@ -477,8 +477,16 @@ TEST(DecimalTest, TestArithmeticOperators)
     EXPECT_EQ(n.scale(), 2);
     EXPECT_TRUE(n == "-8.91");
     n /= 4;
-    EXPECT_EQ(n, "-2.23");
-    EXPECT_EQ(n.scale(), 2);
+    EXPECT_EQ(n, "-2.2275");
+    EXPECT_EQ(n.scale(), 4);
+    n /= 29;
+
+    // -0.07681034482... -> -0.076810 -> -0.76810
+    EXPECT_EQ(n, "-0.07681");
+    EXPECT_EQ(n.scale(), 5);
+    n /= 3;
+    EXPECT_EQ(n, "-0.025603");
+    EXPECT_EQ(n.scale(), 6);
 }
 
 TEST(DecimalTest, TestArithmeticOperators2)
@@ -512,4 +520,193 @@ TEST(DecimalTest, TestCleanup)
     n.Div(1, 5);
     EXPECT_EQ(n, "3.715");
     EXPECT_EQ(n.scale(), 3);
+}
+
+TEST(DecimalTest, TestSelf)
+{
+    flinter::Decimal a;
+    flinter::Decimal b;
+    a = 3;
+    b = a - a;
+    EXPECT_EQ(b, "0");
+    b = a / a;
+    EXPECT_EQ(b, "1");
+}
+
+TEST(DecimalTest, TestCompare)
+{
+    flinter::Decimal a("130.5");
+    flinter::Decimal b("134.0");
+    flinter::Decimal c("134");
+    EXPECT_LT(a, b);
+    EXPECT_GT(b, a);
+    EXPECT_NE(a, b);
+    EXPECT_EQ(b, c);
+    EXPECT_LE(a, c);
+    EXPECT_GE(c, a);
+    EXPECT_EQ(a, a);
+    EXPECT_LE(a, a);
+    EXPECT_GE(a, a);
+}
+
+TEST(DecimalTest, TestDefaultScale)
+{
+    flinter::Decimal a("3.5");
+    flinter::Decimal b;
+
+    EXPECT_EQ(a, "3.5");
+    b = a / 3;
+    EXPECT_EQ(b, "1.166667");
+    EXPECT_EQ(a.str(), "3.5");
+
+    a.set_default_scale(3);
+    EXPECT_EQ(a, "3.5");
+    b = a / 3;
+    EXPECT_EQ(b, "1.167");
+    EXPECT_EQ(a.str(), "3.500");
+}
+
+TEST(DecimalTest, TestPriority)
+{
+    flinter::Decimal a(3);
+    flinter::Decimal b(2);
+    flinter::Decimal c(5);
+    flinter::Decimal d(7);
+    flinter::Decimal e = a + b * (c - d);
+    EXPECT_EQ(e, "-1");
+}
+
+#define R(r,p,i,o) \
+    a.Parse((i)); \
+    EXPECT_##p(a.Serialize(&s, 0, (r)), 0); \
+    EXPECT_EQ(s, (o));
+
+TEST(DecimalTest, TestRounding1)
+{
+    std::string s;
+    flinter::Decimal a;
+    const flinter::Decimal::Rounding r =
+            flinter::Decimal::kRoundingTiesToEven;
+
+    R(r, GT, "11.50",   "12");
+    R(r, LT, "12.50",   "12");
+    R(r, LT, "-11.50",  "-12");
+    R(r, GT, "-12.50",  "-12");
+
+    R(r, EQ, "11.00",   "11");
+    R(r, EQ, "-11.00",  "-11");
+
+    R(r, LT, "11.01",   "11");
+    R(r, GT, "-11.01",  "-11");
+    R(r, LT, "11.49",   "11");
+    R(r, GT, "-11.49",  "-11");
+
+    R(r, GT, "11.51",   "12");
+    R(r, LT, "-11.51",  "-12");
+    R(r, GT, "11.99",   "12");
+    R(r, LT, "-11.99",  "-12");
+}
+
+TEST(DecimalTest, TestRounding2)
+{
+    std::string s;
+    flinter::Decimal a;
+    const flinter::Decimal::Rounding r =
+            flinter::Decimal::kRoundingTiesAwayFromZero;
+
+    R(r, GT, "11.50",   "12");
+    R(r, GT, "12.50",   "13");
+    R(r, LT, "-11.50",  "-12");
+    R(r, LT, "-12.50",  "-13");
+
+    R(r, EQ, "11.00",   "11");
+    R(r, EQ, "-11.00",  "-11");
+
+    R(r, LT, "11.01",   "11");
+    R(r, GT, "-11.01",  "-11");
+    R(r, LT, "11.49",   "11");
+    R(r, GT, "-11.49",  "-11");
+
+    R(r, GT, "11.51",   "12");
+    R(r, LT, "-11.51",  "-12");
+    R(r, GT, "11.99",   "12");
+    R(r, LT, "-11.99",  "-12");
+}
+
+TEST(DecimalTest, TestRounding3)
+{
+    std::string s;
+    flinter::Decimal a;
+    const flinter::Decimal::Rounding r =
+            flinter::Decimal::kRoundingTowardsZero;
+
+    R(r, LT, "11.50",   "11");
+    R(r, LT, "12.50",   "12");
+    R(r, GT, "-11.50",  "-11");
+    R(r, GT, "-12.50",  "-12");
+
+    R(r, EQ, "11.00",   "11");
+    R(r, EQ, "-11.00",  "-11");
+
+    R(r, LT, "11.01",   "11");
+    R(r, GT, "-11.01",  "-11");
+    R(r, LT, "11.49",   "11");
+    R(r, GT, "-11.49",  "-11");
+
+    R(r, LT, "11.51",   "11");
+    R(r, GT, "-11.51",  "-11");
+    R(r, LT, "11.99",   "11");
+    R(r, GT, "-11.99",  "-11");
+}
+
+TEST(DecimalTest, TestRounding4)
+{
+    std::string s;
+    flinter::Decimal a;
+    const flinter::Decimal::Rounding r =
+            flinter::Decimal::kRoundingTowardsPositiveInfinity;
+
+    R(r, GT, "11.50",   "12");
+    R(r, GT, "12.50",   "13");
+    R(r, GT, "-11.50",  "-11");
+    R(r, GT, "-12.50",  "-12");
+
+    R(r, EQ, "11.00",   "11");
+    R(r, EQ, "-11.00",  "-11");
+
+    R(r, GT, "11.01",   "12");
+    R(r, GT, "-11.01",  "-11");
+    R(r, GT, "11.49",   "12");
+    R(r, GT, "-11.49",  "-11");
+
+    R(r, GT, "11.51",   "12");
+    R(r, GT, "-11.51",  "-11");
+    R(r, GT, "11.99",   "12");
+    R(r, GT, "-11.99",  "-11");
+}
+
+TEST(DecimalTest, TestRounding5)
+{
+    std::string s;
+    flinter::Decimal a;
+    const flinter::Decimal::Rounding r =
+            flinter::Decimal::kRoundingTowardsNegativeInfinity;
+
+    R(r, LT, "11.50",   "11");
+    R(r, LT, "12.50",   "12");
+    R(r, LT, "-11.50",  "-12");
+    R(r, LT, "-12.50",  "-13");
+
+    R(r, EQ, "11.00",   "11");
+    R(r, EQ, "-11.00",  "-11");
+
+    R(r, LT, "11.01",   "11");
+    R(r, LT, "-11.01",  "-12");
+    R(r, LT, "11.49",   "11");
+    R(r, LT, "-11.49",  "-12");
+
+    R(r, LT, "11.51",   "11");
+    R(r, LT, "-11.51",  "-12");
+    R(r, LT, "11.99",   "11");
+    R(r, LT, "-11.99",  "-12");
 }

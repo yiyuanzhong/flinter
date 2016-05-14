@@ -193,6 +193,10 @@ int Linkage::OnEvent(LinkageWorker *worker,
         action = next_action;
     }
 
+    if (_action == AbstractIo::kActionNone) {
+        worker->SetWanna(this, true, !!GetSendingBufferSize());
+    }
+
     return ret;
 }
 
@@ -209,7 +213,6 @@ int Linkage::OnEventOnce(LinkageWorker *worker,
         status = _io->Read(buffer, sizeof(buffer), &retlen, &more);
         if (status == AbstractIo::kStatusOk) {
             _action = AbstractIo::kActionNone;
-            worker->SetWannaRead(this, true);
             int ret = OnReceived(buffer, retlen);
             if (ret == 0) {
                 *next_action = AbstractIo::kActionShutdown;
@@ -243,7 +246,6 @@ int Linkage::OnEventOnce(LinkageWorker *worker,
                                  "bytes for fd = %d", length, retlen, peer()->fd());
 
                     assert(GetSendingBufferSize());
-                    worker->SetWannaWrite(this, true);
                     return 1;
 
                 } else {
@@ -251,10 +253,6 @@ int Linkage::OnEventOnce(LinkageWorker *worker,
                     ConsumeSendingBuffer(length);
                     CLOG.Verbose("Linkage: dequeued [%lu] bytes and sent [%lu] "
                                  "bytes for fd = %d", length, retlen, peer()->fd());
-
-                    if (!GetSendingBufferSize()) {
-                        worker->SetWannaWrite(this, false);
-                    }
 
                     return 1;
                 }
@@ -268,22 +266,25 @@ int Linkage::OnEventOnce(LinkageWorker *worker,
 
         } else if (_graceful) { // Finished writing.
             *next_action = AbstractIo::kActionShutdown;
+            _action = AbstractIo::kActionNone;
             return 1;
 
         } else { // Nothing to write for now.
-            worker->SetWannaWrite(this, false);
+            _action = AbstractIo::kActionNone;
             return 1;
         }
 
     } else if (action == AbstractIo::kActionAccept) {
         status = _io->Accept();
         if (status == AbstractIo::kStatusOk) {
+            _action = AbstractIo::kActionNone;
             return DoConnected() ? 1 : -1;
         }
 
     } else if (action == AbstractIo::kActionConnect) {
         status = _io->Connect();
         if (status == AbstractIo::kStatusOk) {
+            _action = AbstractIo::kActionNone;
             return DoConnected() ? 1 : -1;
         }
 
@@ -291,6 +292,7 @@ int Linkage::OnEventOnce(LinkageWorker *worker,
         int ret = Shutdown(&status);
         if (ret <= 0) {
             // In case that I'm not called by I/O engine, enable reading.
+            _action = AbstractIo::kActionNone;
             worker->SetWannaRead(this, true);
             return ret;
         }

@@ -24,29 +24,21 @@
 #include <stdexcept>
 
 namespace flinter {
-namespace {
-static int IncreaseByOne(mpz_t &q)
-{
-    if (mpz_sgn(q) > 0) {
-        mpz_add_ui(q, q, 1);
-        return 1;
-    } else {
-        mpz_sub_ui(q, q, 1);
-        return -1;
-    }
-}
-} // anonymous namespace
 
 class Decimal::Context {
 public:
     mpz_t _v;
     int _scale;
+    int _dscale; // Scale for operator / and str(-1)
+    Rounding _rounding;
 
 }; // class Decimal::Context
 
 Decimal::Decimal() : _context(new Context)
 {
     mpz_init(_context->_v);
+    _context->_rounding = kRoundingTiesToEven;
+    _context->_dscale = -1;
     _context->_scale = 0;
 }
 
@@ -59,7 +51,22 @@ Decimal::~Decimal()
 Decimal::Decimal(const Decimal &o) : _context(new Context)
 {
     mpz_init_set(_context->_v, o._context->_v);
+    _context->_rounding = kRoundingTiesToEven;
+    _context->_dscale = o._context->_dscale;
     _context->_scale = o._context->_scale;
+}
+
+Decimal &Decimal::operator = (const Decimal &o)
+{
+    if (this == &o) {
+        return *this;
+    }
+
+    _context->_rounding = kRoundingTiesToEven;
+    _context->_dscale = o._context->_dscale;
+    _context->_scale = o._context->_scale;
+    mpz_set(_context->_v, o._context->_v);
+    return *this;
 }
 
 Decimal::Decimal(const std::string &s) : _context(new Context)
@@ -68,14 +75,19 @@ Decimal::Decimal(const std::string &s) : _context(new Context)
     if (!Parse(s)) {
         throw std::invalid_argument("invalid decimal string");
     }
+
+    _context->_rounding = kRoundingTiesToEven;
+    _context->_dscale = -1;
 }
 
 Decimal::Decimal(const char *s) : _context(new Context)
 {
-    mpz_init(_context->_v);
-    if (!Parse(s)) {
+    if (!s || !*s || !(mpz_init(_context->_v), Parse(s))) {
         throw std::invalid_argument("invalid decimal string");
     }
+
+    _context->_rounding = kRoundingTiesToEven;
+    _context->_dscale = -1;
 }
 
 #define D(t) \
@@ -88,6 +100,8 @@ Decimal::Decimal(unsigned t s) : _context(new Context) \
         o << s; \
         mpz_init_set_str(_context->_v, o.str().c_str(), 10); \
     } \
+    _context->_rounding = kRoundingTiesToEven; \
+    _context->_dscale = -1; \
     _context->_scale = 0; \
 } \
 Decimal::Decimal(t s) : _context(new Context) \
@@ -99,6 +113,8 @@ Decimal::Decimal(t s) : _context(new Context) \
         o << s; \
         mpz_init_set_str(_context->_v, o.str().c_str(), 10); \
     } \
+    _context->_rounding = kRoundingTiesToEven; \
+    _context->_dscale = -1; \
     _context->_scale = 0; \
 }
 
@@ -178,13 +194,14 @@ bool Decimal::Parse(const std::string &s)
 std::string Decimal::str(int scale) const
 {
     std::string s;
-    Serialize(&s, scale);
+    Serialize(&s, scale >= 0 ? scale : _context->_dscale, _context->_rounding);
     return s;
 }
 
-int Decimal::Serialize(std::string *s, int scale) const
+int Decimal::Serialize(std::string *s, int scale,
+                       const Rounding &rounding) const
 {
-    if (scale < 0 && mpz_sgn(_context->_v) == 0) {
+    if (scale < 0 && mpz_cmp_ui(_context->_v, 0) == 0) {
         PrintZero(s, 0);
         return 0;
     }
@@ -194,68 +211,7 @@ int Decimal::Serialize(std::string *s, int scale) const
     if (extra >= 0) {
         return SerializeWithAppending(s, ns);
     } else {
-        return SerializeWithRounding(s, ns);
-    }
-}
-
-int Decimal::SerializeWithTruncating(std::string *s, int scale) const
-{
-    assert(scale >= 0);
-    const int extra = scale - _context->_scale;
-    assert(extra < 0);
-
-    size_t len = mpz_sizeinbase(_context->_v, 10);
-    if (static_cast<size_t>(-extra) >= len) {
-        PrintZero(s, scale);
-        return -mpz_sgn(_context->_v);
-    }
-
-    s->resize(len + 2);
-    if (!mpz_get_str(&(*s)[0], 10, _context->_v)) {
-        throw std::runtime_error("failed to call mpz_get_str()");
-    }
-
-    len = strlen(s->c_str());
-    len -= static_cast<size_t>(-extra);
-
-    bool all_zero = true;
-    for (const char *p = s->c_str() + len; *p; ++p) {
-        if (*p != '0') {
-            all_zero = false;
-            break;
-        }
-    }
-
-    s->resize(len);
-    std::string::iterator p = s->begin();
-    if (*p == '-') {
-        ++p;
-        --len;
-    }
-
-    int cscale = _context->_scale - -extra;
-    if (cscale > 0) {
-        if (static_cast<size_t>(cscale) >= len) {
-            size_t more = static_cast<size_t>(cscale) - len;
-            s->insert(p, more + 2, '0');
-            // Now p is gone, calculate again.
-            p = s->begin();
-            if (*p == '-') {
-                *(p + 2) = '.';
-            } else {
-                *(p + 1) = '.';
-            }
-
-        } else {
-            ssize_t pos = static_cast<ssize_t>(len) - cscale;
-            s->insert(p + pos, '.');
-        }
-    }
-
-    if (all_zero) {
-        return 0;
-    } else {
-        return -mpz_sgn(_context->_v);
+        return SerializeWithRounding(s, ns, rounding);
     }
 }
 
@@ -306,63 +262,15 @@ int Decimal::SerializeWithAppending(std::string *s, int scale) const
     return 0;
 }
 
-int Decimal::SerializeWithRounding(std::string *s, int scale) const
+int Decimal::SerializeWithRounding(std::string *s, int scale,
+                                   const Rounding &rounding) const
 {
     assert(scale >= 0);
-    const int extra = scale - _context->_scale;
-    assert(extra < 0);
 
-    s->resize(mpz_sizeinbase(_context->_v, 10) + 2);
-    if (!mpz_get_str(&(*s)[0], 10, _context->_v)) {
-        throw std::runtime_error("failed to call mpz_get_str()");
-    }
-
-    s->resize(strlen(s->c_str()));
-    size_t len = s->length();
-    char *tail = &(*s)[0];
-    bool neg = false;
-
-    if (*s->begin() == '-') {
-        neg = true;
-        ++tail;
-        --len;
-    }
-
-    if (static_cast<size_t>(-extra) > len) {
-        PrintZero(s, scale);
-        return -mpz_sgn(_context->_v);
-    } else if (static_cast<size_t>(-extra) == len) {
-        int ret = TestRoundingTiesToEven('0', tail);
-        if (ret <= 0) {
-            PrintZero(s, scale);
-            return -mpz_sgn(_context->_v);
-        } else {
-            PrintOne(s, neg, scale);
-            return mpz_sgn(_context->_v);
-        }
-    }
-
-    tail += len - static_cast<size_t>(-extra);
-    int ret = TestRoundingTiesToEven(*(tail - 1), tail);
-    if (ret <= 0) {
-        SerializeWithTruncating(s, scale);
-        return -mpz_sgn(_context->_v);
-
-    } else {
-        Decimal t(*this);
-        mpz_t r;
-        mpz_init(r);
-        mpz_ui_pow_ui(r, 10, static_cast<unsigned long>(-extra));
-        if (neg) {
-            mpz_sub(t._context->_v, t._context->_v, r);
-        } else {
-            mpz_add(t._context->_v, t._context->_v, r);
-        }
-
-        mpz_clear(r);
-        t.SerializeWithTruncating(s, scale);
-        return mpz_sgn(_context->_v);
-    }
+    Decimal m(*this);
+    int ret = m.Div(1, scale, rounding);
+    m.SerializeWithAppending(s, scale);
+    return ret;
 }
 
 void Decimal::PrintZero(std::string *s, int scale)
@@ -393,31 +301,6 @@ void Decimal::PrintOne(std::string *s, bool negative, int scale)
     }
 }
 
-int Decimal::TestRoundingTiesToEven(char last, const char *tail)
-{
-    if (*tail == '\0') {
-        return 0;
-    } else if (*tail > '5') {
-        return 1;
-    } else if (*tail > '0' && *tail < '5') {
-        return -1;
-    }
-
-    bool all_zero = true;
-    for (const char *p = tail + 1; *p; ++p) {
-        if (*p != '0') {
-            all_zero = false;
-            break;
-        }
-    }
-
-    if (*tail == '0') {
-        return all_zero ? 0 : -1;
-    } else {
-        return all_zero ? ((last - '0') % 2 == 0 ? -1 : 1) : 1;
-    }
-}
-
 void Decimal::Add(const Decimal &o)
 {
     if (_context->_scale < o._context->_scale) {
@@ -438,7 +321,11 @@ void Decimal::Add(const Decimal &o)
 
 void Decimal::Sub(const Decimal &o)
 {
-    if (_context->_scale < o._context->_scale) {
+    if (this == &o) {
+        mpz_set_ui(_context->_v, 0);
+        _context->_scale = 0;
+
+    } else if (_context->_scale < o._context->_scale) {
         Upscale(o._context->_scale - _context->_scale);
         mpz_sub(_context->_v, _context->_v, o._context->_v);
 
@@ -461,13 +348,17 @@ void Decimal::Mul(const Decimal &o)
     Cleanup();
 }
 
-int Decimal::Div(const Decimal &o, int scale)
+int Decimal::Div(const Decimal &o, int scale, const Rounding &rounding)
 {
-    if (o.zero()) {
+    if (scale < 0) {
+        throw std::invalid_argument("must specify scale");
+    } else if (o.zero()) {
         throw std::invalid_argument("devided by zero");
     } else if (this == &o) {
         mpz_set_ui(_context->_v, 1);
         _context->_scale = 0;
+        return 0;
+    } else if (mpz_cmp_ui(_context->_v, 0) == 0) {
         return 0;
     }
 
@@ -478,6 +369,7 @@ int Decimal::Div(const Decimal &o, int scale)
     mpz_init(r);
     mpz_init_set(d, o._context->_v);
 
+    // Using cdiv or fdiv might help, but tdiv is good for ties.
     const int diff = _context->_scale - o._context->_scale;
     if (diff < scale) {
         mpz_ui_pow_ui(q, 10, static_cast<unsigned long>(scale - diff));
@@ -494,21 +386,47 @@ int Decimal::Div(const Decimal &o, int scale)
     }
 
     int result = 0;
-    if (mpz_sgn(r)) { // We've got reminder.
-        result = mpz_sgn(q) < 0 ? 1 : -1;
-        mpz_abs(r, r);
-        mpz_abs(d, d);
-        mpz_mul_2exp(r, r, 1); // r <<= 1;
-
-        int cmp = mpz_cmp(r, d);
-        if (cmp == 0) { // Oops, in the middle.
-            mpz_mod_ui(r, q, 2);
-            if (mpz_sgn(r)) { // Odd.
-                result = IncreaseByOne(q);
+    const int rsign = mpz_cmp_ui(r, 0); // Same as nsign.
+    const int qdir = mpz_sgn(_context->_v) == mpz_sgn(d) ? 1 : -1;
+    if (rsign) { // We've got reminder.
+        if (rounding == kRoundingTowardsPositiveInfinity) {
+            result = 1;
+            if (qdir > 0) {
+                mpz_add_ui(q, q, 1);
             }
 
-        } else if (cmp > 0) {
-            result = IncreaseByOne(q);
+        } else if (rounding == kRoundingTowardsNegativeInfinity) {
+            result = -1;
+            if (qdir < 0) {
+                mpz_sub_ui(q, q, 1);
+            }
+
+        } else if (rounding == kRoundingTowardsZero) {
+            result = -qdir;
+
+        } else {
+            bool bump = true;
+            mpz_mul_2exp(r, r, 1); // r <<= 1;
+            int cmp = mpz_cmpabs(r, d);
+            if (cmp == 0) { // Oops, in the middle.
+                if (rounding == kRoundingTiesToEven) {
+                    bump = !!mpz_odd_p(q);
+                }
+            } else if (cmp < 0) {
+                bump = false;
+            }
+
+            if (bump) {
+                result = qdir;
+                if (qdir > 0) {
+                    mpz_add_ui(q, q, 1);
+                } else {
+                    mpz_sub_ui(q, q, 1);
+                }
+
+            } else {
+                result = -qdir;
+            }
         }
     }
 
@@ -539,7 +457,7 @@ void Decimal::Cleanup()
     mpz_init(r);
     while (_context->_scale) {
         mpz_mod_ui(r, _context->_v, 10);
-        if (mpz_sgn(r)) {
+        if (mpz_cmp_ui(r, 0)) {
             break;
         }
 
@@ -552,52 +470,67 @@ void Decimal::Cleanup()
 
 bool Decimal::zero() const
 {
-    return mpz_sgn(_context->_v) == 0;
+    return mpz_cmp_ui(_context->_v, 0) == 0;
 }
 
 bool Decimal::positive() const
 {
-    return mpz_sgn(_context->_v) > 0;
+    return mpz_cmp_ui(_context->_v, 0) > 0;
 }
 
 bool Decimal::negative() const
 {
-    return mpz_sgn(_context->_v) < 0;
+    return mpz_cmp_ui(_context->_v, 0) < 0;
 }
 
 bool Decimal::operator > (const Decimal &o) const
 {
-    return mpz_cmp(_context->_v, o._context->_v) > 0;
+    return compare(o) > 0;
 }
 
 bool Decimal::operator < (const Decimal &o) const
 {
-    return mpz_cmp(_context->_v, o._context->_v) < 0;
+    return compare(o) < 0;
 }
 
 bool Decimal::operator == (const Decimal &o) const
 {
-    return mpz_cmp(_context->_v, o._context->_v) == 0;
+    return compare(o) == 0;
 }
 
 bool Decimal::operator != (const Decimal &o) const
 {
-    return mpz_cmp(_context->_v, o._context->_v) != 0;
+    return compare(o) != 0;
 }
 
 bool Decimal::operator >= (const Decimal &o) const
 {
-    return mpz_cmp(_context->_v, o._context->_v) >= 0;
+    return compare(o) >= 0;
 }
 
 bool Decimal::operator <= (const Decimal &o) const
 {
-    return mpz_cmp(_context->_v, o._context->_v) <= 0;
+    return compare(o) <= 0;
 }
 
 int Decimal::compare(const Decimal &o) const
 {
-    return mpz_cmp(_context->_v, o._context->_v);
+    if (this == &o) {
+        return 0;
+
+    } else if (_context->_scale == o._context->_scale) {
+        return mpz_cmp(_context->_v, o._context->_v);
+
+    } else if (_context->_scale < o._context->_scale) {
+        Decimal t(*this);
+        t.Upscale(o._context->_scale - _context->_scale);
+        return mpz_cmp(t._context->_v, o._context->_v);
+
+    } else {
+        Decimal t(o);
+        t.Upscale(_context->_scale - o._context->_scale);
+        return mpz_cmp(_context->_v, t._context->_v);
+    }
 }
 
 Decimal &Decimal::operator += (const Decimal &o)
@@ -620,7 +553,11 @@ Decimal &Decimal::operator *= (const Decimal &o)
 
 Decimal &Decimal::operator /= (const Decimal &o)
 {
-    Div(o, std::max(_context->_scale, o._context->_scale));
+    int scale = _context->_dscale >= 0 ?
+                _context->_dscale      :
+                std::max(6, _context->_scale - o._context->_scale);
+
+    Div(o, scale, _context->_rounding);
     return *this;
 }
 
@@ -655,13 +592,37 @@ Decimal Decimal::operator * (const Decimal &o) const
 Decimal Decimal::operator / (const Decimal &o) const
 {
     Decimal n(*this);
-    n.Div(o, std::max(_context->_scale, o._context->_scale));
+    int scale = _context->_dscale >= 0 ?
+                _context->_dscale      :
+                std::max(6, _context->_scale - o._context->_scale);
+
+    n.Div(o, scale, _context->_rounding);
     return n;
 }
 
 int Decimal::scale() const
 {
     return _context->_scale;
+}
+
+void Decimal::set_default_scale(int default_scale)
+{
+    _context->_dscale = default_scale;
+}
+
+int Decimal::default_scale() const
+{
+    return _context->_dscale;
+}
+
+void Decimal::set_default_rounding(const Rounding &default_rounding)
+{
+    _context->_rounding = default_rounding;
+}
+
+const Decimal::Rounding &Decimal::default_rounding() const
+{
+    return _context->_rounding;
 }
 
 } // namespace flinter
