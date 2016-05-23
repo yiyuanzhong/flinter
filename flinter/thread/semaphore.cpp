@@ -23,8 +23,13 @@
 #include "config.h"
 #if defined(WIN32)
 # include <Windows.h>
+# define H reinterpret_cast<HANDLE *>(_context)
+#elif defined(__MACH__)
+# include <dispatch/dispatch.h>
+# define H reinterpret_cast<dispatch_semaphore_t *>(_context)
 #elif HAVE_SEMAPHORE_H
 #include <semaphore.h>
+# define H reinterpret_cast<sem_t *>(_context)
 #else
 # error Unsupported: Semaphore
 #endif
@@ -34,10 +39,14 @@ namespace flinter {
 Semaphore::Semaphore(int initial_count) : _context(NULL)
 {
     assert(initial_count >= 0);
-#ifdef WIN32
+#if defined(WIN32)
     HANDLE *context = new HANDLE;
     *context = CreateSemaphore(NULL, static_cast<LONG>(initial_count), LONG_MAX, NULL);
     if (!*context || *context == INVALID_HANDLE_VALUE) {
+#elif defined(__MACH__)
+    dispatch_semaphore_t *context = new dispatch_semaphore_t;
+    *context = dispatch_semaphore_create(static_cast<long>(initial_count));
+    if (!*context) {
 #else
     sem_t *context = new sem_t;
     if (sem_init(context, 0, static_cast<unsigned int>(initial_count)) < 0) {
@@ -51,24 +60,31 @@ Semaphore::Semaphore(int initial_count) : _context(NULL)
 
 Semaphore::~Semaphore()
 {
-#ifdef WIN32
-    CloseHandle(*reinterpret_cast<HANDLE *>(_context));
-    delete reinterpret_cast<HANDLE *>(_context);
+#if defined(WIN32)
+    CloseHandle(*H);
+    delete H;
+#elif defined(__MACH__)
+    dispatch_release(*H);
+    delete H;
 #else
-    sem_destroy(reinterpret_cast<sem_t *>(_context));
-    delete reinterpret_cast<sem_t *>(_context);
+    sem_destroy(H);
+    delete H;
 #endif
 }
 
 void Semaphore::Acquire()
 {
-#ifdef WIN32
-    if (WaitForSingleObject(*reinterpret_cast<HANDLE *>(_context), INFINITE) == WAIT_OBJECT_0) {
+#if defined(WIN32)
+    if (WaitForSingleObject(*H, INFINITE) == WAIT_OBJECT_0) {
+        return;
+    }
+#elif defined(__MACH__)
+    if (dispatch_semaphore_wait(*H, DISPATCH_TIME_FOREVER) == 0) {
         return;
     }
 #else
     do {
-        if (sem_wait(reinterpret_cast<sem_t *>(_context)) == 0) {
+        if (sem_wait(H) == 0) {
             return;
         }
     } while (errno == EINTR);
@@ -83,15 +99,17 @@ void Semaphore::Release(int count)
         return;
     }
 
-#ifdef WIN32
-    if (!ReleaseSemaphore(*reinterpret_cast<HANDLE *>(_context),
-                         static_cast<LONG>(count), NULL)) {
-
+#if defined(WIN32)
+    if (!ReleaseSemaphore(*H, static_cast<LONG>(count), NULL)) {
         throw std::runtime_error("Semaphore::Release()");
+    }
+#elif defined(__MACH__)
+    for (int i = 0; i < count; ++i) {
+        dispatch_semaphore_signal(*H);
     }
 #else
     for (int i = 0; i < count; ++i) {
-        int ret = sem_post(reinterpret_cast<sem_t *>(_context));
+        int ret = sem_post(H);
         if (ret < 0) {
             throw std::runtime_error("Semaphore::Release()");
         }
@@ -101,13 +119,17 @@ void Semaphore::Release(int count)
 
 bool Semaphore::TryAcquire()
 {
-#ifdef WIN32
-    DWORD ret = WaitForSingleObject(*reinterpret_cast<HANDLE *>(_context), 0);
+#if defined(WIN32)
+    DWORD ret = WaitForSingleObject(*H, 0);
     if (ret == WAIT_OBJECT_0) {
         return true;
     } else if (ret == WAIT_TIMEOUT) {
+#elif defined(__MACH__)
+    if (dispatch_semaphore_wait(*H, DISPATCH_TIME_NOW) == 0) {
+        return true;
+    } else if (true) {
 #else
-    if (sem_trywait(reinterpret_cast<sem_t *>(_context)) == 0) {
+    if (sem_trywait(H) == 0) {
         return true;
     } else if (errno == EAGAIN) {
 #endif

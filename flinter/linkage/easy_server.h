@@ -225,8 +225,7 @@ private:
                             int thread_id);
 
     // thread_id can be out of range so a random one is picked.
-    ProxyLinkageWorker *GetIoWorker(int thread_id,
-                                    int *actual_id = NULL) const;
+    ProxyLinkageWorker *GetIoWorker(int thread_id) const;
 
     ProxyLinkage *DoReconnect(ProxyLinkageWorker *worker,
                               channel_t channel,
@@ -238,11 +237,6 @@ private:
                     channel_t channel,
                     const void *buffer,
                     size_t length);
-
-    void DoRealRegisterTimer(int thread_id,
-                             int64_t after,
-                             int64_t repeat,
-                             Runnable *timer);
 
     static const Configure kDefaultConfigure;
 

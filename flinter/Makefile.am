@@ -157,6 +157,8 @@ libflinter_la_SOURCES = $(libflinter_core_la_SOURCES) \
                         charset.cpp \
                         convert.cpp \
                         encode.cpp \
+                        encode_crypto.cpp \
+                        encode_cs.cpp \
                         explode.cpp \
                         hash.cpp \
                         logger.cpp \
