@@ -105,10 +105,13 @@ include_linkage_HEADERS = linkage/abstract_io.h \
                           linkage/ssl_io.h \
                           linkage/ssl_peer.h
 
-libflinter_core_la_SOURCES = babysitter.c \
+libflinter_core_la_SOURCES = MurmurHash3.c \
+                             MurmurHash3.h \
+                             babysitter.c \
                              cmdline.c \
                              daemon.c \
                              envvars.c \
+                             hash.c \
                              mkdirs.c \
                              msleep.c \
                              pidfile.c \
@@ -152,15 +155,12 @@ libflinter_la_SOURCES = $(libflinter_core_la_SOURCES) \
                         linkage/resolver.cpp \
                         linkage/ssl_context.cpp \
                         linkage/ssl_io.cpp \
-                        MurmurHash3.cpp \
-                        MurmurHash3.h \
                         charset.cpp \
                         convert.cpp \
                         encode.cpp \
                         encode_crypto.cpp \
                         encode_cs.cpp \
                         explode.cpp \
-                        hash.cpp \
                         logger.cpp \
                         trim.cpp
 
@@ -173,7 +173,7 @@ libflinter_la_LIBADD += -lgmp
 endif
 
 if WITH_OPENSSL
-libflinter_core_la_SOURCES += hash_c.c pkcs7.c
+libflinter_core_la_SOURCES += hash_crypto.c pkcs7.c
 libflinter_core_la_LIBADD += ${openssl_LIBS}
 libflinter_la_LIBADD += ${openssl_LIBS}
 endif

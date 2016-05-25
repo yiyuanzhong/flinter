@@ -29,7 +29,7 @@ SUBDIRS = .
 # "d" will be appended for each STATICS, ABC will become -lABC_debug eventually
 STATICS = flinter/output/lib/flinter
 LIBRARIES = crypto dl ev gmp iconv icudata icuuc jsoncpp lzma neo_cgi neo_cs \
-            neo_utl pthread ssl xml2 z zookeeper_mt gtest gmock gmock_main
+            neo_utl pthread rt ssl xml2 z zookeeper_mt gtest gmock gmock_main
 PKGCONFIGS =
 
 BINPATH =

@@ -15,24 +15,12 @@
 
 #include "flinter/hash.h"
 
-#include <string.h>
-
 #include "flinter/MurmurHash3.h"
 
 uint32_t hash_murmurhash3(const void *buffer, size_t length)
 {
-    const uint32_t seed = static_cast<uint32_t>(length * 0xdeadbeef);
+    const uint32_t seed = (uint32_t)(length * 0xdeadbeef);
     uint32_t hash;
     MurmurHash3_x86_32(buffer, (int)length, seed, &hash);
     return hash;
-}
-
-uint32_t hash_murmurhash3(const std::string &buffer)
-{
-    return hash_murmurhash3(buffer.data(), buffer.length());
-}
-
-uint32_t hash_murmurhash3(const char *buffer)
-{
-    return hash_murmurhash3(buffer, strlen(buffer));
 }

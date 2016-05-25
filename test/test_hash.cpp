@@ -44,3 +44,8 @@ TEST(hashTest, TestSHA256)
     ASSERT_EQ(hash_sha256("../test/hash.txt", 1048576, 5000, buffer), 0);
     ASSERT_STREQ(buffer, "7f83b1657ff1fc53b92dc18148a1d65dfc2d4b1fa3d677284addd200126d9069");
 }
+
+TEST(hashTest, TestMurmurhash3)
+{
+    EXPECT_EQ(hash_murmurhash3("hello", 5), 0x3FA68FD9);
+}
