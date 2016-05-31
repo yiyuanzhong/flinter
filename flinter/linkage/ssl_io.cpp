@@ -217,10 +217,30 @@ bool SslIo::OnHandshaked()
     }
 
     std::string issuer_name = buffer;
-    uint64_t serial_number = static_cast<uint64_t>(ASN1_INTEGER_get(
-                X509_get_serialNumber(x509)));
+    ASN1_INTEGER *asn1 = X509_get_serialNumber(x509);
+    if (!asn1) {
+        X509_free(x509);
+        return false;
+    }
 
+    BIGNUM *bn = ASN1_INTEGER_to_BN(asn1, NULL);
+    if (!bn) {
+        X509_free(x509);
+        return false;
+    }
+
+    char *serial = BN_bn2hex(bn);
+    if (!serial) {
+        BN_free(bn);
+        X509_free(x509);
+        return false;
+    }
+
+    std::string serial_number = serial;
+    OPENSSL_free(serial);
+    BN_free(bn);
     X509_free(x509);
+
     _peer = new SslPeer(version, cipher,
                         subject_name, issuer_name, serial_number);
 

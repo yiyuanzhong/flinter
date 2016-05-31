@@ -104,7 +104,7 @@ public:
         const flinter::SslPeer *peer = context.ssl_peer();
         LOG(INFO) << "SUBJECT: " << peer->subject_name();
         LOG(INFO) << "ISSUER: " << peer->issuer_name();
-        LOG(INFO) << "SERIAL: " << std::hex << peer->serial_number();
+        LOG(INFO) << "SERIAL: " << peer->serial_number();
         return flinter::EasyHandler::OnConnected(context);
     }
 

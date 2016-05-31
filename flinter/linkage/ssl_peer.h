@@ -26,8 +26,7 @@ class SslPeer {
 public:
     SslPeer(const std::string &version,
             const std::string &cipher)
-            : _serial_number(0)
-            , _version(version)
+            : _version(version)
             , _cipher(cipher)
             , _certificate(false) {}
 
@@ -35,10 +34,10 @@ public:
             const std::string &cipher,
             const std::string &subject_name,
             const std::string &issuer_name,
-            uint64_t serial_number)
-            : _subject_name(subject_name)
+            const std::string &serial_number)
+            : _serial_number(serial_number)
+            , _subject_name(subject_name)
             , _issuer_name(issuer_name)
-            , _serial_number(serial_number)
             , _version(version)
             , _cipher(cipher)
             , _certificate(true) {}
@@ -53,7 +52,7 @@ public:
         return _issuer_name;
     }
 
-    const uint64_t &serial_number() const
+    const std::string &serial_number() const
     {
         return _serial_number;
     }
@@ -74,9 +73,9 @@ public:
     }
 
 private:
+    std::string _serial_number;
     std::string _subject_name;
     std::string _issuer_name;
-    uint64_t _serial_number;
     std::string _version;
     std::string _cipher;
     bool _certificate;

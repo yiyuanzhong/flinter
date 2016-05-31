@@ -63,7 +63,7 @@ public:
         const flinter::SslPeer *peer = ssl->peer();
         LOG(INFO) << "SUBJECT: " << peer->subject_name();
         LOG(INFO) << "ISSUER: " << peer->issuer_name();
-        LOG(INFO) << "SERIAL: " << std::hex << peer->serial_number();
+        LOG(INFO) << "SERIAL: " << peer->serial_number();
         flinter::LinkageHandler::OnConnected(linkage);
         return linkage->Send("12345\r\n", 7);
     }
