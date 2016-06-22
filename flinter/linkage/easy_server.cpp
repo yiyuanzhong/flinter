@@ -319,6 +319,20 @@ private:
 
 }; // class EasyServer::SendJob
 
+class EasyServer::IoContext {
+public:
+    explicit IoContext(int thread_id);
+    ~IoContext();
+
+    outgoing_map_t _outgoing_informations;
+    connect_map_t _connect_proxy_handlers;
+    channel_map_t _channel_linkages;
+    const int _thread_id;
+    Mutex *const _mutex;
+    channel_t _channel;
+
+}; // class EasyServer::IoContext
+
 bool EasyServer::ProxyLinkageWorker::OnInitialize()
 {
     if (!_tuner) {
@@ -372,7 +386,7 @@ int EasyServer::ProxyHandler::OnMessage(Linkage *linkage,
     // skip locking to get better performance.
     if (s->_workers) {
         JobWorker::Job *job = new JobWorker::Job(l->context(), buffer, length);
-        MutexLocker locker(s->_mutex);
+        MutexLocker locker(s->_gmutex);
         s->DoAppendJob(job);
         return 1;
     }
@@ -482,14 +496,38 @@ bool EasyServer::JobWorker::Job::Run()
     return true;
 }
 
-EasyServer::EasyServer()
-        : _workers(0)
-        , _slots(0)
-        , _pool(new FixedThreadPool)
-        , _incoming(new Condition)
+EasyServer::IoContext::IoContext(int thread_id)
+        : _thread_id(thread_id)
         , _mutex(new Mutex)
+        , _channel(static_cast<channel_t>(thread_id))
+{
+    // Intended left blank.
+}
+
+EasyServer::IoContext::~IoContext()
+{
+    delete _mutex;
+
+    for (connect_map_t::iterator p = _connect_proxy_handlers.begin();
+         p != _connect_proxy_handlers.end(); ++p) {
+
+        delete p->second;
+    }
+
+    for (outgoing_map_t::iterator p = _outgoing_informations.begin();
+         p != _outgoing_informations.end(); ++p) {
+
+        delete p->second;
+    }
+}
+
+EasyServer::EasyServer()
+        : _pool(new FixedThreadPool)
+        , _incoming(new Condition)
         , _configure(kDefaultConfigure)
-        , _channel(0)
+        , _gmutex(new Mutex)
+        , _workers(0)
+        , _slots(0)
         , _incoming_connections(0)
         , _outgoing_connections(0)
 {
@@ -501,7 +539,7 @@ EasyServer::~EasyServer()
     Shutdown();
 
     delete _pool;
-    delete _mutex;
+    delete _gmutex;
     delete _incoming;
 }
 
@@ -522,7 +560,7 @@ bool EasyServer::DoListen(uint16_t port,
         return false;
     }
 
-    MutexLocker locker(_mutex);
+    MutexLocker locker(_gmutex);
     _listen_proxy_handlers.push_back(proxy_handler);
     _listeners.push_back(listener);
     return true;
@@ -594,7 +632,7 @@ bool EasyServer::RegisterTimer(int64_t after, int64_t repeat, Runnable *timer)
     }
 
     int64_t tid = get_current_thread_id();
-    MutexLocker locker(_mutex);
+    MutexLocker locker(_gmutex);
     if (_io_workers.empty()) {
         _timers.push_back(std::make_pair(timer, std::make_pair(after, repeat)));
         return true;
@@ -634,10 +672,12 @@ bool EasyServer::Initialize(size_t slots,
 
     // Set constants before going multi-threaded.
     // DoShutdown() will reset them if anything bad happens.
+    _job_workers.reserve(workers);
+    _io_workers.reserve(slots);
     _workers = workers;
     _slots = slots;
 
-    MutexLocker locker(_mutex);
+    MutexLocker locker(_gmutex);
     for (size_t i = 0; i < slots; ++i) {
         ProxyLinkageWorker *worker =
                 new ProxyLinkageWorker(easy_tuner, static_cast<int>(i));
@@ -663,8 +703,13 @@ bool EasyServer::Initialize(size_t slots,
         p = _timers.erase(p);
     }
 
+    _io_context.reserve(slots);
+    for (size_t i = 0; i < slots; ++i) {
+        _io_context.push_back(new IoContext(static_cast<int>(i)));
+    }
+
     // Now multi-threading.
-    for (std::list<ProxyLinkageWorker *>::const_iterator
+    for (std::vector<ProxyLinkageWorker *>::const_iterator
          p = _io_workers.begin(); p != _io_workers.end(); ++p) {
 
         if (!_pool->AppendJob(*p, true)) {
@@ -690,7 +735,7 @@ bool EasyServer::Initialize(size_t slots,
 
 bool EasyServer::Shutdown()
 {
-    MutexLocker locker(_mutex);
+    MutexLocker locker(_gmutex);
     return DoShutdown(&locker);
 }
 
@@ -709,7 +754,7 @@ bool EasyServer::DoShutdown(MutexLocker *locker)
         DoAppendJob(NULL);
     }
 
-    for (std::list<ProxyLinkageWorker *>::const_iterator
+    for (std::vector<ProxyLinkageWorker *>::const_iterator
          p = _io_workers.begin(); p != _io_workers.end(); ++p) {
 
         (*p)->Shutdown();
@@ -721,28 +766,22 @@ bool EasyServer::DoShutdown(MutexLocker *locker)
 
     // Now back into single threaded mode, don't lock again.
 
+    for (std::vector<IoContext *>::iterator p = _io_context.begin();
+         p != _io_context.end(); ++p) {
+
+        delete *p;
+    }
+
     for (std::list<ProxyHandler *>::iterator p = _listen_proxy_handlers.begin();
          p != _listen_proxy_handlers.end(); ++p) {
 
         delete *p;
     }
 
-    for (connect_map_t::iterator p = _connect_proxy_handlers.begin();
-         p != _connect_proxy_handlers.end(); ++p) {
-
-        delete p->second;
-    }
-
     for (std::list<Listener *>::iterator p = _listeners.begin();
          p != _listeners.end(); ++p) {
 
         delete *p;
-    }
-
-    for (outgoing_map_t::iterator p = _outgoing_informations.begin();
-         p != _outgoing_informations.end(); ++p) {
-
-        delete p->second;
     }
 
     for (std::list<std::pair<Runnable *, std::pair<int64_t, int64_t> > >::iterator
@@ -753,11 +792,10 @@ bool EasyServer::DoShutdown(MutexLocker *locker)
 
     DoDumpJobs();
 
-    _connect_proxy_handlers.clear();
     _listen_proxy_handlers.clear();
-    _outgoing_informations.clear();
     _job_workers.clear();
     _io_workers.clear();
+    _io_context.clear();
     _listeners.clear();
     _timers.clear();
     _workers = 0;
@@ -783,9 +821,9 @@ bool EasyServer::AttachListeners(LinkageWorker *worker)
 
 Runnable *EasyServer::GetJob()
 {
-    MutexLocker locker(_mutex);
+    MutexLocker locker(_gmutex);
     while (_jobs.empty()) {
-        _incoming->Wait(_mutex);
+        _incoming->Wait(_gmutex);
     }
 
     Runnable *job = _jobs.front();
@@ -838,20 +876,23 @@ Linkage *EasyServer::AllocateChannel(LinkageWorker *worker,
                                      ProxyHandler *proxy_handler)
 {
     ProxyLinkageWorker *const w = static_cast<ProxyLinkageWorker *>(worker);
+    IoContext *const ioc = _io_context[static_cast<size_t>(w->thread_id())];
 
-    MutexLocker locker(_mutex);
-    if (_incoming_connections >= _configure.maximum_incoming_connections) {
+    uint64_t inconn = _incoming_connections.AddAndFetch(1);
+    if (inconn >= _configure.maximum_incoming_connections) {
         LOG(VERBOSE) << "EasyServer: incoming connections over limit: "
                      << _configure.maximum_incoming_connections;
 
+        _incoming_connections.SubAndFetch(1);
         return NULL;
     }
 
-    channel_t channel = AllocateChannel(true);
-    ++_incoming_connections;
+    MutexLocker locker(ioc->_mutex);
+    channel_t channel = AllocateChannel(ioc, true);
 
     Interface *interface = new Interface;
     if (!interface->Accepted(peer.fd())) {
+        _incoming_connections.SubAndFetch(1);
         delete interface;
         return NULL;
     }
@@ -869,31 +910,36 @@ Linkage *EasyServer::AllocateChannel(LinkageWorker *worker,
     linkage->set_send_timeout(_configure.incoming_send_timeout);
     linkage->set_idle_timeout(_configure.incoming_idle_timeout);
 
-    _channel_linkages.insert(std::make_pair(channel, linkage));
+    ioc->_channel_linkages.insert(std::make_pair(channel, linkage));
     LOG(VERBOSE) << "EasyServer: creating linkage: " << peer.ip_str();
     return linkage;
 }
 
 void EasyServer::ReleaseChannel(channel_t channel)
 {
-    MutexLocker locker(_mutex);
-    _channel_linkages.erase(channel);
-    if (!IsOutgoingChannel(channel)) {
-        --_incoming_connections;
+    IoContext *const ioc = GetIoContext(channel);
+    if (!ioc) {
         return;
     }
 
-    --_outgoing_connections;
-    if (_outgoing_informations.find(channel) != _outgoing_informations.end()) {
+    MutexLocker locker(ioc->_mutex);
+    ioc->_channel_linkages.erase(channel);
+    if (!IsOutgoingChannel(channel)) {
+        _incoming_connections.SubAndFetch(1);
+        return;
+    }
+
+    _outgoing_connections.SubAndFetch(1);
+    if (ioc->_outgoing_informations.find(channel) != ioc->_outgoing_informations.end()) {
         // Still needed.
         return;
     }
 
     LOG(VERBOSE) << "EasyServer: outgoing ProxyHandler released: " << channel;
-    connect_map_t::iterator p = _connect_proxy_handlers.find(channel);
-    assert(p != _connect_proxy_handlers.end());
+    connect_map_t::iterator p = ioc->_connect_proxy_handlers.find(channel);
+    assert(p != ioc->_connect_proxy_handlers.end());
     delete p->second;
-    _connect_proxy_handlers.erase(p);
+    ioc->_connect_proxy_handlers.erase(p);
 }
 
 void EasyServer::QueueOrExecuteJob(Runnable *job)
@@ -905,7 +951,7 @@ void EasyServer::QueueOrExecuteJob(Runnable *job)
     // _workers are only set in single threaded environment,
     // skip locking to get better performance.
     if (_workers) {
-        MutexLocker locker(_mutex);
+        MutexLocker locker(_gmutex);
         DoAppendJob(job);
         return;
     }
@@ -920,8 +966,8 @@ bool EasyServer::QueueIo(Runnable *job, int thread_id)
         return true;
     }
 
-    MutexLocker locker(_mutex);
-    std::list<ProxyLinkageWorker *>::iterator p = _io_workers.begin();
+    MutexLocker locker(_gmutex);
+    std::vector<ProxyLinkageWorker *>::iterator p = _io_workers.begin();
     if (thread_id) {
         std::advance(p, thread_id);
     }
@@ -932,25 +978,30 @@ bool EasyServer::QueueIo(Runnable *job, int thread_id)
 
 void EasyServer::Forget(channel_t channel)
 {
-    MutexLocker locker(_mutex);
-    outgoing_map_t::iterator p = _outgoing_informations.find(channel);
-    if (p != _outgoing_informations.end()) {
-        delete p->second;
-        _outgoing_informations.erase(p);
+    IoContext *const ioc = GetIoContext(channel);
+    if (!ioc) {
+        return;
     }
 
-    if (_channel_linkages.find(channel) != _channel_linkages.end()) {
+    MutexLocker locker(ioc->_mutex);
+    outgoing_map_t::iterator p = ioc->_outgoing_informations.find(channel);
+    if (p != ioc->_outgoing_informations.end()) {
+        delete p->second;
+        ioc->_outgoing_informations.erase(p);
+    }
+
+    if (ioc->_channel_linkages.find(channel) != ioc->_channel_linkages.end()) {
         // Still needed.
         return;
     }
 
-    connect_map_t::iterator q = _connect_proxy_handlers.find(channel);
-    if (q == _connect_proxy_handlers.end()) {
+    connect_map_t::iterator q = ioc->_connect_proxy_handlers.find(channel);
+    if (q == ioc->_connect_proxy_handlers.end()) {
         return;
     }
 
     delete q->second;
-    _connect_proxy_handlers.erase(q);
+    ioc->_connect_proxy_handlers.erase(q);
     LOG(VERBOSE) << "EasyServer: outgoing ProxyHandler released: " << channel;
 }
 
@@ -961,10 +1012,15 @@ void EasyServer::Forget(const EasyContext &context)
 
 bool EasyServer::Disconnect(channel_t channel, bool finish_write)
 {
+    IoContext *const ioc = GetIoContext(channel);
+    if (!ioc) {
+        return true;
+    }
+
     int64_t tid = get_current_thread_id();
-    MutexLocker locker(_mutex);
-    channel_map_t::iterator p = _channel_linkages.find(channel);
-    if (p == _channel_linkages.end()) {
+    MutexLocker locker(ioc->_mutex);
+    channel_map_t::iterator p = ioc->_channel_linkages.find(channel);
+    if (p == ioc->_channel_linkages.end()) {
         return true;
     }
 
@@ -988,9 +1044,14 @@ bool EasyServer::Disconnect(const EasyContext &context, bool finish_write)
 
 void EasyServer::DoRealDisconnect(channel_t channel, bool finish_write)
 {
-    MutexLocker locker(_mutex);
-    channel_map_t::iterator p = _channel_linkages.find(channel);
-    if (p == _channel_linkages.end()) {
+    IoContext *const ioc = GetIoContext(channel);
+    if (!ioc) {
+        return;
+    }
+
+    MutexLocker locker(ioc->_mutex);
+    channel_map_t::iterator p = ioc->_channel_linkages.find(channel);
+    if (p == ioc->_channel_linkages.end()) {
         return;
     }
 
@@ -1006,16 +1067,21 @@ void EasyServer::DoRealSend(ProxyLinkageWorker *worker,
                             const void *buffer,
                             size_t length)
 {
-    MutexLocker locker(_mutex);
-    ProxyLinkage *linkage = NULL;
-    channel_map_t::iterator p = _channel_linkages.find(channel);
+    IoContext *const ioc = GetIoContext(channel);
+    if (!ioc) {
+        return;
+    }
 
-    if (p != _channel_linkages.end()) {
+    MutexLocker locker(ioc->_mutex);
+    ProxyLinkage *linkage = NULL;
+    channel_map_t::iterator p = ioc->_channel_linkages.find(channel);
+
+    if (p != ioc->_channel_linkages.end()) {
         linkage = p->second;
 
     } else if (IsOutgoingChannel(channel)) {
-        outgoing_map_t::const_iterator q = _outgoing_informations.find(channel);
-        if (q != _outgoing_informations.end()) {
+        outgoing_map_t::const_iterator q = ioc->_outgoing_informations.find(channel);
+        if (q != ioc->_outgoing_informations.end()) {
             linkage = DoReconnect(worker, channel, q->second);
         }
     }
@@ -1032,11 +1098,16 @@ void EasyServer::DoRealSend(ProxyLinkageWorker *worker,
 
 bool EasyServer::Send(channel_t channel, const void *buffer, size_t length)
 {
+    IoContext *const ioc = GetIoContext(channel);
+    if (!ioc) {
+        return false;
+    }
+
     int64_t tid = get_current_thread_id();
-    MutexLocker locker(_mutex);
+    MutexLocker locker(ioc->_mutex);
     ProxyLinkageWorker *worker = NULL;
-    channel_map_t::iterator p = _channel_linkages.find(channel);
-    if (p != _channel_linkages.end()) {
+    channel_map_t::iterator p = ioc->_channel_linkages.find(channel);
+    if (p != ioc->_channel_linkages.end()) {
         worker = static_cast<ProxyLinkageWorker *>(p->second->worker());
         if (tid > 0 && tid == worker->running_thread_id()) {
             locker.Unlock();
@@ -1044,8 +1115,8 @@ bool EasyServer::Send(channel_t channel, const void *buffer, size_t length)
         }
 
     } else if (IsOutgoingChannel(channel)) {
-        outgoing_map_t::const_iterator q = _outgoing_informations.find(channel);
-        if (q != _outgoing_informations.end()) {
+        outgoing_map_t::const_iterator q = ioc->_outgoing_informations.find(channel);
+        if (q != ioc->_outgoing_informations.end()) {
             worker = GetIoWorker(q->second->thread_id());
             if (tid > 0 && tid == worker->running_thread_id()) {
                 Linkage *linkage = DoReconnect(worker, channel, q->second);
@@ -1075,7 +1146,7 @@ bool EasyServer::Send(const EasyContext &context, const void *buffer, size_t len
 
 EasyServer::ProxyLinkageWorker *EasyServer::GetIoWorker(int thread_id) const
 {
-    std::list<ProxyLinkageWorker *>::const_iterator p = _io_workers.begin();
+    std::vector<ProxyLinkageWorker *>::const_iterator p = _io_workers.begin();
 
     int r = thread_id;
     if (r < 0 || static_cast<size_t>(r) >= _io_workers.size()) {
@@ -1094,6 +1165,9 @@ EasyServer::ProxyLinkage *EasyServer::DoReconnect(
         channel_t channel,
         const OutgoingInformation *info)
 {
+    IoContext *const ioc = GetIoContext(channel);
+    assert(ioc);
+
     LinkagePeer me;
     LinkagePeer peer;
     Interface *interface = new Interface;
@@ -1131,8 +1205,8 @@ EasyServer::ProxyLinkage *EasyServer::DoReconnect(
     linkage->set_send_timeout(_configure.outgoing_send_timeout);
     linkage->set_idle_timeout(_configure.outgoing_idle_timeout);
 
-    _channel_linkages.insert(std::make_pair(channel, linkage));
-    ++_outgoing_connections;
+    ioc->_channel_linkages.insert(std::make_pair(channel, linkage));
+    _outgoing_connections.AddAndFetch(1);
     return linkage;
 }
 
@@ -1144,7 +1218,10 @@ EasyServer::channel_t EasyServer::DoConnectTcp4(
         SslContext *ssl,
         int thread_id)
 {
-    MutexLocker locker(_mutex);
+    assert(thread_id >= 0);
+    IoContext *const ioc = _io_context[static_cast<size_t>(thread_id)];
+
+    MutexLocker locker(ioc->_mutex);
     ProxyHandler *proxy_handler = new ProxyHandler(easy_handler,
                                                    easy_factory,
                                                    ssl);
@@ -1152,7 +1229,7 @@ EasyServer::channel_t EasyServer::DoConnectTcp4(
     OutgoingInformation *info =
             new OutgoingInformation(proxy_handler, host, port, thread_id);
 
-    channel_t c = AllocateChannel(false);
+    channel_t c = AllocateChannel(ioc, false);
     if (!_io_workers.empty()) {
         ProxyLinkageWorker *worker = GetIoWorker(thread_id);
         ProxyLinkage *linkage = DoReconnect(worker, c, info);
@@ -1163,8 +1240,8 @@ EasyServer::channel_t EasyServer::DoConnectTcp4(
         }
     }
 
-    _connect_proxy_handlers.insert(std::make_pair(c, proxy_handler));
-    _outgoing_informations.insert(std::make_pair(c, info));
+    ioc->_connect_proxy_handlers.insert(std::make_pair(c, proxy_handler));
+    ioc->_outgoing_informations.insert(std::make_pair(c, info));
     return c;
 }
 
@@ -1236,9 +1313,11 @@ EasyServer::channel_t EasyServer::SslConnectTcp4(
     return DoConnectTcp4(host, port, NULL, easy_factory, ssl, thread_id);
 }
 
-EasyServer::channel_t EasyServer::AllocateChannel(bool incoming_or_outgoing)
+EasyServer::channel_t EasyServer::AllocateChannel(IoContext *ioc,
+                                                  bool incoming_or_outgoing)
 {
-    channel_t channel = ++_channel;
+    ioc->_channel += _slots;
+    channel_t channel = ioc->_channel;
     if (!incoming_or_outgoing) {
         channel |= 0x8000000000000000ull;
     }

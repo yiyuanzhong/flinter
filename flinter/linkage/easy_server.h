@@ -22,7 +22,9 @@
 #include <list>
 #include <queue>
 #include <string>
+#include <vector>
 
+#include <flinter/types/atomic.h>
 #include <flinter/types/unordered_map.h>
 #include <flinter/factory.h>
 #include <flinter/runnable.h>
@@ -183,6 +185,7 @@ private:
     class ProxyLinkage;
     class ProxyHandler;
     class JobWorker;
+    class IoContext;
     class SendJob;
 
     // Locked.
@@ -204,11 +207,27 @@ private:
                                      bool client_or_server,
                                      bool socket_connecting);
 
-    channel_t AllocateChannel(bool incoming_or_outgoing);
+    channel_t AllocateChannel(IoContext *ioc, bool incoming_or_outgoing);
     bool AttachListeners(LinkageWorker *worker);
     bool DoShutdown(MutexLocker *locker);
     void DoAppendJob(Runnable *job); // No lock.
     void DoDumpJobs();
+
+    // Locked.
+    int GetThreadId(channel_t channel) const
+    {
+        return static_cast<int>((channel & 0x7fffffffffffffffull) % _slots);
+    }
+
+    // Locked.
+    IoContext *GetIoContext(channel_t channel) const
+    {
+        if (!IsValidChannel(channel)) {
+            return NULL;
+        }
+
+        return _io_context[static_cast<size_t>(GetThreadId(channel))];
+    }
 
     // Locked.
     bool DoListen(uint16_t port,
@@ -246,28 +265,25 @@ private:
 
     std::list<std::pair<Runnable *, std::pair<int64_t, int64_t> > > _timers;
     std::list<ProxyHandler *> _listen_proxy_handlers;
-    std::list<ProxyLinkageWorker *> _io_workers;
-    connect_map_t _connect_proxy_handlers;
-    std::list<JobWorker *> _job_workers;
+    std::vector<ProxyLinkageWorker *> _io_workers;
+    std::vector<JobWorker *> _job_workers;
     std::list<Listener *> _listeners;
     std::queue<Runnable *> _jobs;
+    FixedThreadPool *const _pool;
+    Condition *const _incoming;
+    Configure _configure;
+    Mutex *const _gmutex;
 
     // For efficiency, these variables are not lock protected.
     size_t _workers;
     size_t _slots;
 
-    FixedThreadPool *const _pool;
-    Condition *const _incoming;
-    Mutex *const _mutex;
+    // Locked per I/O thread.
+    std::vector<IoContext *> _io_context;
 
-    outgoing_map_t _outgoing_informations;
-    channel_map_t _channel_linkages;
-    Configure _configure;
-    channel_t _channel;
-
-    // Connection management.
-    size_t _incoming_connections;
-    size_t _outgoing_connections;
+    // Global connection management.
+    uatomic64_t _incoming_connections;
+    uatomic64_t _outgoing_connections;
 
 }; // class EasyServer
 
