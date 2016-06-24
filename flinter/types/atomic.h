@@ -27,14 +27,14 @@ public:
     Atomic() : _t(T()) {}
     Atomic(const T &t) : _t(t) {}
 
-    const T &Get() const
+    T Get() const
     {
-        return _t;
+        return __sync_or_and_fetch(&_t, 0);
     }
 
-    void Set(const T &t)
+    T Set(const T &t)
     {
-        _t = t;
+        return __sync_lock_test_and_set(&_t, t);
     }
 
     __ATOMIC_IMPL(FetchAndAdd , __sync_fetch_and_add );
@@ -56,16 +56,6 @@ public:
     T CompareAndSwap(const T &oldval, const T &newval)
     {
         return __sync_val_compare_and_swap(&_t, oldval, newval);
-    }
-
-    void Lock()
-    {
-        while (__sync_lock_test_and_set(&_t, 1)) {}
-    }
-
-    void Unlock()
-    {
-        __sync_lock_release(&_t);
     }
 
 private:
