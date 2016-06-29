@@ -93,6 +93,14 @@ NEOERR *CGI::Parser::Parse(::CGI *, char *, char *, void *rock)
         return STATUS_OK;
     }
 
+    // ClearSilver will parse these special content type so skip them.
+    const char *type = cgi->_SERVER["CONTENT_TYPE"].c_str();
+    if (memcmp(type, "application/x-www-form-urlencoded", 34) == 0 || // Exact
+        memcmp(type, "multipart/form-data", 19) == 0               ){ // Prefix
+
+        return STATUS_OK;
+    }
+
     int len = 0;
     do {
         int ret;
