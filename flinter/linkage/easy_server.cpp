@@ -386,7 +386,7 @@ int EasyServer::ProxyHandler::OnMessage(Linkage *linkage,
     // skip locking to get better performance.
     if (s->_workers) {
         JobWorker::Job *job = new JobWorker::Job(l->context(), buffer, length);
-        MutexLocker locker(s->_gmutex);
+        MutexLocker glocker(s->_gmutex);
         s->DoAppendJob(job);
         return 1;
     }
@@ -555,12 +555,18 @@ bool EasyServer::DoListen(uint16_t port,
     Listener *listener = new ProxyListener(this, proxy_handler);
 
     if (!listener->ListenTcp4(port, false)) {
-        delete proxy_handler;
         delete listener;
+        delete proxy_handler;
         return false;
     }
 
-    MutexLocker locker(_gmutex);
+    MutexLocker glocker(_gmutex);
+    if (!_io_workers.empty()) {
+        delete listener;
+        delete proxy_handler;
+        throw std::logic_error("EasyServer only listens before Initialize()");
+    }
+
     _listen_proxy_handlers.push_back(proxy_handler);
     _listeners.push_back(listener);
     return true;
@@ -632,7 +638,7 @@ bool EasyServer::RegisterTimer(int64_t after, int64_t repeat, Runnable *timer)
     }
 
     int64_t tid = get_current_thread_id();
-    MutexLocker locker(_gmutex);
+    MutexLocker glocker(_gmutex);
     if (_io_workers.empty()) {
         _timers.push_back(std::make_pair(timer, std::make_pair(after, repeat)));
         return true;
@@ -640,7 +646,7 @@ bool EasyServer::RegisterTimer(int64_t after, int64_t repeat, Runnable *timer)
 
     LinkageWorker *worker = GetIoWorker(-1);
     if (tid > 0 && tid == worker->running_thread_id()) {
-        locker.Unlock();
+        glocker.Unlock();
         if (!worker->RegisterTimer(after, repeat, timer, true)) {
             LOG(ERROR) << "EasyServer: failed to register timer.";
             return false;
@@ -677,7 +683,7 @@ bool EasyServer::Initialize(size_t slots,
     _workers = workers;
     _slots = slots;
 
-    MutexLocker locker(_gmutex);
+    MutexLocker glocker(_gmutex);
     for (size_t i = 0; i < slots; ++i) {
         ProxyLinkageWorker *worker =
                 new ProxyLinkageWorker(easy_tuner, static_cast<int>(i));
@@ -685,7 +691,7 @@ bool EasyServer::Initialize(size_t slots,
         _io_workers.push_back(worker);
         if (!AttachListeners(worker)) {
             LOG(ERROR) << "EasyServer: failed to initialize I/O workers.";
-            DoShutdown(&locker);
+            DoShutdown(&glocker);
             return false;
         }
     }
@@ -696,7 +702,7 @@ bool EasyServer::Initialize(size_t slots,
         LinkageWorker *worker = GetIoWorker(-1);
         if (!worker->RegisterTimer(p->second.first, p->second.second, p->first, true)) {
             LOG(ERROR) << "EasyServer: failed to initialize timers.";
-            DoShutdown(&locker);
+            DoShutdown(&glocker);
             return false;
         }
 
@@ -714,7 +720,7 @@ bool EasyServer::Initialize(size_t slots,
 
         if (!_pool->AppendJob(*p, true)) {
             LOG(ERROR) << "EasyServer: failed to append I/O workers.";
-            DoShutdown(&locker);
+            DoShutdown(&glocker);
             return false;
         }
     }
@@ -725,7 +731,7 @@ bool EasyServer::Initialize(size_t slots,
 
         if (!_pool->AppendJob(worker, true)) {
             LOG(ERROR) << "EasyServer: failed to append job workers.";
-            DoShutdown(&locker);
+            DoShutdown(&glocker);
             return false;
         }
     }
@@ -735,8 +741,8 @@ bool EasyServer::Initialize(size_t slots,
 
 bool EasyServer::Shutdown()
 {
-    MutexLocker locker(_gmutex);
-    return DoShutdown(&locker);
+    MutexLocker glocker(_gmutex);
+    return DoShutdown(&glocker);
 }
 
 void EasyServer::DoDumpJobs()
@@ -821,7 +827,7 @@ bool EasyServer::AttachListeners(LinkageWorker *worker)
 
 Runnable *EasyServer::GetJob()
 {
-    MutexLocker locker(_gmutex);
+    MutexLocker glocker(_gmutex);
     while (_jobs.empty()) {
         _incoming->Wait(_gmutex);
     }
@@ -951,7 +957,7 @@ void EasyServer::QueueOrExecuteJob(Runnable *job)
     // _workers are only set in single threaded environment,
     // skip locking to get better performance.
     if (_workers) {
-        MutexLocker locker(_gmutex);
+        MutexLocker glocker(_gmutex);
         DoAppendJob(job);
         return;
     }
@@ -966,7 +972,7 @@ bool EasyServer::QueueIo(Runnable *job, int thread_id)
         return true;
     }
 
-    MutexLocker locker(_gmutex);
+    MutexLocker glocker(_gmutex);
     std::vector<ProxyLinkageWorker *>::iterator p = _io_workers.begin();
     if (thread_id) {
         std::advance(p, thread_id);
@@ -1218,7 +1224,15 @@ EasyServer::channel_t EasyServer::DoConnectTcp4(
         SslContext *ssl,
         int thread_id)
 {
-    assert(thread_id >= 0);
+    MutexLocker glocker(_gmutex);
+    if (_io_workers.empty()) {
+        throw std::logic_error("EasyServer only connects after Initialize()");
+    }
+
+    if (thread_id < 0 || static_cast<size_t>(thread_id) >= _io_workers.size()) {
+        thread_id = rand() % static_cast<int>(_io_workers.size());
+    }
+
     IoContext *const ioc = _io_context[static_cast<size_t>(thread_id)];
 
     MutexLocker locker(ioc->_mutex);

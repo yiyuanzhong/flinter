@@ -173,6 +173,11 @@ int main()
         return EXIT_FAILURE;
     }
 
+    // Don't start any workers since we use own pool.
+    if (!s.Initialize(3, 0)) {
+        return EXIT_FAILURE;
+    }
+
     uint64_t channels[N];
     Handler *handlers[N];
     for (size_t i = 0; i < N; ++i) {
@@ -186,11 +191,6 @@ int main()
             // Should release resources.
             return EXIT_FAILURE;
         }
-    }
-
-    // Don't start any workers since we use own pool.
-    if (!s.Initialize(3, 0)) {
-        return EXIT_FAILURE;
     }
 
     // Now do your business.

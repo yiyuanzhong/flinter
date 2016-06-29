@@ -119,6 +119,7 @@ public:
     bool Send(const EasyContext &context, const void *buffer, size_t length);
 
     /// Allocate channel for outgoing connection.
+    /// Call after Initialize().
     /// @sa Forget()
     channel_t ConnectTcp4(const std::string &host,
                           uint16_t port,
@@ -126,6 +127,7 @@ public:
                           int thread_id = -1);
 
     /// Allocate channel for outgoing connection.
+    /// Call after Initialize().
     /// @sa Forget()
     channel_t ConnectTcp4(const std::string &host,
                           uint16_t port,
@@ -133,6 +135,7 @@ public:
                           int thread_id = -1);
 
     /// Allocate channel for outgoing connection.
+    /// Call after Initialize().
     /// @sa Forget()
     channel_t SslConnectTcp4(const std::string &host,
                              uint16_t port,
@@ -141,6 +144,7 @@ public:
                              int thread_id = -1);
 
     /// Allocate channel for outgoing connection.
+    /// Call after Initialize().
     /// @sa Forget()
     channel_t SslConnectTcp4(const std::string &host,
                              uint16_t port,

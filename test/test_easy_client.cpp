@@ -39,12 +39,13 @@ int main()
     Handler handler;
     flinter::EasyServer s;
 
-    uint64_t channel = s.ConnectTcp4("127.0.0.1", 5577, &handler);
-    if (!channel) {
+    if (!s.Initialize(3, 7)) {
         return EXIT_FAILURE;
     }
 
-    if (!s.Initialize(3, 7)) {
+    uint64_t channel = s.ConnectTcp4("127.0.0.1", 5577, &handler);
+    if (!channel) {
+        s.Shutdown();
         return EXIT_FAILURE;
     }
 

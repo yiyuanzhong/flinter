@@ -64,10 +64,10 @@ TEST(easyClient, TestSslConnect4)
 
     Handler handler;
     flinter::EasyServer s;
+    ASSERT_TRUE(s.Initialize(3, 7));
 
     uint64_t channel = s.SslConnectTcp4("127.0.0.1", 5577, ssl, &handler);
     ASSERT_NE(channel, 0);
-    ASSERT_TRUE(s.Initialize(3, 7));
 
     for (int i = 0; i < 120; ++i) {
         std::ostringstream o;
