@@ -29,7 +29,7 @@ public:
 
     T Get() const
     {
-        return __sync_or_and_fetch(&_t, 0);
+        return _t;
     }
 
     T Set(const T &t)
