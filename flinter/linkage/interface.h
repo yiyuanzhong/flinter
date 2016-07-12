@@ -18,8 +18,6 @@
 
 #if defined(__unix__) || defined(__MACH__)
 
-#include <arpa/inet.h>
-#include <sys/un.h>
 #include <stdint.h>
 
 #include <string>
@@ -100,10 +98,7 @@ public:
         return _domain;
     }
 
-    bool unix_socket() const
-    {
-        return _domain == AF_UNIX;
-    }
+    bool unix_socket() const;
 
     int fd() const
     {
@@ -117,9 +112,9 @@ private:
     static int BindIPv6(uint16_t port, bool loopback);
     static int BindIPv4(uint16_t port, bool loopback);
 
-    static ssize_t FillAddress(struct sockaddr_un *addr,
-                               const std::string &sockname,
-                               bool file_based);
+    static ssize_t FillUnixAddress(void *sockaddr_un,
+                                   const std::string &sockname,
+                                   bool file_based);
 
     bool DoListenTcp(uint16_t port, bool loopback, int domain);
 

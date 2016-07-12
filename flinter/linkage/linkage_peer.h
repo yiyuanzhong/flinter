@@ -37,7 +37,7 @@ class LinkagePeer {
 public:
     LinkagePeer();
 
-#if defined(__unix__)
+#if defined(__unix__) || defined(__MACH__)
     bool Set(const struct sockaddr_in6 *ip, HANDLE fd);
     bool Set(const struct sockaddr_un  *ip, HANDLE fd);
 #endif

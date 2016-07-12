@@ -13,7 +13,7 @@
  * limitations under the License.
  */
 
-#ifdef __unix__
+#if defined(__unix__)
 
 #include "flinter/linkage/interface.h"
 
@@ -214,7 +214,7 @@ bool Interface::ListenUnix(const std::string &sockname, bool file_based, bool pr
     }
 
     struct sockaddr_un addr;
-    ssize_t size = FillAddress(&addr, sockname, file_based);
+    ssize_t size = FillUnixAddress(&addr, sockname, file_based);
     if (size < 0) {
         errno = EINVAL;
         return false;
@@ -403,7 +403,7 @@ int Interface::ConnectUnix(const std::string &sockname,
     }
 
     struct sockaddr_un addr;
-    ssize_t size = FillAddress(&addr, sockname, file_based);
+    ssize_t size = FillUnixAddress(&addr, sockname, file_based);
     if (size < 0) {
         errno = EINVAL;
         return -1;
@@ -507,12 +507,13 @@ bool Interface::TestIfConnected()
     return safe_test_if_connected(_socket) == 0;
 }
 
-ssize_t Interface::FillAddress(struct sockaddr_un *addr,
-                               const std::string &sockname,
-                               bool file_based)
+ssize_t Interface::FillUnixAddress(void *sockaddr_un,
+                                   const std::string &sockname,
+                                   bool file_based)
 {
-    assert(addr);
+    assert(sockaddr_un);
     assert(sockname.length());
+    struct sockaddr_un *addr = reinterpret_cast<struct sockaddr_un *>(sockaddr_un);
 
     size_t size = 0;
     memset(addr, 0, sizeof(*addr));
@@ -541,6 +542,11 @@ ssize_t Interface::FillAddress(struct sockaddr_un *addr,
     return static_cast<socklen_t>(size);
 }
 
+bool Interface::unix_socket() const
+{
+    return _domain == AF_UNIX;
+}
+
 } // namespace flinter
 
-#endif // __unix__
+#endif // defined(__unix__)
