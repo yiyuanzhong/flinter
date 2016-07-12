@@ -32,9 +32,6 @@ public:
     FileDescriptorIo(Interface *i, bool connecting);
     virtual ~FileDescriptorIo();
 
-    bool ConnectTcp4(const std::string &host, uint16_t port);
-    bool ConnectUnix(const std::string &sockname, bool file_based);
-
     virtual bool Initialize(Action *action,
                             Action *next_action,
                             bool *wanna_read,
