@@ -460,6 +460,12 @@ int set_socket_keepalive(int sockfd)
     return setsockopt(sockfd, SOL_SOCKET, SO_KEEPALIVE, &one, (socklen_t)sizeof(one));
 }
 
+int set_socket_broadcast(int sockfd)
+{
+    static const int one = 1;
+    return setsockopt(sockfd, SOL_SOCKET, SO_BROADCAST, &one, (socklen_t)sizeof(one));
+}
+
 int set_tcp_nodelay(int sockfd)
 {
     static const int one = 1;

@@ -92,6 +92,9 @@ extern int set_tcp_defer_accept(int sockfd);
 /** Allow TCP no delay. */
 extern int set_tcp_nodelay(int sockfd);
 
+/** Allow socket to send broadcast packets. */
+extern int set_socket_broadcast(int sockfd);
+
 /** Allow socket to send keep-alive packets. */
 extern int set_socket_keepalive(int sockfd);
 
