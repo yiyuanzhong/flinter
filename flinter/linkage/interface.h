@@ -16,8 +16,7 @@
 #ifndef  __FLINTER_LINKAGE_INTERFACE_H__
 #define  __FLINTER_LINKAGE_INTERFACE_H__
 
-#if defined(__unix__) || defined(__MACH__)
-
+#include <sys/types.h>
 #include <stdint.h>
 
 #include <string>
@@ -28,6 +27,38 @@ class LinkagePeer;
 
 class Interface {
 public:
+    struct Parameter {
+        int domain;
+        int type;
+        int protocol;
+
+        // TCP only
+        bool tcp_defer_accept;
+        bool tcp_nodelay;
+
+        // UDP only
+        bool udp_broadcast;
+        bool udp_multicast;
+
+        // TCP/UDP
+        const char *socket_interface;
+        const char *socket_hostname;
+        uint16_t socket_bind_port;
+        uint16_t socket_port;
+
+        bool socket_close_on_exec;
+        bool socket_reuse_address;
+        bool socket_non_blocking;
+        bool socket_keepalive;
+
+        // Unix socket
+        const char *unix_abstract;
+        const char *unix_pathname;
+        mode_t unix_mode;
+
+        Parameter();
+    }; // struct Parameter
+
     Interface();
     ~Interface();
 
@@ -79,6 +110,22 @@ public:
                     LinkagePeer *peer = NULL,
                     LinkagePeer *me = NULL);
 
+    /// Low level listen.
+    bool Listen(const Parameter &parameter, LinkagePeer *me = NULL);
+
+    /// Low level accepted.
+    bool Accepted(const Parameter &parameter, int fd);
+
+    /// Low level connect.
+    int Connect(const Parameter &parameter,
+                LinkagePeer *peer = NULL,
+                LinkagePeer *me = NULL);
+
+    // Low level accept.
+    bool Accept(const Parameter &parameter,
+                LinkagePeer *peer,
+                LinkagePeer *me = NULL);
+
     /// @param timeout to wait, <0 for infinity.
     /// @warning only call to this method if connect() gives "in progress".
     bool WaitUntilConnected(int64_t timeout);
@@ -93,13 +140,6 @@ public:
     /// Close all underlying sockets.
     bool Close();
 
-    int domain() const
-    {
-        return _domain;
-    }
-
-    bool unix_socket() const;
-
     int fd() const
     {
         return _socket;
@@ -108,27 +148,30 @@ public:
     static const int kMaximumQueueLength = 256;
 
 private:
-    static int CreateSocket(int domain, int type, int protocol);
-    static int BindIPv6(uint16_t port, bool loopback);
-    static int BindIPv4(uint16_t port, bool loopback);
-
-    static ssize_t FillUnixAddress(void *sockaddr_un,
-                                   const std::string &sockname,
-                                   bool file_based);
-
-    bool DoListenTcp(uint16_t port, bool loopback, int domain);
-
     std::string _sockname;
-    bool _file_based;
-
     int _socket;
     int _domain;
-    bool _client;
+
+    int DoConnectTcp4(const Parameter &parameter, LinkagePeer *peer, LinkagePeer *me);
+    int DoConnectTcp6(const Parameter &parameter, LinkagePeer *peer, LinkagePeer *me);
+    int DoConnectUnix(const Parameter &parameter, LinkagePeer *peer, LinkagePeer *me);
+
+    bool DoListenTcp4(const Parameter &parameter, LinkagePeer *me);
+    bool DoListenTcp6(const Parameter &parameter, LinkagePeer *me);
+    bool DoListenUnix(const Parameter &parameter, LinkagePeer *me);
+    bool DoListenUnixSocket(const Parameter &parameter, LinkagePeer *me);
+    bool DoListenUnixNamespace(const Parameter &parameter, LinkagePeer *me);
+
+    static bool InitializeSocket(const Parameter &parameter, int s);
+    static int CreateSocket(const Parameter &parameter);
+    static int CreateListenSocket(const Parameter &parameter,
+                                  void *sockaddr,
+                                  size_t addrlen);
+
+    static int Bind(int s, void *sockaddr, size_t addrlen);
 
 }; // class Interface
 
 } // namespace flinter
-
-#endif // defined(__unix__) || defined(__MACH__)
 
 #endif //__FLINTER_LINKAGE_INTERFACE_H__

@@ -39,18 +39,14 @@
 namespace flinter {
 
 template <class T>
-static bool GetPeerOrClose(int s,
-                           const T &addr,
-                           LinkagePeer *peer,
-                           LinkagePeer *me)
+static bool GetPeerOrClose(int s, LinkagePeer *peer, LinkagePeer *me)
 {
-    if (set_non_blocking_mode(s) || set_close_on_exec(s)) {
-        safe_close(s);
-        return false;
-    }
-
     if (peer) {
-        if (!peer->Set(&addr, s)) {
+        T sa;
+        socklen_t len = sizeof(sa);
+        if (getpeername(s, reinterpret_cast<struct sockaddr *>(&sa), &len) ||
+            !peer->Set(&sa, s)) {
+
             safe_close(s);
             return false;
         }
@@ -70,7 +66,76 @@ static bool GetPeerOrClose(int s,
     return true;
 }
 
-Interface::Interface() : _file_based(true), _socket(-1), _domain(AF_UNSPEC), _client(true)
+template <class T>
+bool DoAccept(int s, LinkagePeer *peer, LinkagePeer *me)
+{
+    T addr;
+    struct sockaddr *sa = reinterpret_cast<struct sockaddr *>(&addr);
+    socklen_t len = sizeof(addr);
+    int fd = safe_accept(s, sa, &len);
+    if (fd < 0) {
+        return false;
+    }
+
+    return GetPeerOrClose<T>(fd, peer, me);
+}
+
+static bool Fill(struct sockaddr_in6 *addr, const char *ip, uint16_t port)
+{
+    memset(addr, 0, sizeof(*addr));
+    addr->sin6_family = AF_INET6;
+    addr->sin6_addr = in6addr_any;
+    addr->sin6_port = htons(port);
+    if (ip && *ip) {
+        if (!inet_pton(AF_INET6, ip, &addr->sin6_addr)) {
+            errno = EINVAL;
+            return false;
+        }
+    }
+
+    return true;
+}
+
+static bool Fill(struct sockaddr_in *addr, const char *ip, uint16_t port)
+{
+    memset(addr, 0, sizeof(*addr));
+    addr->sin_family = AF_INET;
+    addr->sin_addr.s_addr = htonl(INADDR_ANY);
+    addr->sin_port = htons(port);
+    if (ip && *ip) {
+        if (!inet_pton(AF_INET, ip, &addr->sin_addr)) {
+            errno = EINVAL;
+            return false;
+        }
+    }
+
+    return true;
+}
+
+Interface::Parameter::Parameter()
+        : domain(AF_UNSPEC)
+        , type(SOCK_STREAM)
+        , protocol(0)
+        , tcp_defer_accept(false)
+        , tcp_nodelay(false)
+        , udp_broadcast(false)
+        , udp_multicast(false)
+        , socket_interface(NULL)
+        , socket_hostname(NULL)
+        , socket_bind_port(0)
+        , socket_port(0)
+        , socket_close_on_exec(false)
+        , socket_reuse_address(false)
+        , socket_non_blocking(false)
+        , socket_keepalive(false)
+        , unix_abstract(NULL)
+        , unix_pathname(NULL)
+        , unix_mode(S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP | S_IROTH | S_IWOTH)
+{
+    // Intended left blank.
+}
+
+Interface::Interface() : _socket(-1), _domain(AF_UNSPEC)
 {
     // Intended left blank.
 }
@@ -80,193 +145,487 @@ Interface::~Interface()
     Close();
 }
 
-int Interface::CreateSocket(int domain, int type, int protocol)
+int Interface::Bind(int s, void *sockaddr, size_t addrlen)
 {
-    int s = socket(domain, type, protocol);
+    return bind(s, reinterpret_cast<struct sockaddr *>(sockaddr),
+                   static_cast<socklen_t>(addrlen));
+}
+
+int Interface::CreateListenSocket(const Parameter &parameter,
+                                  void *sockaddr,
+                                  size_t addrlen)
+{
+    int s = CreateSocket(parameter);
     if (s < 0) {
         return -1;
     }
 
-    if (set_non_blocking_mode(s) || set_close_on_exec(s)) {
+    if (Bind(s, sockaddr, addrlen)) {
         safe_close(s);
         return -1;
     }
 
-    return s;
-}
-
-int Interface::BindIPv6(uint16_t port, bool loopback)
-{
-    int s = CreateSocket(AF_INET6, SOCK_STREAM, 0);
-    if (s < 0) {
-        return -1;
-    }
-
-    struct sockaddr_in6 addr6;
-    memset(&addr6, 0, sizeof(addr6));
-    addr6.sin6_family = AF_INET6;
-    addr6.sin6_port = htons(port);
-    if (loopback) {
-        memcpy(&addr6.sin6_addr, &in6addr_loopback, sizeof(addr6.sin6_addr));
-    } else {
-        memcpy(&addr6.sin6_addr, &in6addr_any, sizeof(addr6.sin6_addr));
-    }
-
-    if (set_socket_reuse_address(s) ||
-        bind(s, reinterpret_cast<struct sockaddr *>(&addr6), sizeof(addr6))) {
-
-        safe_close(s);
-        return -1;
-    }
-
-    return s;
-}
-
-int Interface::BindIPv4(uint16_t port, bool loopback)
-{
-    int s = CreateSocket(AF_INET, SOCK_STREAM, 0);
-    if (s < 0) {
-        return -1;
-    }
-
-    struct sockaddr_in addr;
-    memset(&addr, 0, sizeof(addr));
-    addr.sin_family = AF_INET;
-    addr.sin_port = htons(port);
-    if (loopback) {
-        addr.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
-    } else {
-        addr.sin_addr.s_addr = htonl(INADDR_ANY);
-    }
-
-    if (set_socket_reuse_address(s) ||
-        bind(s, reinterpret_cast<struct sockaddr *>(&addr), sizeof(addr))) {
-
-        safe_close(s);
-        return -1;
-    }
-
-    return s;
-}
-
-bool Interface::ListenTcp6(uint16_t port, bool loopback)
-{
-    return DoListenTcp(port, loopback, AF_INET6);
-}
-
-bool Interface::ListenTcp4(uint16_t port, bool loopback)
-{
-    return DoListenTcp(port, loopback, AF_INET);
-}
-
-bool Interface::ListenTcp(uint16_t port, bool loopback)
-{
-    return DoListenTcp(port, loopback, AF_UNSPEC);
-}
-
-bool Interface::DoListenTcp(uint16_t port, bool loopback, int domain)
-{
-    if (_socket >= 0) {
-        return true;
-    }
-
-    int s = -1;
-
-    if (domain != AF_INET) {
-        s = BindIPv6(port, loopback);
-        if (s >= 0) {
-            domain = AF_INET6;
-        }
-    }
-
-    if (s < 0 && domain != AF_INET6) {
-        s = BindIPv4(port, loopback);
-        if (s >= 0) {
-            domain = AF_INET;
-        }
-    }
-
-    if (s < 0) {
-        return false;
-    }
-
-    if (safe_listen(s, kMaximumQueueLength)) {
-        safe_close(s);
-        return false;
-    }
-
-    _socket = s;
-    _file_based = false;
-    _sockname.clear();
-    _client = false;
-    _domain = domain;
-
-    CLOG.Trace("Interface: listening on %s:%u...", loopback ? "loopback" : "any", port);
-    return true;
-}
-
-bool Interface::ListenUnix(const std::string &sockname, bool file_based, bool privileged)
-{
-    if (sockname.empty()) {
-        return false;
-    } else if (_socket >= 0) {
-        return true;
-    }
-
-    struct sockaddr_un addr;
-    ssize_t size = FillUnixAddress(&addr, sockname, file_based);
-    if (size < 0) {
-        errno = EINVAL;
-        return false;
-    }
-
-    int s = CreateSocket(AF_UNIX, SOCK_STREAM, 0);
-    if (s < 0) {
-        return false;
-    }
-
-    if (bind(s, reinterpret_cast<struct sockaddr *>(&addr),
-                static_cast<socklen_t>(size))) {
-
-        if (file_based && errno == EADDRINUSE) {
-            // TODO(yiyuanzhong): check if the socket is actually dead.
-        }
-
-        safe_close(s);
-        return false;
-    }
-
-    if (file_based) {
-        mode_t mode = privileged ? (S_IRUSR | S_IWUSR)
-                                 : (S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP | S_IROTH | S_IWOTH);
-
-        if (chmod(sockname.c_str(), mode)) {
+    if (parameter.type == SOCK_STREAM) {
+        if (listen(s, kMaximumQueueLength)) {
             safe_close(s);
-            unlink(sockname.c_str());
+            return -1;
+        }
+    }
+
+    return s;
+}
+
+int Interface::CreateSocket(const Parameter &parameter)
+{
+    int s = socket(parameter.domain, parameter.type, parameter.protocol);
+    if (s < 0) {
+        return -1;
+    }
+
+    if (!InitializeSocket(parameter, s)) {
+        safe_close(s);
+        return -1;
+    }
+
+    return s;
+}
+
+bool Interface::InitializeSocket(const Parameter &parameter, int s)
+{
+    if (parameter.socket_reuse_address) {
+        if (set_socket_reuse_address(s)) {
             return false;
         }
     }
 
-    if (safe_listen(s, kMaximumQueueLength)) {
-        safe_close(s);
-        if (file_based) {
-            unlink(sockname.c_str());
+    if (parameter.socket_non_blocking) {
+        if (set_non_blocking_mode(s)) {
+            return false;
         }
+    }
+
+    if (parameter.socket_close_on_exec) {
+        if (set_close_on_exec(s)) {
+            return false;
+        }
+    }
+
+    if (parameter.socket_keepalive) {
+        if (set_socket_keepalive(s)) {
+            return false;
+        }
+    }
+
+    if (parameter.tcp_defer_accept) {
+        if (set_tcp_defer_accept(s)) {
+            return false;
+        }
+    }
+
+    if (parameter.tcp_nodelay) {
+        if (set_tcp_nodelay(s)) {
+            return false;
+        }
+    }
+
+    if (parameter.udp_broadcast) {
+        if (set_socket_broadcast(s)) {
+            return false;
+        }
+    }
+
+    return true;
+}
+
+int Interface::DoConnectTcp4(const Parameter &parameter,
+                             LinkagePeer *peer,
+                             LinkagePeer *me)
+{
+    std::string ip;
+    if (!Resolver::GetInstance()->Resolve(parameter.socket_hostname, &ip)) {
+        errno = ENXIO;
+        return -1;
+    }
+
+    bool need_bind = false;
+    struct sockaddr_in local;
+    if (parameter.socket_interface && *parameter.socket_interface) {
+        need_bind = true;
+        if (!Fill(&local, parameter.socket_interface, parameter.socket_bind_port)) {
+            return -1;
+        }
+    }
+
+    struct sockaddr_in addr;
+    if (!Fill(&addr, ip.c_str(), parameter.socket_port)) {
+        return -1;
+    }
+
+    int s = CreateSocket(parameter);
+    if (s < 0) {
+        return -1;
+    }
+
+    if (need_bind) {
+        if (Bind(s, &local, sizeof(local))) {
+            safe_close(s);
+            return -1;
+        }
+    }
+
+    int ret = safe_connect(s, reinterpret_cast<struct sockaddr *>(&addr), sizeof(addr));
+    if (ret < 0) {
+        if (errno != EINPROGRESS) {
+            safe_close(s);
+            return -1;
+        }
+    }
+
+    if (!GetPeerOrClose<struct sockaddr_in>(s, peer, me)) {
+        return -1;
+    }
+
+    _socket = s;
+    _domain = AF_INET;
+    return ret == 0 ? 0 : 1;
+}
+
+int Interface::DoConnectUnix(const Parameter &parameter,
+                             LinkagePeer *peer,
+                             LinkagePeer * /*me*/)
+{
+    bool file_based = true;
+    const char *name = NULL;
+    if (parameter.unix_pathname && *parameter.unix_pathname) {
+        name = parameter.unix_pathname;
+    } else if (parameter.unix_abstract && *parameter.unix_abstract) {
+        name = parameter.unix_abstract;
+        file_based = false;
+    }
+
+    struct sockaddr_un aun;
+    memset(&aun, 0, sizeof(aun));
+    aun.sun_family = AF_UNIX;
+    size_t len = strlen(name);
+    if (len >= sizeof(aun.sun_path)) {
+        errno = EINVAL;
+        return -1;
+    }
+
+    if (file_based) {
+        memcpy(aun.sun_path, name, len);
+    } else {
+        memcpy(aun.sun_path + 1, name, len);
+    }
+
+    len += sizeof(aun) - sizeof(aun.sun_path) + 1;
+    int s = CreateSocket(parameter);
+    if (s < 0) {
+        return -1;
+    }
+
+    // UNIX socket will never be in progress.
+    if (safe_connect(s, reinterpret_cast<struct sockaddr *>(&aun),
+                        static_cast<socklen_t>(len))) {
+
+        safe_close(s);
+        return -1;
+    }
+
+    if (peer) {
+        if (!peer->Set(&aun, s)) {
+            return -1;
+        }
+    }
+
+    _socket = s;
+    _domain = AF_UNIX;
+    return 0;
+}
+
+int Interface::Connect(const Parameter &parameter,
+                       LinkagePeer *peer,
+                       LinkagePeer *me)
+{
+    // For connecting, SOCK_STREAM and SOCK_DGRAM share the same actions.
+    if (parameter.type != SOCK_STREAM && parameter.type != SOCK_DGRAM) {
+        errno = EINVAL;
+        return -1;
+
+    } else if (!Close()) {
+        return -1;
+
+    } else if (parameter.domain == AF_INET6) {
+        //return DoConnectTcp6(parameter, peer, me); // UDP as well.
+
+    } else if (parameter.domain == AF_INET  ) {
+        return DoConnectTcp4(parameter, peer, me); // UDP as well.
+
+    } else if (parameter.domain == AF_UNIX  ) {
+        return DoConnectUnix(parameter, peer, me);
+    }
+
+    CLOG.Fatal("Interface: BUG: unsupported socket type: <%d:%d:%d>",
+               parameter.domain, parameter.type, parameter.protocol);
+
+    return -1;
+}
+
+bool Interface::DoListenTcp4(const Parameter &parameter, LinkagePeer *me)
+{
+    struct ip_mreqn mreqn;
+    struct sockaddr_in ain;
+    bool multicast = false;
+
+    if (parameter.type == SOCK_DGRAM && parameter.udp_multicast) {
+        memset(&mreqn, 0, sizeof(mreqn));
+        if (!parameter.socket_interface                                     ||
+            !*parameter.socket_interface                                    ||
+            inet_aton(parameter.socket_interface, &mreqn.imr_address) != 1  ){
+
+            errno = EINVAL;
+            return false;
+        }
+
+        if (!Fill(&ain, parameter.socket_hostname, parameter.socket_bind_port)) {
+            return false;
+        }
+
+        mreqn.imr_multiaddr = ain.sin_addr;
+        multicast = true;
+
+    } else if (!Fill(&ain, parameter.socket_interface, parameter.socket_bind_port)) {
+        return false;
+    }
+
+    int s = CreateListenSocket(parameter, &ain, sizeof(ain));
+    if (s < 0) {
+        return false;
+    }
+
+    if (multicast) {
+        if (setsockopt(s, IPPROTO_IP, IP_ADD_MEMBERSHIP, &mreqn, sizeof(mreqn))) {
+            safe_close(s);
+            return false;
+        }
+    }
+
+    if (!GetPeerOrClose<struct sockaddr_in>(s, NULL, me)) {
         return false;
     }
 
     _socket = s;
-    _file_based = file_based;
-    _sockname = sockname;
-    _client = false;
-    _domain = AF_UNIX;
+    _domain = AF_INET;
 
-    CLOG.Trace("Interface: listening on %s%s [%s]...",
-               privileged ? "privileged " : "",
-               file_based ? "file" : "namespace",
-               sockname.c_str());
+    char buffer[128];
+    CLOG.Verbose("Interface: LISTEN<%d> %s4 <%s:%u>", s,
+                 parameter.type == SOCK_STREAM ? "TCP" : "UDP",
+                 inet_ntop(AF_INET, &ain.sin_addr, buffer, sizeof(buffer)),
+                 parameter.socket_bind_port);
 
     return true;
+}
+
+bool Interface::DoListenTcp6(const Parameter &parameter, LinkagePeer *me)
+{
+    struct sockaddr_in6 ai6;
+    if (!Fill(&ai6, parameter.socket_interface, parameter.socket_bind_port)) {
+        return false;
+    }
+
+    int s = CreateListenSocket(parameter, &ai6, sizeof(ai6));
+    if (s < 0) {
+        return false;
+    }
+
+    if (!GetPeerOrClose<struct sockaddr_in6>(s, NULL, me)) {
+        return false;
+    }
+
+    _socket = s;
+    _domain = AF_INET6;
+
+    char buffer[128];
+    CLOG.Verbose("Interface: LISTEN<%d> %s6 <[%s]:%u>", s,
+                 parameter.type == SOCK_STREAM ? "TCP" : "UDP",
+                 inet_ntop(AF_INET6, &ai6.sin6_addr, buffer, sizeof(buffer)),
+                 parameter.socket_bind_port);
+
+    return true;
+}
+
+bool Interface::DoListenUnixSocket(const Parameter &parameter,
+                                   LinkagePeer * /*me*/)
+{
+    struct sockaddr_un aun;
+    memset(&aun, 0, sizeof(aun));
+    aun.sun_family = AF_UNIX;
+
+    size_t len = strlen(parameter.unix_pathname);
+    if (len >= sizeof(aun.sun_path)) {
+        errno = EINVAL;
+        return false;
+    }
+
+    memcpy(aun.sun_path, parameter.unix_pathname, len);
+    len += sizeof(aun) - sizeof(aun.sun_path) + 1;
+
+    int s = CreateSocket(parameter);
+    if (s < 0) {
+        return false;
+    }
+
+    if (Bind(s, &aun, len)) {
+        safe_close(s);
+        return false;
+    }
+
+    if (chmod(parameter.unix_pathname, parameter.unix_mode)) {
+        safe_close(s);
+        unlink(parameter.unix_pathname);
+        return false;
+    }
+
+    if (listen(s, kMaximumQueueLength)) {
+        safe_close(s);
+        unlink(parameter.unix_pathname);
+        return false;
+    }
+
+    _socket = s;
+    _domain = AF_UNIX;
+    _sockname = parameter.unix_pathname;
+    CLOG.Verbose("Interface: LISTEN<%d> PATHNAME%c [%s]", s,
+                 parameter.type == SOCK_STREAM ? 's' : 'd',
+                 parameter.unix_abstract);
+
+    return true;
+}
+
+bool Interface::DoListenUnixNamespace(const Parameter &parameter,
+                                      LinkagePeer * /*me*/)
+{
+    struct sockaddr_un aun;
+    memset(&aun, 0, sizeof(aun));
+    aun.sun_family = AF_UNIX;
+
+    size_t len = strlen(parameter.unix_abstract);
+    if (len >= sizeof(aun.sun_path)) {
+        errno = EINVAL;
+        return false;
+    }
+
+    memcpy(aun.sun_path + 1, parameter.unix_pathname, len);
+    len += sizeof(aun) - sizeof(aun.sun_path) + 1;
+
+    int s = CreateListenSocket(parameter, &aun, len);
+    if (s < 0) {
+        return false;
+    }
+
+    _socket = s;
+    _domain = AF_UNIX;
+    CLOG.Verbose("Interface: LISTEN<%d> ABSTRACT%c [%s]", s,
+                 parameter.type == SOCK_STREAM ? 's' : 'd',
+                 parameter.unix_abstract);
+
+    return true;
+}
+
+bool Interface::DoListenUnix(const Parameter &parameter, LinkagePeer *me)
+{
+    if (parameter.unix_pathname && *parameter.unix_pathname) {
+        return DoListenUnixSocket(parameter, me);
+
+    } else if (parameter.unix_abstract && *parameter.unix_abstract) {
+        return DoListenUnixNamespace(parameter, me);
+    }
+
+    CLOG.Fatal("Interface: BUG: neither pathname nor abstract namespace "
+                               "specified for UNIX sockets.");
+
+    errno = EINVAL;
+    return false;
+}
+
+bool Interface::Listen(const Parameter &parameter, LinkagePeer *me)
+{
+    if (parameter.type != SOCK_STREAM && parameter.type != SOCK_DGRAM) {
+        errno = EINVAL;
+        return false;
+
+    } else if (!Close()) {
+        return false;
+
+    } else if (parameter.domain == AF_INET6) {
+        return DoListenTcp6(parameter, me); // UDP as well.
+
+    } else if (parameter.domain == AF_INET ) {
+        return DoListenTcp4(parameter, me); // UDP as well.
+
+    } else if (parameter.domain == AF_UNIX ) {
+        return DoListenUnix(parameter, me);
+    }
+
+    CLOG.Fatal("Interface: BUG: unsupported socket type: <%d:%d:%d>",
+               parameter.domain, parameter.type, parameter.protocol);
+
+    errno = EINVAL;
+    return false;
+}
+
+bool Interface::ListenTcp6(uint16_t port, bool loopback)
+{
+    Parameter p;
+    p.domain = AF_INET6;
+    p.type = SOCK_STREAM;
+    p.socket_bind_port = port;
+    p.socket_non_blocking = true;
+    p.socket_reuse_address = true;
+    p.socket_close_on_exec = true;
+    p.socket_interface = loopback ? "::1" : "::";
+    return Listen(p);
+}
+
+bool Interface::ListenTcp4(uint16_t port, bool loopback)
+{
+    Parameter p;
+    p.domain = AF_INET;
+    p.type = SOCK_STREAM;
+    p.socket_bind_port = port;
+    p.socket_non_blocking = true;
+    p.socket_reuse_address = true;
+    p.socket_close_on_exec = true;
+    p.socket_interface = loopback ? "127.0.0.1" : "0.0.0.0";
+    return Listen(p);
+}
+
+bool Interface::ListenTcp(uint16_t port, bool loopback)
+{
+    return ListenTcp6(port, loopback) || ListenTcp4(port, loopback);
+}
+
+bool Interface::ListenUnix(const std::string &sockname, bool file_based, bool privileged)
+{
+    static const mode_t kPriviledged = S_IRUSR | S_IWUSR;
+    static const mode_t kNormal = S_IRUSR | S_IWUSR
+                                | S_IRGRP | S_IWGRP
+                                | S_IROTH | S_IWOTH;
+
+    Parameter p;
+    p.domain = AF_UNIX;
+    p.type = SOCK_STREAM;
+    p.socket_non_blocking = true;
+    p.socket_close_on_exec = true;
+    if (file_based) {
+        p.unix_pathname = sockname.c_str();
+        p.unix_mode = privileged ? kPriviledged : kNormal;
+
+    } else {
+        p.unix_abstract = sockname.c_str();
+    }
+
+    return Listen(p);
 }
 
 bool Interface::Shutdown()
@@ -296,94 +655,79 @@ bool Interface::Close()
         return true;
     }
 
-    if (_file_based) {
+    if (!_sockname.empty()) {
         // Try but not necessarily succeed.
         unlink(_sockname.c_str());
+        _sockname.clear();
     }
 
     int socket = _socket;
-    _file_based = true;
-    _client = true;
     _socket = -1;
 
     if (safe_close(socket)) {
         return false;
     }
 
+    _domain = AF_UNSPEC;
     return true;
 }
 
 bool Interface::Accept(LinkagePeer *peer, LinkagePeer *me)
 {
+    Parameter p;
+    p.socket_close_on_exec = true;
+    p.socket_non_blocking = true;
+    return Accept(p, peer, me);
+}
+
+bool Interface::Accept(const Parameter &parameter,
+                       LinkagePeer *peer,
+                       LinkagePeer *me)
+{
     assert(_socket >= 0);
-    assert(!_client);
     assert(peer);
 
-    if (_socket < 0 || _client || !peer) {
+    bool ret = false;
+    if (_socket < 0 || !peer) {
+        return false;
+
+    } else if (_domain == AF_INET6) {
+        ret = DoAccept<struct sockaddr_in6>(_socket, peer, me);
+
+    } else if (_domain == AF_INET) {
+        ret = DoAccept<struct sockaddr_in >(_socket, peer, me);
+
+    } else if (_domain == AF_UNIX) {
+        ret = DoAccept<struct sockaddr_un >(_socket, peer, me);
+    }
+
+    if (!ret) {
         return false;
     }
 
-    if (_domain == AF_UNIX) {
-        struct sockaddr_un addr;
-        socklen_t len = sizeof(addr);
-        int fd = safe_accept(_socket, reinterpret_cast<struct sockaddr *>(&addr), &len);
-        if (fd < 0) {
-            return false;
-        }
-
-        if (addr.sun_family != AF_UNIX) { // Something has gone terribly wrong.
-            safe_close(fd);
-            return false;
-        }
-
-        return GetPeerOrClose(fd, addr, peer, me);
-
-    } else if (_domain == AF_INET6) {
-        struct sockaddr_in6 addr6;
-        socklen_t len = sizeof(addr6);
-        int fd = safe_accept(_socket, reinterpret_cast<struct sockaddr *>(&addr6), &len);
-        if (fd < 0) {
-            return false;
-        }
-
-        if (addr6.sin6_family != AF_INET6) { // Something has gone terribly wrong.
-            safe_close(fd);
-            return false;
-        }
-
-        return GetPeerOrClose(fd, addr6, peer, me);
-
-    } else if (_domain == AF_INET) {
-        struct sockaddr_in addr;
-        socklen_t len = sizeof(addr);
-        int fd = safe_accept(_socket, reinterpret_cast<struct sockaddr *>(&addr), &len);
-        if (fd < 0) {
-            return false;
-        }
-
-        if (addr.sin_family != AF_INET) { // Something has gone terribly wrong.
-            safe_close(fd);
-            return false;
-        }
-
-        return GetPeerOrClose(fd, addr, peer, me);
+    if (!InitializeSocket(parameter, peer->fd())) {
+        safe_close(peer->fd());
+        return false;
     }
 
-    return false;
+    return true;
 }
 
 bool Interface::Accepted(int fd)
 {
-    if (_socket >= 0) {
-        errno = EINVAL;
+    Parameter p;
+    p.socket_non_blocking = true;
+    p.socket_close_on_exec = true;
+    return Accepted(p, fd);
+}
+
+bool Interface::Accepted(const Parameter &parameter, int fd)
+{
+    if (!Close() || !InitializeSocket(parameter, fd)) {
         return false;
     }
 
-    if (set_non_blocking_mode(fd) || set_close_on_exec(fd)) {
-        return false;
-    }
-
-    _file_based = false;
+    _domain = parameter.domain;
     _socket = fd;
     return true;
 }
@@ -393,44 +737,19 @@ int Interface::ConnectUnix(const std::string &sockname,
                            LinkagePeer *peer,
                            LinkagePeer *me)
 {
-    assert(sockname.length());
-    assert(_socket < 0);
-    assert(_client);
+    Parameter p;
+    p.domain = AF_UNIX;
+    p.type = SOCK_STREAM;
+    p.socket_non_blocking = true;
+    p.socket_close_on_exec = true;
 
-    if (_socket >= 0) {
-        errno = EINVAL;
-        return -1;
+    if (file_based) {
+        p.unix_pathname = sockname.c_str();
+    } else {
+        p.unix_abstract = sockname.c_str();
     }
 
-    struct sockaddr_un addr;
-    ssize_t size = FillUnixAddress(&addr, sockname, file_based);
-    if (size < 0) {
-        errno = EINVAL;
-        return -1;
-    }
-
-    int s = CreateSocket(AF_UNIX, SOCK_STREAM, 0);
-    if (s < 0) {
-        return -1;
-    }
-
-    // UNIX socket will never be in progress.
-    if (safe_connect(s, (struct sockaddr *)&addr, static_cast<socklen_t>(size))) {
-        safe_close(s);
-        return -1;
-    }
-
-    if (!GetPeerOrClose(s, addr, peer, me)) {
-        if (file_based) {
-            unlink(sockname.c_str());
-        }
-
-        return -1;
-    }
-
-    _file_based = file_based;
-    _socket = s;
-    return 0;
+    return Connect(p, peer, me);
 }
 
 int Interface::ConnectTcp4(const std::string &hostname,
@@ -438,49 +757,14 @@ int Interface::ConnectTcp4(const std::string &hostname,
                            LinkagePeer *peer,
                            LinkagePeer *me)
 {
-    assert(hostname.length());
-    assert(_client);
-
-    if (_socket >= 0) {
-        errno = EINVAL;
-        return -1;
-    }
-
-    std::string ip;
-    if (!Resolver::GetInstance()->Resolve(hostname, &ip)) {
-        errno = ENXIO;
-        return -1;
-    }
-
-    struct sockaddr_in addr;
-    memset(&addr, 0, sizeof(addr));
-    addr.sin_family = AF_INET;
-    addr.sin_port = htons(port);
-    if (inet_aton(ip.c_str(), &addr.sin_addr) == 0) {
-        errno = ENXIO;
-        return -1;
-    }
-
-    int s = CreateSocket(AF_INET, SOCK_STREAM, 0);
-    if (s < 0) {
-        return -1;
-    }
-
-    int ret = safe_connect(s, reinterpret_cast<struct sockaddr *>(&addr), sizeof(addr));
-    if (ret < 0) {
-        if (errno != EINPROGRESS) {
-            safe_close(s);
-            return -1;
-        }
-    }
-
-    if (!GetPeerOrClose(s, addr, peer, me)) {
-        return -1;
-    }
-
-    _socket = s;
-    _file_based = false;
-    return ret == 0 ? 0 : 1;
+    Parameter p;
+    p.domain = AF_INET;
+    p.type = SOCK_STREAM;
+    p.socket_port = port;
+    p.socket_non_blocking = true;
+    p.socket_close_on_exec = true;
+    p.socket_hostname = hostname.c_str();
+    return Connect(p, peer, me);
 }
 
 bool Interface::WaitUntilConnected(int64_t timeout)
@@ -505,46 +789,6 @@ bool Interface::TestIfConnected()
     }
 
     return safe_test_if_connected(_socket) == 0;
-}
-
-ssize_t Interface::FillUnixAddress(void *sockaddr_un,
-                                   const std::string &sockname,
-                                   bool file_based)
-{
-    assert(sockaddr_un);
-    assert(sockname.length());
-    struct sockaddr_un *addr = reinterpret_cast<struct sockaddr_un *>(sockaddr_un);
-
-    size_t size = 0;
-    memset(addr, 0, sizeof(*addr));
-    addr->sun_family = AF_UNIX;
-
-    if (file_based) {
-        int ret = snprintf(addr->sun_path, sizeof(addr->sun_path),
-                           "%s", sockname.c_str());
-
-        if (ret < 0 || static_cast<size_t>(ret) >= sizeof(addr->sun_path)) {
-            return -1;
-        }
-
-        size = SUN_LEN(addr);
-
-    } else {
-        size = sockname.length();
-        if (size > sizeof(addr->sun_path) - 1) {
-            return -1;
-        }
-
-        memcpy(addr->sun_path + 1, sockname.data(), size);
-        size += sizeof(*addr) - sizeof(addr->sun_path) + 1;
-    }
-
-    return static_cast<socklen_t>(size);
-}
-
-bool Interface::unix_socket() const
-{
-    return _domain == AF_UNIX;
 }
 
 } // namespace flinter
