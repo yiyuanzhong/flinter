@@ -16,6 +16,7 @@
 #include "flinter/linkage/easy_server.h"
 
 #include <assert.h>
+#include <string.h>
 
 #include <stdexcept>
 

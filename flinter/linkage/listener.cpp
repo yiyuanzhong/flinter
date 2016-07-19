@@ -16,6 +16,7 @@
 #include "flinter/linkage/listener.h"
 
 #include <errno.h>
+#include <string.h>
 
 #include "flinter/linkage/interface.h"
 #include "flinter/linkage/linkage_peer.h"
