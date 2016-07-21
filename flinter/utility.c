@@ -690,6 +690,10 @@ int set_close_on_exec(int fd)
         return ret;
     }
 
+    if ((ret & FD_CLOEXEC) == FD_CLOEXEC) {
+        return 0;
+    }
+
     ret |= FD_CLOEXEC;
     return fcntl(fd, F_SETFD, ret);
 }
