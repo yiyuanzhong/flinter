@@ -78,7 +78,8 @@ int Listener::OnReadable(LinkageWorker *worker)
 {
     LinkagePeer me;
     LinkagePeer peer;
-    if (!_listener->Accept(&peer, &me)) {
+    Interface::Parameter p;
+    if (!_listener->Accept(p, &peer, &me)) {
         if (errno == EINTR          ||
             errno == EAGAIN         ||
             errno == EWOULDBLOCK    ||
@@ -89,14 +90,6 @@ int Listener::OnReadable(LinkageWorker *worker)
 
         CLOG.Warn("Listener: failed to accept: %d: %s", errno, strerror(errno));
         return -1;
-    }
-
-    if (set_non_blocking_mode(peer.fd()) ||
-        set_close_on_exec(peer.fd())     ){
-
-        CLOG.Warn("Listener: failed to set fd properties for fd = %d", peer.fd());
-        safe_close(peer.fd());
-        return 1;
     }
 
     LinkageBase *linkage = CreateLinkage(worker, peer, me);
