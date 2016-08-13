@@ -37,11 +37,11 @@
 
 namespace flinter {
 
-const time_t Resolver::DEFAULT_REFRESH_TIME     = 300;              ///< 5min
-const time_t Resolver::DEFAULT_BLACKLIST_TIME   = 60;               ///< 1min
+const time_t Resolver::kDefaultRefreshTime      = 300;              ///< 5min
+const time_t Resolver::kDefaultBlacklistTime    = 60;               ///< 1min
 
-const int64_t Resolver::CACHE_EXPIRE            = 3600000000000LL;  ///< 1h
-const int64_t Resolver::AGING_INTERVAL          = 300000000000LL;   ///< 5min
+const int64_t Resolver::kCacheExpire            = 3600000000000LL;  ///< 1h
+const int64_t Resolver::kAgingInterval          = 300000000000LL;   ///< 5min
 
 /*
  * I personally prefer getaddrinfo(3) over gethostbyname(3), however GLIBC follows
@@ -207,7 +207,7 @@ bool Resolver::Resolve(const std::string &hostname,
 {
     if (!result || expire <= 0) {
         return false;
-    } else if (option != FIRST && option != RANDOM && option != SEQUENTIAL) {
+    } else if (option != kFirst && option != kRandom && option != kSequential) {
         return false;
     }
 
@@ -231,11 +231,11 @@ bool Resolver::Resolve(const std::string &hostname,
         return false;
     }
 
-    if (option == FIRST) {
+    if (option == kFirst) {
         *result = value->_addr[0];
         return true;
 
-    } else if (option == RANDOM) {
+    } else if (option == kRandom) {
         // This one shouldn't be negative but I just protect it.
         int r = rand();
         r = r < 0 ? -r : r;
@@ -243,7 +243,7 @@ bool Resolver::Resolve(const std::string &hostname,
         *result = value->_addr[index];
         return true;
 
-    } else if (option == SEQUENTIAL) {
+    } else if (option == kSequential) {
         *result = value->_addr[value->_current];
 
         ++value->_current;
@@ -360,7 +360,7 @@ void Resolver::Clear()
 void Resolver::Aging(int64_t now)
 {
     // Don't make it too frequent.
-    if (now - _last_aging < AGING_INTERVAL) {
+    if (now - _last_aging < kAgingInterval) {
         return;
     }
     _last_aging = now;
@@ -368,7 +368,7 @@ void Resolver::Aging(int64_t now)
     size_t count = 0;
     for (addresses_t::iterator p = _addresses.begin(); p != _addresses.end();) {
         addresses_t::iterator q = p++;
-        if (now - q->second._active >= CACHE_EXPIRE) {
+        if (now - q->second._active >= kCacheExpire) {
             _addresses.erase(q);
             ++count;
         }

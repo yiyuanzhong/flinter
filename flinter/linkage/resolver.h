@@ -42,11 +42,10 @@ class Resolver : public Singleton<Resolver> {
 
 public:
     enum Option {
-        FIRST,
-        RANDOM,
-        SEQUENTIAL,
-
-    };
+        kFirst,
+        kRandom,
+        kSequential,
+    }; // enum Option
 
     /*
      * Resolve hostname to IPs and get desired result instructed by option. Cache applies.
@@ -59,8 +58,8 @@ public:
      */
     bool Resolve(const std::string &hostname,
                  std::string *result,
-                 const Option &option = RANDOM,
-                 time_t expire = DEFAULT_REFRESH_TIME);
+                 const Option &option = kRandom,
+                 time_t expire = kDefaultRefreshTime);
 
     /*
      * Resolve hostname to IPs and get all results. Cache applies.
@@ -72,13 +71,13 @@ public:
      */
     bool Resolve(const std::string &hostname,
                  std::list<std::string> *result,
-                 time_t expire = DEFAULT_REFRESH_TIME);
+                 time_t expire = kDefaultRefreshTime);
 
     /// Remove an IP from cache, causing sequential call to resolve() not returning that IP.
     /// Effect will be undone when expire time is reached.
     void Invalidate(const std::string &hostname,
                     const std::string &ip,
-                    time_t expire = DEFAULT_BLACKLIST_TIME);
+                    time_t expire = kDefaultBlacklistTime);
 
     /// Invalidate all cache immediately.
     void Clear();
@@ -92,8 +91,8 @@ public:
         _use_getaddrinfo = use_getaddrinfo;
     }
 
-    static const time_t DEFAULT_REFRESH_TIME;   ///< How long to resolve again for a host.
-    static const time_t DEFAULT_BLACKLIST_TIME; ///< How long to restore a blacklisted IP.
+    static const time_t kDefaultRefreshTime;   ///< How long to resolve again for a host.
+    static const time_t kDefaultBlacklistTime; ///< How long to restore a blacklisted IP.
 
 private:
     typedef std::string Key;
@@ -132,8 +131,8 @@ private:
 
     void Aging(int64_t now);
 
-    static const int64_t CACHE_EXPIRE;          ///< No one resolves and purge the host.
-    static const int64_t AGING_INTERVAL;        ///< How many seconds that we purge.
+    static const int64_t kCacheExpire;          ///< No one resolves and purge the host.
+    static const int64_t kAgingInterval;        ///< How many seconds that we purge.
 
     typedef std::map<Key, Value> addresses_t;
     addresses_t _addresses;
