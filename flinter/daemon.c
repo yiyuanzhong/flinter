@@ -286,7 +286,7 @@ int daemon_spawn(int fd_to_start_closing, int flags)
         _exit(EXIT_FAILURE);
     }
 
-    // Kick off the daemon process.
+    /* Kick off the daemon process. */
     return 0;
 }
 
@@ -746,4 +746,4 @@ int daemon_main(const daemon_configure_t *configure, int argc, char *argv[])
     return status;
 }
 
-#endif // __unix__
+#endif /* __unix__ */

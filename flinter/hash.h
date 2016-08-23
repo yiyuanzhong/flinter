@@ -72,4 +72,4 @@ extern int hash_sha256(const char *filename, int limit_rate, int milliseconds, c
 }
 #endif
 
-#endif // __FLINTER_HASH_H__
+#endif /* __FLINTER_HASH_H__ */

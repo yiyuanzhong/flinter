@@ -55,4 +55,4 @@ extern int msleep_signal(int milliseconds,
 }
 #endif
 
-#endif // __FLINTER_MSLEEP_H__
+#endif /* __FLINTER_MSLEEP_H__ */
