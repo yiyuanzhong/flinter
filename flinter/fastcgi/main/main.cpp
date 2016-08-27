@@ -23,6 +23,7 @@
 #include "flinter/fastcgi/main/fastcgi_main.h"
 #include "flinter/fastcgi/dispatcher.h"
 #include "flinter/cmdline.h"
+#include "flinter/openssl.h"
 #include "flinter/utility.h"
 #include "flinter/xml.h"
 
@@ -30,12 +31,6 @@
 
 #if HAVE_CURL_CURL_H
 #include <curl/curl.h>
-#endif
-
-#if HAVE_OPENSSL_OPENSSLV_H
-#include <openssl/err.h>
-#include <openssl/evp.h>
-#include <openssl/ssl.h>
 #endif
 
 int main(int argc, char *argv[])
@@ -52,14 +47,7 @@ int main(int argc, char *argv[])
     // Initialize weak (but fast) PRG rand(3).
     randomize();
 
-#if HAVE_OPENSSL_OPENSSLV_H
-    // Initialize OpenSSL.
-    OpenSSL_add_all_algorithms();
-    if (SSL_library_init() != 1) {
-        fprintf(stderr, "Failed to initialize OpenSSL.\n");
-        return false;
-    }
-#endif
+    flinter::OpenSSLInitializer openssl_initializer;
 
 #if HAVE_CURL_CURL_H_
     // Initialize libcurl.
@@ -109,17 +97,7 @@ int main(int argc, char *argv[])
     curl_global_cleanup();
 #endif
 
-#if HAVE_OPENSSL_OPENSSLV_H
-    // Shutdown OpenSSL.
-#if HAVE_SSL_LIBRARY_CLEANUP
-    SSL_library_cleanup();
-#endif
-
-    EVP_cleanup();
-    CRYPTO_cleanup_all_ex_data();
-    ERR_remove_thread_state(NULL);
-#endif
-
+    openssl_initializer.Shutdown();
     google::protobuf::ShutdownProtobufLibrary();
     return ret;
 }

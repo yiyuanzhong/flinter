@@ -3,9 +3,6 @@
 #include <stdlib.h>
 #include <string.h>
 
-#include <openssl/err.h>
-#include <openssl/ssl.h>
-
 #include <flinter/linkage/easy_context.h>
 #include <flinter/linkage/easy_handler.h>
 #include <flinter/linkage/easy_server.h>
@@ -17,6 +14,7 @@
 
 #include <flinter/logger.h>
 #include <flinter/msleep.h>
+#include <flinter/openssl.h>
 #include <flinter/signals.h>
 
 class Handler : public flinter::EasyHandler {
@@ -159,8 +157,7 @@ TEST(sumServer, TestSslListen)
     signals_set_handler(SIGINT, on_signal_quit);
     signals_ignore(SIGPIPE);
 
-    ASSERT_TRUE(SSL_library_init());
-    SSL_load_error_strings();
+    flinter::OpenSSLInitializer openssl_initializer;
 
     flinter::SslContext *ssl = new flinter::SslContext(false);
     ASSERT_TRUE(ssl->SetVerifyPeer(true));
@@ -195,9 +192,4 @@ TEST(sumServer, TestSslListen)
     s.Shutdown();
 
     delete ssl;
-    SSL_library_cleanup();
-    EVP_cleanup();
-    CRYPTO_cleanup_all_ex_data();
-    ERR_remove_thread_state(NULL);
-    ERR_free_strings();
 }

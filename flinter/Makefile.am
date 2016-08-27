@@ -45,6 +45,7 @@ include_flinter_HEADERS = babysitter.h \
                           msleep.h \
                           object_map.h \
                           object_pool.h \
+                          openssl.h \
                           pidfile.h \
                           pkcs7.h \
                           revision.h \
@@ -162,6 +163,7 @@ libflinter_la_SOURCES = $(libflinter_core_la_SOURCES) \
                         encode_cs.cpp \
                         explode.cpp \
                         logger.cpp \
+                        openssl.cpp \
                         trim.cpp
 
 libflinter_la_LIBADD += @JSONCPP_LIBS@
