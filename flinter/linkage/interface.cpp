@@ -281,8 +281,14 @@ int Interface::DoConnectTcp4(const Parameter &parameter,
         }
     }
 
-    if (!GetPeerOrClose<struct sockaddr_in>(s, peer, me)) {
+    if (!GetPeerOrClose<struct sockaddr_in>(s, NULL, me)) {
         return -1;
+    }
+
+    if (peer) {
+        if (!peer->Set(&addr, s)) {
+            return -1;
+        }
     }
 
     _socket = s;
