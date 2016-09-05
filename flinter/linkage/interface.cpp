@@ -18,11 +18,11 @@
 #include "flinter/linkage/interface.h"
 
 #include <arpa/inet.h>
+#include <netinet/in.h>
 #include <sys/types.h>
 #include <sys/socket.h>
 #include <sys/stat.h>
 #include <sys/un.h>
-#include <netinet/in.h>
 #include <assert.h>
 #include <errno.h>
 #include <fcntl.h>
@@ -241,41 +241,57 @@ int Interface::DoConnectTcp4(const Parameter &parameter,
                              LinkagePeer *peer,
                              LinkagePeer *me)
 {
-    std::string ip;
-    if (!Resolver::GetInstance()->Resolve(parameter.socket_hostname, &ip)) {
-        errno = ENXIO;
+    if (!parameter.socket_hostname  ||
+        !*parameter.socket_hostname ||
+        !parameter.socket_port      ){
+
+        errno = EINVAL;
         return -1;
     }
 
-    bool need_bind = false;
-    struct sockaddr_in local;
-    if (parameter.socket_interface && *parameter.socket_interface) {
-        need_bind = true;
-        if (!Fill(&local, parameter.socket_interface, parameter.socket_bind_port)) {
-            return -1;
-        }
-    }
-
+    Resolver *const resolver = Resolver::GetInstance();
     struct sockaddr_in addr;
-    if (!Fill(&addr, ip.c_str(), parameter.socket_port)) {
-        return -1;
-    }
 
     int s = CreateSocket(parameter);
     if (s < 0) {
+        CLOG.Verbose("Interface: failed to initialize socket: %d: %s",
+                     errno, strerror(errno));
+
         return -1;
     }
 
-    if (need_bind) {
-        if (Bind(s, &local, sizeof(local))) {
+    if (parameter.socket_interface && *parameter.socket_interface) {
+        if (!resolver->Resolve(parameter.socket_interface,
+                               parameter.socket_bind_port,
+                               &addr)) {
+
+            safe_close(s);
+            return -1;
+        }
+
+        if (Bind(s, &addr, sizeof(addr))) {
+            CLOG.Verbose("Interface: failed to bind socket(%d): %d: %s",
+                         s, errno, strerror(errno));
+
             safe_close(s);
             return -1;
         }
     }
 
+    if (!resolver->Resolve(parameter.socket_hostname,
+                           parameter.socket_port,
+                           &addr)) {
+
+        safe_close(s);
+        return -1;
+    }
+
     int ret = safe_connect(s, reinterpret_cast<struct sockaddr *>(&addr), sizeof(addr));
     if (ret < 0) {
         if (errno != EINPROGRESS) {
+            CLOG.Verbose("Interface: failed to connect socket(%d): %d: %s",
+                         s, errno, strerror(errno));
+
             safe_close(s);
             return -1;
         }
@@ -287,6 +303,7 @@ int Interface::DoConnectTcp4(const Parameter &parameter,
 
     if (peer) {
         if (!peer->Set(&addr, s)) {
+            safe_close(s);
             return -1;
         }
     }
@@ -784,7 +801,15 @@ bool Interface::WaitUntilConnected(int64_t timeout)
         milliseconds = static_cast<int>(timeout / 1000000LL);
     }
 
-    return safe_wait_until_connected(_socket, milliseconds) == 0;
+    int ret = safe_wait_until_connected(_socket, milliseconds);
+    if (ret) {
+        CLOG.Verbose("Interface: failed to wait until connected(%d): %d: %s",
+                     _socket, errno, strerror(errno));
+
+        return false;
+    }
+
+    return true;
 }
 
 bool Interface::TestIfConnected()
@@ -794,7 +819,15 @@ bool Interface::TestIfConnected()
         return false;
     }
 
-    return safe_test_if_connected(_socket) == 0;
+    int ret = safe_test_if_connected(_socket);
+    if (ret) {
+        CLOG.Verbose("Interface: failed to test if connected(%d): %d: %s",
+                     _socket, errno, strerror(errno));
+
+        return false;
+    }
+
+    return true;
 }
 
 } // namespace flinter

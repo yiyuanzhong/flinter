@@ -319,8 +319,13 @@ int ranged_rand_r(int range, unsigned int *seedp)
     return r % n;
 }
 
-#if defined(WIN32)
 void randomize(void)
+{
+    srand(randomize_r());
+}
+
+#if defined(WIN32)
+unsigned int randomize_r(void)
 {
     unsigned int seed;
     int64_t timestamp;
@@ -329,8 +334,7 @@ void randomize(void)
     if (CryptAcquireContext(&hProv, NULL, MS_DEF_PROV, PROV_RSA_FULL, 0)) {
         if (CryptGenRandom(hProv, sizeof(seed), (BYTE *)&seed)) {
             CryptReleaseContext(hProv, 0);
-            srand(seed);
-            return;
+            return seed;
         }
         CryptReleaseContext(hProv, 0);
     }
@@ -338,13 +342,11 @@ void randomize(void)
     /* Not good, try time based random initializer. */
     timestamp = get_wall_clock_timestamp();
     if (timestamp >= 0) {
-        seed = (unsigned int)(timestamp ^ GetProcessId(GetCurrentProcess()));
-        srand(seed);
-        return;
+        return (unsigned int)(timestamp ^ GetProcessId(GetCurrentProcess()));
     }
 
     /* What the hell? */
-    srand((unsigned int)GetProcessId(GetCurrentProcess()));
+    return (unsigned int)GetProcessId(GetCurrentProcess());
 }
 
 int64_t get_wall_clock_timestamp(void)
@@ -538,7 +540,7 @@ ssize_t set_maximum_files(size_t nofile)
     return (ssize_t)rlim.rlim_cur;
 }
 
-void randomize(void)
+unsigned int randomize_r(void)
 {
     int fd;
     int64_t timestamp;
@@ -549,8 +551,7 @@ void randomize(void)
     if (fd >= 0) {
         if (safe_read(fd, &seed, sizeof(seed)) == sizeof(seed)) {
             safe_close(fd);
-            srand(seed);
-            return;
+            return seed;
         }
 
         safe_close(fd);
@@ -559,13 +560,11 @@ void randomize(void)
     /* Not good, try time based random initializer. */
     timestamp = get_wall_clock_timestamp();
     if (timestamp >= 0) {
-        seed = (unsigned int)(timestamp ^ getpid());
-        srand(seed);
-        return;
+        return (unsigned int)(timestamp ^ getpid());
     }
 
     /* What the hell? */
-    srand((unsigned int)getpid());
+    return (unsigned int)getpid();
 }
 
 int64_t get_wall_clock_timestamp(void)

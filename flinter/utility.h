@@ -29,6 +29,9 @@ extern "C" {
 extern int32_t atoi32(const char *value);
 
 /** Initialize pesudo random number generator aka srand(3). */
+extern unsigned int randomize_r(void);
+
+/** Initialize pesudo random number generator aka srand(3). */
 extern void randomize(void);
 
 /**

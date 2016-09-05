@@ -27,333 +27,277 @@
 #include <string.h>
 
 #include <algorithm>
+#include <set>
 
 #include "flinter/thread/mutex_locker.h"
 #include "flinter/logger.h"
 #include "flinter/trim.h"
 #include "flinter/utility.h"
 
-#include "config.h"
-
 namespace flinter {
 
-const time_t Resolver::kDefaultRefreshTime      = 300;              ///< 5min
-const time_t Resolver::kDefaultBlacklistTime    = 60;               ///< 1min
+const int64_t Resolver::kRefreshTime   =  300000000000LL;   ///< 5min
+const int64_t Resolver::kCacheExpire   = 3600000000000LL;   ///< 1h
+const int64_t Resolver::kAgingInterval =  300000000000LL;   ///< 5min
 
-const int64_t Resolver::kCacheExpire            = 3600000000000LL;  ///< 1h
-const int64_t Resolver::kAgingInterval          = 300000000000LL;   ///< 5min
+static inline struct in_addr &Get(struct sockaddr_in *addr)
+{
+    return addr->sin_addr;
+}
 
-/*
- * I personally prefer getaddrinfo(3) over gethostbyname(3), however GLIBC follows
- *         RFC3484 section 6: Destination Address Selection, which sorts IP addresses
- *         according to the distance of netmask. CDN relies on the order DNS returns
- *         thus a sorting will break it severely.
- *
- * gethostbyname(3) will not sort the result.
- *
- */
-Resolver::Value *Resolver::DoResolve_getaddrinfo(const std::string &hostname)
+static inline struct in6_addr &Get(struct sockaddr_in6 *addr)
+{
+    return addr->sin6_addr;
+}
+
+static inline void Set(struct sockaddr_in *addr, uint16_t port)
+{
+    addr->sin_family = AF_INET;
+    addr->sin_port = htons(port);
+}
+
+static inline void Set(struct sockaddr_in6 *addr, uint16_t port)
+{
+    addr->sin6_family = AF_INET6;
+    addr->sin6_port = htons(port);
+}
+
+class Less {
+public:
+    bool operator()(const struct in_addr &a, const struct in_addr &b)
+    {
+        return a.s_addr < b.s_addr;
+    }
+    bool operator()(const struct in6_addr &a, const struct in6_addr &b)
+    {
+        return memcmp(&a, &b, sizeof(struct in6_addr)) < 0;
+    }
+}; // class Less4
+
+template <class T, class A>
+void Resolver::Cache<T, A>::Set(struct addrinfo *res)
+{
+    if (!res) {
+        _addr.clear();
+        _current = -1;
+        return;
+    }
+
+    size_t size = 0;
+    for (struct addrinfo *p = res; p; p = p->ai_next, ++size);
+
+    typename std::set<A, Less> s;
+    for (typename std::vector<T>::iterator
+         p = _addr.begin(); p != _addr.end(); ++p) {
+
+        s.insert(Get(&*p));
+    }
+
+    bool diff = false;
+    for (struct addrinfo *p = res; p; p = p->ai_next) {
+        T *a = reinterpret_cast<T *>(p->ai_addr);
+        typename std::set<A>::iterator q = s.find(Get(a));
+        if (q == s.end()) {
+            diff = true;
+            break;
+        }
+
+        s.erase(q);
+    }
+
+    if (!diff && s.empty()) {
+        return;
+    }
+
+    size_t i = 0;
+    _current = -1;
+    _addr.resize(size);
+    for (struct addrinfo *p = res; p; p = p->ai_next) {
+        T *addr = &_addr[i++];
+        memcpy(addr, p->ai_addr, sizeof(T));
+    }
+}
+
+template <class T, class C>
+bool Resolver::Pick(T *addr, C *cache,
+                    const Option &option,
+                    unsigned int *seed)
+{
+    if (cache->_addr.empty()) {
+        return false;
+    }
+
+    int size = static_cast<int>(cache->_addr.size());
+    if (option == kFirst || cache->_addr.size() == 1) {
+        cache->_current = 0;
+
+    } else if (option == kSequential) {
+        cache->_current = (cache->_current + 1) % size;
+
+    } else {
+        cache->_current = ranged_rand_r(size, seed);
+    }
+
+    memcpy(addr, &cache->_addr[static_cast<size_t>(cache->_current)], sizeof(T));
+    return true;
+}
+
+template <class C>
+bool Resolver::DoResolve_getaddrinfo(const char *hostname, C *cache,
+                                     int domain, int flags)
 {
     struct addrinfo hints;
     memset(&hints, 0, sizeof(hints));
-    hints.ai_flags    = AI_ADDRCONFIG;
-    hints.ai_family   = AF_INET;
+    hints.ai_family   = domain;
+    hints.ai_flags    = flags;
+
+    // Might not be the case but it's always the same using numeric port.
     hints.ai_socktype = SOCK_STREAM;
 
-    struct addrinfo *res = NULL;
-    int ret = getaddrinfo(hostname.c_str(), NULL, &hints, &res);
-    if (ret || !res) {
-        CLOG.Trace("Resolver: failed to resolve [%s]: %d: %s",
-                   hostname.c_str(), ret, gai_strerror(ret));
+    struct addrinfo *res;
+    int ret = getaddrinfo(hostname, NULL, &hints, &res);
+    if (ret) {
+        switch (ret) {
+        case EAI_NONAME:
+            res = NULL;
+            break;
 
-        return NULL;
-    }
+        case EAI_SYSTEM:
+            CLOG.Trace("Resolver: failed to resolve [%s]: %d: %s",
+                       hostname, errno, strerror(errno));
 
-    Value *value = new Value(res);
-    freeaddrinfo(res);
-    return value;
-}
+            return false;
 
-Resolver::Value *Resolver::DoResolve_gethostbyname(const std::string &hostname)
-{
-#if HAVE_GETHOSTBYNAME2_R
-    int ret_errno;
-    char buffer[4096];
-    struct hostent *res;
-    struct hostent result;
-    int ret = gethostbyname2_r(hostname.c_str(), AF_INET, &result,
-                               buffer, sizeof(buffer), &res, &ret_errno);
+        default:
+            CLOG.Trace("Resolver: failed to resolve [%s]: %d: %s",
+                       hostname, ret, gai_strerror(ret));
 
-    if (ret || !res) {
-        // What can I say? hstrerror(3) is obsolete but no replacement is made.
-        // LOG.trace("Resolver: failed to resolve [%s]: %d: %s",
-        //           hostname.c_str(), ret_errno, hstrerror(ret_errno));
-
-        CLOG.Trace("Resolver: failed to resolve [%s]: %d", hostname.c_str(), ret_errno);
-        return NULL;
-    }
-
-    Value *value = new Value(res);
-    return value;
-#else
-    (void)hostname;
-    return NULL;
-#endif
-}
-
-Resolver::Value *Resolver::DoResolve(const std::string &hostname, int64_t now, int64_t expire)
-{
-    addresses_t::iterator p = _addresses.find(hostname);
-    if (p != _addresses.end()) {
-        Value &v = p->second;
-
-        // Try to recover some of the invalidated IPs first.
-        for (std::list<std::pair<std::string, int64_t> >::iterator q = v._bad.begin();
-             q != v._bad.end();) {
-
-            if (now < q->second) {
-                break;
-            }
-
-            v._addr.push_back(q->first);
-            q = v._bad.erase(q);
-        }
-
-        if (now - p->second._resolved < p->second._expire) {
-            // Cache hit.
-            return &v;
-        }
-    }
-
-    // Cache miss.
-
-    Value *value;
-#if HAVE_GETHOSTBYNAME2_R
-    if (_use_getaddrinfo) {
-        value = DoResolve_getaddrinfo(hostname);
-    } else {
-        value = DoResolve_gethostbyname(hostname);
-    }
-#else
-    value = DoResolve_getaddrinfo(hostname);
-#endif
-
-    if (!value) {
-        return NULL;
-    }
-
-    value->_resolved = now;
-    value->_expire = expire;
-    value->_active = now;
-
-    CLOG.Verbose("Resolver: resolved [%s] to %lu result(s).",
-                 hostname.c_str(), value->_addr.size());
-
-    // It's (very likely) possible that the result is the same.
-    if (p != _addresses.end()) {
-        if (p->second._dns == value->_dns) {
-            // Cool, keep it alive.
-            p->second._resolved = now;
-            delete value;
-            return &p->second;
-        }
-
-        // Oops, reset it.
-        _addresses.erase(p);
-    }
-
-    p = _addresses.insert(addresses_t::value_type(hostname, *value)).first;
-    delete value;
-    return &p->second;
-}
-
-bool Resolver::Resolve(const std::string &hostname,
-                       std::list<std::string> *result,
-                       time_t expire)
-{
-    if (!result || expire <= 0) {
-        return false;
-    }
-
-    const int64_t now = get_monotonic_timestamp();
-
-    std::string host;
-    if (!CleanupHostname(hostname, &host)) {
-        return false;
-    }
-
-    MutexLocker locker(&_mutex);
-    Aging(now); // Save the memory, save the world.
-
-    Value *value = DoResolve(host, now, 1000000000LL * expire);
-    if (!value) {
-        return false;
-    }
-
-    result->clear();
-    for (std::vector<std::string>::const_iterator p = value->_addr.begin();
-         p != value->_addr.end(); ++p) {
-
-        result->push_back(*p);
-    }
-
-    return true;
-}
-
-bool Resolver::Resolve(const std::string &hostname,
-                       std::string *result,
-                       const Option &option,
-                       time_t expire)
-{
-    if (!result || expire <= 0) {
-        return false;
-    } else if (option != kFirst && option != kRandom && option != kSequential) {
-        return false;
-    }
-
-    const int64_t now = get_monotonic_timestamp();
-
-    std::string host;
-    if (!CleanupHostname(hostname, &host)) {
-        return false;
-    }
-
-    MutexLocker locker(&_mutex);
-    Aging(now); // Save the memory, save the world.
-
-    Value *value = DoResolve(host, now, 1000000000LL * expire);
-    if (!value) {
-        return false;
-    }
-
-    value->_active = now;
-    if (value->_addr.empty()) {
-        return false;
-    }
-
-    if (option == kFirst) {
-        *result = value->_addr[0];
-        return true;
-
-    } else if (option == kRandom) {
-        // This one shouldn't be negative but I just protect it.
-        int r = rand();
-        r = r < 0 ? -r : r;
-        size_t index = static_cast<size_t>(r) % value->_addr.size();
-        *result = value->_addr[index];
-        return true;
-
-    } else if (option == kSequential) {
-        *result = value->_addr[value->_current];
-
-        ++value->_current;
-        value->_current %= value->_addr.size();
-        return true;
-    }
-
-    assert(false);
-    return false;
-}
-
-bool Resolver::CleanupHostname(const std::string &hostname, std::string *result)
-{
-    assert(result);
-    std::string input = trim(hostname);
-    if (input.empty()) {
-        return false;
-    }
-
-    result->resize(input.length());
-    std::transform(input.begin(), input.end(), result->begin(), tolower);
-    return true;
-}
-
-bool Resolver::CleanupIp(const std::string &ip, std::string *result)
-{
-    assert(result);
-    std::string input = trim(ip);
-
-    unsigned long ul[4];
-    const char *start = input.c_str();
-    char *end;
-
-    for (size_t i = 0; i < 3; ++i) {
-        ul[i] = strtoul(start, &end, 10);
-        if (end == start || ul[i] >= 256 || *end != '.') {
             return false;
         }
 
-        start = end + 1;
-    }
-
-    ul[3] = strtoul(start, &end, 10);
-    if (end == start || ul[3] >= 256 || *end != '\0') {
+    } else if (!res) {
+        CLOG.Trace("Resolver: failed to resolve [%s]: empty response", hostname);
         return false;
     }
 
-    char buffer[INET_ADDRSTRLEN];
-    sprintf(buffer, "%lu.%lu.%lu.%lu", ul[0], ul[1], ul[2], ul[3]);
-    *result = buffer;
+    cache->Set(res);
+    if (res) {
+        freeaddrinfo(res);
+    }
+
     return true;
 }
 
-void Resolver::Invalidate(const std::string &hostname, const std::string &ip, time_t expire)
+bool Resolver::Resolve(const char *hostname, uint16_t port,
+                       struct sockaddr_in *addr,
+                       const Option &option)
 {
-    if (expire <= 0) {
-        return;
+    return DoResolve(addr, hostname, port, option, &_addr4,
+                     AF_INET, AI_ADDRCONFIG);
+}
+
+bool Resolver::Resolve(const char *hostname, uint16_t port,
+                       struct sockaddr_in6 *addr,
+                       const Option &option)
+{
+    return DoResolve(addr, hostname, port, option, &_addr6,
+                     AF_INET6, AI_ADDRCONFIG | AI_V4MAPPED);
+}
+
+template <class T, class C>
+bool Resolver::DoResolve(T *addr, const char *hostname,
+                         uint16_t port, const Option &option,
+                         std::map<std::string, C *> *address,
+                         int domain, int flags)
+{
+    if (!hostname || !*hostname || !port || !addr) {
+        return false;
     }
 
-    std::string host = trim(hostname);
-    if (!host.length()) {
-        return;
+    memset(addr, 0, sizeof(*addr));
+    if (inet_pton(domain, hostname, &Get(addr)) == 1) {
+        Set(addr, port);
+        return true;
     }
 
-    std::transform(host.begin(), host.end(), host.begin(), tolower);
-
-    std::string value;
-    if (!CleanupIp(ip, &value)) {
-        return;
+    char host[1024];
+    size_t hlen = strlen(hostname);
+    if (hlen >= sizeof(host)) {
+        return false;
     }
+
+    const int64_t now = get_monotonic_timestamp();
+    const int64_t deadline = now - kRefreshTime;
+    std::transform(hostname, hostname + hlen, host, ::tolower);
+    host[hlen] = '\0';
+    std::string shost = host;
 
     MutexLocker locker(&_mutex);
-    addresses_t::iterator p = _addresses.find(host);
-    if (p == _addresses.end()) {
-        return;
+    Aging(now);
+
+    typename std::map<std::string, C *>::iterator p = address->find(shost);
+    if (p == address->end()) {
+        p = address->insert(std::make_pair(shost, new C)).first;
     }
 
-    std::vector<std::string> &v = p->second._addr;
-    std::vector<std::string>::iterator q = v.begin();
-    size_t &c = p->second._current;
-    for (size_t i = 0; i < v.size(); ++i, ++q) {
-        if (v[i] == value) {
-            const int64_t now = get_monotonic_timestamp();
-            const int64_t when = now + 1000000000LL * expire;
+    C *c = p->second;
+    while (c->_resolved < deadline) {
+        if (c->_resolving) {
+            do {
+                _condition.Wait(&_mutex);
+            } while (c->_resolving);
+            continue;
+        }
 
-            // Put it in queue.
-            p->second._bad.push_back(std::pair<std::string, int64_t>(*q, when));
+        c->_resolving = true;
+        locker.Unlock();
+        bool ret = DoResolve_getaddrinfo(host, c, domain, flags);
+        locker.Relock();
 
-            // Yes, sure, std::vector::erase() is slow, but who cares?
-            v.erase(q);
+        c->_resolving = false;
+        _condition.WakeAll();
 
-            if (c >= i) {
-                if (v.empty()) {
-                    break;
-                } else if (c == 0) {
-                    c = v.size() - 1;
-                } else {
-                    --c;
-                }
-            }
+        if (ret) {
+            CLOG.Verbose("Resolver: resolved [%s] to %lu result(s).",
+                         hostname, c->_addr.size());
 
-            break;
+            c->_resolved = get_monotonic_timestamp();
         }
     }
+
+    if (!Pick(addr, c, option, &_seed)) {
+        return false;
+    }
+
+    Set(addr, port);
+    return true;
 }
 
 void Resolver::Clear()
 {
+    size_t count = 0;
     MutexLocker locker(&_mutex);
-    _addresses.clear();
+    for (address4_t::iterator p = _addr4.begin(); p != _addr4.end();) {
+        address4_t::iterator q = p++;
+        if (!q->second->_resolving) {
+            delete q->second;
+            _addr4.erase(q);
+            ++count;
+        }
+    }
+
+    for (address6_t::iterator p = _addr6.begin(); p != _addr6.end();) {
+        address6_t::iterator q = p++;
+        if (!q->second->_resolving) {
+            delete q->second;
+            _addr6.erase(q);
+            ++count;
+        }
+    }
+
+    if (count) {
+        CLOG.Verbose("Resolver: removed %lu hosts.", count);
+    }
 }
 
 // Call locked.
@@ -366,10 +310,21 @@ void Resolver::Aging(int64_t now)
     _last_aging = now;
 
     size_t count = 0;
-    for (addresses_t::iterator p = _addresses.begin(); p != _addresses.end();) {
-        addresses_t::iterator q = p++;
-        if (now - q->second._active >= kCacheExpire) {
-            _addresses.erase(q);
+    int64_t deadline = now - kCacheExpire;
+    for (address4_t::iterator p = _addr4.begin(); p != _addr4.end();) {
+        address4_t::iterator q = p++;
+        if (!q->second->_resolving && q->second->_resolved < deadline) {
+            delete q->second;
+            _addr4.erase(q);
+            ++count;
+        }
+    }
+
+    for (address6_t::iterator p = _addr6.begin(); p != _addr6.end();) {
+        address6_t::iterator q = p++;
+        if (!q->second->_resolving && q->second->_resolved < deadline) {
+            delete q->second;
+            _addr6.erase(q);
             ++count;
         }
     }
@@ -379,62 +334,15 @@ void Resolver::Aging(int64_t now)
     }
 }
 
-void Resolver::Clear(const std::string &hostname)
-{
-    std::string host = trim(hostname);
-    if (!host.length()) {
-        return;
-    }
-
-    std::transform(host.begin(), host.end(), host.begin(), tolower);
-    MutexLocker locker(&_mutex);
-    _addresses.erase(host);
-}
-
-Resolver::Resolver() : _use_getaddrinfo(true), _last_aging(get_monotonic_timestamp())
+Resolver::Resolver() : _last_aging(get_monotonic_timestamp())
+                     , _seed(randomize_r())
 {
     // Intended left blank.
 }
 
-Resolver::Value::Value(struct addrinfo *res) : _current(0)
+Resolver::~Resolver()
 {
-    if (!res) {
-        return;
-    }
-
-    for (struct addrinfo *p = res; p; p = p->ai_next) {
-        char buffer[INET_ADDRSTRLEN];
-        if (inet_ntop(AF_INET,
-                      &reinterpret_cast<struct sockaddr_in *>(p->ai_addr)->sin_addr,
-                      buffer, sizeof(buffer))) {
-
-            // Yes, sure, std::vector::push_back() is slow, but who cares?
-            std::string ip = buffer;
-            _dns.insert(ip);
-
-            // Keep the order to allow CDN to work.
-            _addr.push_back(ip);
-        }
-    }
-}
-
-Resolver::Value::Value(struct hostent *res) : _current(0)
-{
-    if (!res || !res->h_addr_list) {
-        return;
-    }
-
-    for (char **p = res->h_addr_list; *p; ++p) {
-        char buffer[INET_ADDRSTRLEN];
-        if (inet_ntop(AF_INET, *p, buffer, sizeof(buffer))) {
-            // Yes, sure, std::vector::push_back() is slow, but who cares?
-            std::string ip = buffer;
-            _dns.insert(ip);
-
-            // Keep the order to allow CDN to work.
-            _addr.push_back(ip);
-        }
-    }
+    Clear();
 }
 
 } // namespace flinter

@@ -16,6 +16,7 @@
 #ifndef __FLINTER_LINKAGE_RESOLVER_H__
 #define __FLINTER_LINKAGE_RESOLVER_H__
 
+#include <netinet/in.h>
 #include <sys/types.h>
 #include <stdint.h>
 #include <time.h>
@@ -26,12 +27,11 @@
 #include <string>
 #include <vector>
 
+#include <flinter/thread/condition.h>
 #include <flinter/thread/mutex.h>
 #include <flinter/singleton.h>
 
 struct addrinfo;
-struct hostent;
-struct sockaddr;
 
 namespace flinter {
 
@@ -47,97 +47,67 @@ public:
         kSequential,
     }; // enum Option
 
-    /*
-     * Resolve hostname to IPs and get desired result instructed by option. Cache applies.
-     *
-     * @param hostname hostname to resolve.
-     * @param result   resolved ip in string form.
-     * @param option   resolving option.
-     * @param expire   seconds before resolve again, must be positive.
-     *                 only effective the first time it's resolved, or after clear().
-     */
-    bool Resolve(const std::string &hostname,
-                 std::string *result,
-                 const Option &option = kRandom,
-                 time_t expire = kDefaultRefreshTime);
+    bool Resolve(const char *hostname, uint16_t port,
+                 struct sockaddr_in *addr,
+                 const Option &option = kSequential);
 
-    /*
-     * Resolve hostname to IPs and get all results. Cache applies.
-     *
-     * @param hostname hostname to resolve.
-     * @param result   resolved ip in string form.
-     * @param expire   seconds before resolve again, must be positive.
-     *                 only effective the first time it's resolved, or after clear().
-     */
-    bool Resolve(const std::string &hostname,
-                 std::list<std::string> *result,
-                 time_t expire = kDefaultRefreshTime);
-
-    /// Remove an IP from cache, causing sequential call to resolve() not returning that IP.
-    /// Effect will be undone when expire time is reached.
-    void Invalidate(const std::string &hostname,
-                    const std::string &ip,
-                    time_t expire = kDefaultBlacklistTime);
+    bool Resolve(const char *hostname, uint16_t port,
+                 struct sockaddr_in6 *addr,
+                 const Option &option = kSequential);
 
     /// Invalidate all cache immediately.
     void Clear();
 
-    /// Invalidate cache for the host immediately.
-    void Clear(const std::string &hostname);
-
-    /// Use getaddrinfo(3), which conform to RFC3484 section 6.
-    void SetResolveMode(bool use_getaddrinfo)
-    {
-        _use_getaddrinfo = use_getaddrinfo;
-    }
-
-    static const time_t kDefaultRefreshTime;   ///< How long to resolve again for a host.
-    static const time_t kDefaultBlacklistTime; ///< How long to restore a blacklisted IP.
-
 private:
-    typedef std::string Key;
-
-    class Value {
+    template <class T, class A>
+    class Cache {
     public:
-        Value(struct addrinfo *res);
-        Value(struct hostent *res);
+        Cache() : _resolved(-1), _current(-1), _resolving(false) {}
+        void Set(struct addrinfo *res);
+        typedef T sockaddr_t;
+        typedef A addr_t;
 
-        std::set<std::string> _dns;         ///< DNS result.
-        std::vector<std::string> _addr;     ///< Valid IPs.
+        std::vector<T> _addr;
+        int64_t _resolved;
+        ssize_t _current;
+        bool _resolving;
+    }; // class Cache
 
-        /// Invalid IPs and when restore it again.
-        std::list<std::pair<std::string, int64_t> > _bad;
+    typedef Cache<struct sockaddr_in,  struct in_addr > cache4_t;
+    typedef Cache<struct sockaddr_in6, struct in6_addr> cache6_t;
 
-        int64_t _resolved;  ///< Last time when I resolve in real.
-        int64_t _expire;    ///< Seconds that need resolve again.
-        int64_t _active;    ///< Last time when someone resolved.
-        size_t _current;    ///< Current index in sequential mode.
-
-    }; // class Value
-
-    /// Clean IP address.
-    static bool CleanupIp(const std::string &ip, std::string *result);
-
-    /// Clean hostname.
-    static bool CleanupHostname(const std::string &hostname, std::string *result);
+    template <class T, class C>
+    static bool Pick(T *addr, C *cache,
+                     const Option &option,
+                     unsigned int *seed);
 
     Resolver();
-    ~Resolver() {}
+    ~Resolver();
 
-    /// @return either cache is valid or resolved successfully.
-    Value *DoResolve(const std::string &hostname, int64_t now, int64_t expire);
-    Value *DoResolve_gethostbyname(const std::string &hostname);
-    Value *DoResolve_getaddrinfo(const std::string &hostname);
+    template <class T, class C>
+    bool DoResolve(T *addr, const char *hostname,
+                   uint16_t port, const Option &option,
+                   std::map<std::string, C *> *address,
+                   int domain, int flags);
+
+    template <class C>
+    bool DoResolve_getaddrinfo(const char *hostname, C *cache,
+                               int domain, int flags);
 
     void Aging(int64_t now);
 
-    static const int64_t kCacheExpire;          ///< No one resolves and purge the host.
-    static const int64_t kAgingInterval;        ///< How many seconds that we purge.
+    static const int64_t kRefreshTime;   ///< Resolve again for a host.
+    static const int64_t kCacheExpire;   ///< No resolving and purge the host.
+    static const int64_t kAgingInterval; ///< How many seconds that we purge.
 
-    typedef std::map<Key, Value> addresses_t;
-    addresses_t _addresses;
-    bool _use_getaddrinfo;
+    typedef std::map<std::string, cache4_t *> address4_t;
+    typedef std::map<std::string, cache6_t *> address6_t;
+    address4_t _addr4;
+    address6_t _addr6;
+
+    Condition _condition;
     int64_t _last_aging;
+    unsigned int _seed;
     Mutex _mutex;
 
 }; // class Resolver
