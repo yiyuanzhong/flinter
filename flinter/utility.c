@@ -570,36 +570,31 @@ unsigned int randomize_r(void)
 int64_t get_wall_clock_timestamp(void)
 {
     time_t t;
-    int64_t result;
     struct timeval tv;
 
 #if HAVE_CLOCK_GETTIME
     struct timespec tp;
     if (clock_gettime(CLOCK_REALTIME, &tp) == 0) {
-        result = 1000000000LL * tp.tv_sec + tp.tv_nsec;
-        return result;
+        return 1000000000LL * tp.tv_sec + tp.tv_nsec;
     }
 #elif defined(__MACH__)
     clock_serv_t cclock;
     if (host_get_clock_service(mach_host_self(), CALENDAR_CLOCK, &cclock) == KERN_SUCCESS) {
         mach_timespec_t mts;
         if (clock_get_time(cclock, &mts) == 0) {
-            result = 1000000000LL * mts.tv_sec + mts.tv_nsec;
             mach_port_deallocate(mach_task_self(), cclock);
-            return result;
+            return (int64_t)(1000000000LL * mts.tv_sec + mts.tv_nsec);
         }
         mach_port_deallocate(mach_task_self(), cclock);
     }
 #endif
 
     if (gettimeofday(&tv, NULL) == 0) {
-        result = 1000000000LL * tv.tv_sec + 1000LL * tv.tv_usec;
-        return result;
+        return (int64_t)(1000000000LL * tv.tv_sec + 1000LL * tv.tv_usec);
     }
 
     if ((t = time(NULL)) >= 0) {
-        result = 1000000000LL * t;
-        return result;
+        return (int64_t)(1000000000LL * t);
     }
 
     return -1;
@@ -608,34 +603,17 @@ int64_t get_wall_clock_timestamp(void)
 int64_t get_monotonic_timestamp(void)
 {
 #if HAVE_CLOCK_GETTIME
-    int64_t result;
     struct timespec tp;
-#ifdef CLOCK_MONOTONIC_PRECISE
-    if (clock_gettime(CLOCK_MONOTONIC_PRECISE, &tp) == 0) {
-        result = (int64_t)(1000000000LL * tp.tv_sec + tp.tv_nsec);
-        return result;
-    }
-#endif
-
-#ifdef CLOCK_MONOTONIC_HR
-    if (clock_gettime(CLOCK_MONOTONIC_HR, &tp) == 0) {
-        result = (int64_t)(1000000000LL * tp.tv_sec + tp.tv_nsec);
-        return result;
-    }
-#endif
-
     if (clock_gettime(CLOCK_MONOTONIC, &tp) == 0) {
-        result = (int64_t)(1000000000LL * tp.tv_sec + tp.tv_nsec);
-        return result;
+        return (int64_t)(1000000000LL * tp.tv_sec + tp.tv_nsec);
     }
 #elif defined(__MACH__)
     clock_serv_t cclock;
+    mach_timespec_t mts;
     if (host_get_clock_service(mach_host_self(), SYSTEM_CLOCK, &cclock) == KERN_SUCCESS) {
-        mach_timespec_t mts;
         if (clock_get_time(cclock, &mts) == KERN_SUCCESS) {
-            int64_t result = (int64_t)(1000000000LL * mts.tv_sec + mts.tv_nsec);
             mach_port_deallocate(mach_task_self(), cclock);
-            return result;
+            return (int64_t)(1000000000LL * mts.tv_sec + mts.tv_nsec);
         }
         mach_port_deallocate(mach_task_self(), cclock);
     }
@@ -649,29 +627,16 @@ time_t get_monotonic_time(void)
 {
 #if HAVE_CLOCK_GETTIME
     struct timespec tp;
-#ifdef CLOCK_MONOTONIC_PRECISE
-    if (clock_gettime(CLOCK_MONOTONIC_PRECISE, &tp) == 0) {
-        return tp.tv_sec;
-    }
-#endif
-
-#ifdef CLOCK_MONOTONIC_HR
-    if (clock_gettime(CLOCK_MONOTONIC_HR, &tp) == 0) {
-        return tp.tv_sec;
-    }
-#endif
-
     if (clock_gettime(CLOCK_MONOTONIC, &tp) == 0) {
         return tp.tv_sec;
     }
 #elif defined(__MACH__)
     clock_serv_t cclock;
+    mach_timespec_t mts;
     if (host_get_clock_service(mach_host_self(), SYSTEM_CLOCK, &cclock) == KERN_SUCCESS) {
-        mach_timespec_t mts;
         if (clock_get_time(cclock, &mts) == KERN_SUCCESS) {
-            time_t result = mts.tv_sec;
             mach_port_deallocate(mach_task_self(), cclock);
-            return result;
+            return mts.tv_sec;
         }
         mach_port_deallocate(mach_task_self(), cclock);
     }
