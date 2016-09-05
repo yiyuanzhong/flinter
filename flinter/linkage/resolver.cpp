@@ -241,7 +241,7 @@ bool Resolver::DoResolve(T *addr, const char *hostname,
     }
 
     C *c = p->second;
-    while (c->_resolved < deadline) {
+    while (c->_resolved < 0 || c->_resolved < deadline) {
         if (c->_resolving) {
             do {
                 _condition.Wait(&_mutex);
@@ -310,7 +310,7 @@ void Resolver::Aging(int64_t now)
     _last_aging = now;
 
     size_t count = 0;
-    int64_t deadline = now - kCacheExpire;
+    const int64_t deadline = now - kCacheExpire;
     for (address4_t::iterator p = _addr4.begin(); p != _addr4.end();) {
         address4_t::iterator q = p++;
         if (!q->second->_resolving && q->second->_resolved < deadline) {
