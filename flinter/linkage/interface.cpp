@@ -80,38 +80,6 @@ bool DoAccept(int s, LinkagePeer *peer, LinkagePeer *me)
     return GetPeerOrClose<T>(fd, peer, me);
 }
 
-static bool Fill(struct sockaddr_in6 *addr, const char *ip, uint16_t port)
-{
-    memset(addr, 0, sizeof(*addr));
-    addr->sin6_family = AF_INET6;
-    addr->sin6_addr = in6addr_any;
-    addr->sin6_port = htons(port);
-    if (ip && *ip) {
-        if (!inet_pton(AF_INET6, ip, &addr->sin6_addr)) {
-            errno = EINVAL;
-            return false;
-        }
-    }
-
-    return true;
-}
-
-static bool Fill(struct sockaddr_in *addr, const char *ip, uint16_t port)
-{
-    memset(addr, 0, sizeof(*addr));
-    addr->sin_family = AF_INET;
-    addr->sin_addr.s_addr = htonl(INADDR_ANY);
-    addr->sin_port = htons(port);
-    if (ip && *ip) {
-        if (!inet_pton(AF_INET, ip, &addr->sin_addr)) {
-            errno = EINVAL;
-            return false;
-        }
-    }
-
-    return true;
-}
-
 Interface::Parameter::Parameter()
         : domain(AF_UNSPEC)
         , type(SOCK_STREAM)
@@ -400,6 +368,7 @@ bool Interface::DoListenTcp4(const Parameter &parameter, LinkagePeer *me)
     struct sockaddr_in ain;
     bool multicast = false;
 
+    Resolver *const resolver = Resolver::GetInstance();
     if (parameter.type == SOCK_DGRAM && parameter.udp_multicast) {
         memset(&mreqn, 0, sizeof(mreqn));
         if (!parameter.socket_interface                                     ||
@@ -410,15 +379,25 @@ bool Interface::DoListenTcp4(const Parameter &parameter, LinkagePeer *me)
             return false;
         }
 
-        if (!Fill(&ain, parameter.socket_hostname, parameter.socket_bind_port)) {
+        if (!resolver->Resolve(parameter.socket_hostname,
+                               parameter.socket_bind_port,
+                               &ain, Resolver::kFirst)) {
+
             return false;
         }
 
         mreqn.imr_multiaddr = ain.sin_addr;
         multicast = true;
 
-    } else if (!Fill(&ain, parameter.socket_interface, parameter.socket_bind_port)) {
-        return false;
+    } else {
+        const char *hostname = "0.0.0.0";
+        if (parameter.socket_interface && *parameter.socket_interface) {
+            hostname = parameter.socket_interface;
+        }
+
+        if (!resolver->Resolve(hostname, parameter.socket_bind_port, &ain, Resolver::kFirst)) {
+            return false;
+        }
     }
 
     int s = CreateListenSocket(parameter, &ain, sizeof(ain));
@@ -452,7 +431,16 @@ bool Interface::DoListenTcp4(const Parameter &parameter, LinkagePeer *me)
 bool Interface::DoListenTcp6(const Parameter &parameter, LinkagePeer *me)
 {
     struct sockaddr_in6 ai6;
-    if (!Fill(&ai6, parameter.socket_interface, parameter.socket_bind_port)) {
+    const char *hostname = "::";
+    if (parameter.socket_interface && *parameter.socket_interface) {
+        hostname = parameter.socket_interface;
+    }
+
+    Resolver *const resolver = Resolver::GetInstance();
+    if (!resolver->Resolve(hostname,
+                           parameter.socket_bind_port,
+                           &ai6, Resolver::kFirst)) {
+
         return false;
     }
 
