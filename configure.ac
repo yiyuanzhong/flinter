@@ -50,7 +50,9 @@ AC_ARG_WITH([multiprecision],
                             [enable multiprecision libraries [default=yes]])])
 
 AM_CONDITIONAL([WITH_MULTIPRECISION], [test x"${with_multiprecision}" != x"no"])
-AS_IF([test x"${with_multiprecision}" != x"no"], [AC_CHECK_HEADERS([gmp.h])])
+AS_IF([test x"${with_multiprecision}" != x"no"],
+      [AC_CHECK_HEADERS([gmp.h], [],
+      [AC_MSG_ERROR([gmplib is missing, try --without-multiprecision])])])
 
 # OpenSSL
 AC_ARG_WITH([openssl],
