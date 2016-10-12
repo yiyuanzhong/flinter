@@ -285,14 +285,18 @@ public:
             size_t length) : _worker(worker)
                            , _easy_server(easy_server)
                            , _channel(channel)
-                           , _length(length)
-                           , _buffer(malloc(length))
+                           , _length(0)
+                           , _buffer(NULL)
     {
-        if (!_buffer) {
-            throw std::bad_alloc();
-        }
+        if (buffer && length) {
+            _buffer = malloc(length);
+            if (!_buffer) {
+                throw std::bad_alloc();
+            }
 
-        memcpy(_buffer, buffer, length);
+            memcpy(_buffer, buffer, length);
+            _length = length;
+        }
     }
 
     virtual ~SendJob()
@@ -315,8 +319,8 @@ private:
     ProxyLinkageWorker *const _worker;
     EasyServer *const _easy_server;
     const channel_t _channel;
-    const size_t _length;
-    void *const _buffer;
+    size_t _length;
+    void *_buffer;
 
 }; // class EasyServer::SendJob
 
@@ -1096,7 +1100,7 @@ void EasyServer::DoRealSend(ProxyLinkageWorker *worker,
     // Same thread, no need to prevent pointer being freed.
     locker.Unlock();
 
-    if (!linkage) {
+    if (!linkage || !buffer) {
         return;
     }
 
@@ -1115,9 +1119,16 @@ bool EasyServer::Send(channel_t channel, const void *buffer, size_t length)
     ProxyLinkageWorker *worker = NULL;
     channel_map_t::iterator p = ioc->_channel_linkages.find(channel);
     if (p != ioc->_channel_linkages.end()) {
+        if (!buffer || !length) {
+            return true;
+        }
+
         worker = static_cast<ProxyLinkageWorker *>(p->second->worker());
         if (tid > 0 && tid == worker->running_thread_id()) {
             locker.Unlock();
+            if (!buffer || !length) {
+                return true;
+            }
             return p->second->Send(buffer, length);
         }
 
@@ -1132,6 +1143,10 @@ bool EasyServer::Send(channel_t channel, const void *buffer, size_t length)
                 }
 
                 locker.Unlock();
+                if (!buffer || !length) {
+                    return true;
+                }
+
                 return linkage->Send(buffer, length);
             }
         }
@@ -1245,16 +1260,6 @@ EasyServer::channel_t EasyServer::DoConnectTcp4(
             new OutgoingInformation(proxy_handler, host, port, thread_id);
 
     channel_t c = AllocateChannel(ioc, false);
-    if (!_io_workers.empty()) {
-        ProxyLinkageWorker *worker = GetIoWorker(thread_id);
-        ProxyLinkage *linkage = DoReconnect(worker, c, info);
-        if (!linkage) {
-            delete info;
-            delete proxy_handler;
-            return kInvalidChannel;
-        }
-    }
-
     ioc->_connect_proxy_handlers.insert(std::make_pair(c, proxy_handler));
     ioc->_outgoing_informations.insert(std::make_pair(c, info));
     return c;
