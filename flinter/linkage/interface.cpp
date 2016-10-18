@@ -67,17 +67,21 @@ static bool GetPeerOrClose(int s, LinkagePeer *peer, LinkagePeer *me)
 }
 
 template <class T>
-bool DoAccept(int s, LinkagePeer *peer, LinkagePeer *me)
+int DoAccept(int s, LinkagePeer *peer, LinkagePeer *me)
 {
     T addr;
     struct sockaddr *sa = reinterpret_cast<struct sockaddr *>(&addr);
     socklen_t len = sizeof(addr);
     int fd = safe_accept(s, sa, &len);
     if (fd < 0) {
-        return false;
+        return -1;
     }
 
-    return GetPeerOrClose<T>(fd, peer, me);
+    if (!GetPeerOrClose<T>(fd, peer, me)) {
+        return 1;
+    }
+
+    return 0;
 }
 
 Interface::Parameter::Parameter()
@@ -683,7 +687,7 @@ bool Interface::Close()
     return true;
 }
 
-bool Interface::Accept(LinkagePeer *peer, LinkagePeer *me)
+int Interface::Accept(LinkagePeer *peer, LinkagePeer *me)
 {
     Parameter p;
     p.socket_close_on_exec = true;
@@ -691,16 +695,16 @@ bool Interface::Accept(LinkagePeer *peer, LinkagePeer *me)
     return Accept(p, peer, me);
 }
 
-bool Interface::Accept(const Parameter &parameter,
+int Interface::Accept(const Parameter &parameter,
                        LinkagePeer *peer,
                        LinkagePeer *me)
 {
     assert(_socket >= 0);
     assert(peer);
 
-    bool ret = false;
-    if (_socket < 0 || !peer) {
-        return false;
+    int ret = -1;
+    if (_socket < 0) {
+        return -1;
 
     } else if (_domain == AF_INET6) {
         ret = DoAccept<struct sockaddr_in6>(_socket, peer, me);
@@ -712,16 +716,16 @@ bool Interface::Accept(const Parameter &parameter,
         ret = DoAccept<struct sockaddr_un >(_socket, peer, me);
     }
 
-    if (!ret) {
-        return false;
+    if (ret) {
+        return ret;
     }
 
     if (!InitializeSocket(parameter, peer->fd())) {
         safe_close(peer->fd());
-        return false;
+        return 1;
     }
 
-    return true;
+    return 0;
 }
 
 bool Interface::Accepted(int fd)

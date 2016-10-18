@@ -90,7 +90,10 @@ public:
 
     /// @param peer can NOT be NULL.
     /// @param me can be NULL.
-    bool Accept(LinkagePeer *peer, LinkagePeer *me = NULL);
+    /// @retval <0 listen fd failure
+    /// @retval  0 successful
+    /// @retval >0 accepted fd failure
+    int Accept(LinkagePeer *peer, LinkagePeer *me = NULL);
 
     /// If you accept from some other places.
     bool Accepted(int fd);
@@ -121,10 +124,14 @@ public:
                 LinkagePeer *peer = NULL,
                 LinkagePeer *me = NULL);
 
-    // Low level accept.
-    bool Accept(const Parameter &parameter,
-                LinkagePeer *peer,
-                LinkagePeer *me = NULL);
+    /// @param peer can NOT be NULL.
+    /// @param me can be NULL.
+    /// @retval <0 listen fd failure
+    /// @retval  0 successful
+    /// @retval >0 accepted fd failure
+    int Accept(const Parameter &parameter,
+               LinkagePeer *peer,
+               LinkagePeer *me = NULL);
 
     /// @param timeout to wait, <0 for infinity.
     /// @warning only call to this method if connect() gives "in progress".

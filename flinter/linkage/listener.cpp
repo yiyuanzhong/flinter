@@ -79,7 +79,8 @@ int Listener::OnReadable(LinkageWorker *worker)
     LinkagePeer me;
     LinkagePeer peer;
     Interface::Parameter p;
-    if (!_listener->Accept(p, &peer, &me)) {
+    int ret = _listener->Accept(p, &peer, &me);
+    if (ret < 0) {
         if (errno == EINTR          ||
             errno == EAGAIN         ||
             errno == EWOULDBLOCK    ||
@@ -90,6 +91,10 @@ int Listener::OnReadable(LinkageWorker *worker)
 
         CLOG.Warn("Listener: failed to accept: %d: %s", errno, strerror(errno));
         return -1;
+
+    } else if (ret > 0) {
+        CLOG.Warn("Listener: failed to setup new fd: %d: %s", errno, strerror(errno));
+        return 1;
     }
 
     LinkageBase *linkage = CreateLinkage(worker, peer, me);
