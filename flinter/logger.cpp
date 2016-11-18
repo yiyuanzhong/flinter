@@ -43,6 +43,10 @@ namespace {
 static const size_t kMaximumLineLength = 2048;
 static const size_t kMaximumFileLength = 256;
 
+// 6 might not really be correct since PID range vary.
+#define PID_LENGTH 6
+#define PID_LENGTH_STRING "6"
+
 #ifdef NDEBUG
 static Logger::Level g_filter = Logger::kLevelTrace;
 #else
@@ -164,45 +168,45 @@ static bool Log(const Logger::Level &level,
     if (g_colorful) {
         switch (level) {
         case Logger::kLevelFatal   : memcpy(buffer, "FATAL ", 6);
-                                     memcpy(buffer + 34, "\033[1;37;41m", 10);
-                                     next = buffer + 44;
+                                     memcpy(buffer + 29 + PID_LENGTH, "\033[1;37;41m", 10);
+                                     next = buffer + 39 + PID_LENGTH;
                                      color = true;
                                      break;
         case Logger::kLevelError   : memcpy(buffer, "ERROR ", 6);
-                                     memcpy(buffer + 34, "\033[1;31m", 7);
-                                     next = buffer + 41;
+                                     memcpy(buffer + 29 + PID_LENGTH, "\033[1;31m", 7);
+                                     next = buffer + 36 + PID_LENGTH;
                                      color = true;
                                      break;
         case Logger::kLevelWarn    : memcpy(buffer, "WARN  ", 6);
-                                     memcpy(buffer + 34, "\033[1;33m", 7);
-                                     next = buffer + 41;
+                                     memcpy(buffer + 29 + PID_LENGTH, "\033[1;33m", 7);
+                                     next = buffer + 36 + PID_LENGTH;
                                      color = true;
                                      break;
         case Logger::kLevelInfo    : memcpy(buffer, "INFO  ", 6);
-                                     next = buffer + 34;
+                                     next = buffer + 29 + PID_LENGTH;
                                      break;
         case Logger::kLevelTrace   : memcpy(buffer, "TRACE ", 6);
-                                     memcpy(buffer + 34, "\033[0;36m", 7);
-                                     next = buffer + 41;
+                                     memcpy(buffer + 29 + PID_LENGTH, "\033[0;36m", 7);
+                                     next = buffer + 36 + PID_LENGTH;
                                      color = true;
                                      break;
         case Logger::kLevelDebug   : memcpy(buffer, "DEBUG ", 6);
-                                     memcpy(buffer + 34, "\033[0;32m", 7);
-                                     next = buffer + 41;
+                                     memcpy(buffer + 29 + PID_LENGTH, "\033[0;32m", 7);
+                                     next = buffer + 36 + PID_LENGTH;
                                      color = true;
                                      break;
         case Logger::kLevelVerbose : memcpy(buffer, "MINOR ", 6);
-                                     memcpy(buffer + 34, "\033[0;34m", 7);
-                                     next = buffer + 41;
+                                     memcpy(buffer + 29 + PID_LENGTH, "\033[0;34m", 7);
+                                     next = buffer + 36 + PID_LENGTH;
                                      color = true;
                                      break;
         default                    : memcpy(buffer, "OTHER ", 6);
-                                     next = buffer + 34;
+                                     next = buffer + 29 + PID_LENGTH;
                                      break;
         };
 
     } else {
-        next = buffer + 34;
+        next = buffer + 29 + PID_LENGTH;
         switch (level) {
         case Logger::kLevelFatal   : memcpy(buffer, "FATAL ", 6); break;
         case Logger::kLevelError   : memcpy(buffer, "ERROR ", 6); break;
@@ -215,24 +219,26 @@ static bool Log(const Logger::Level &level,
         };
     }
 
-    // Timestamp and thread id.
-    long tid = static_cast<long>(syscall(SYS_gettid));
-    if (tid < 0) {
-        tid = static_cast<long>(getpid());
-    }
+#ifdef __linux__
+    long tid = static_cast<long>(get_current_thread_id());
+#else
+    // For UNIX/MacOSX, native thread id is quite unfamiliar.
+    long tid = getpid();
+#endif
 
-    ssize_t sret = sprintf(buffer + 6, "%02d-%02d %02d:%02d:%02d.%06ld %5ld",
+    ssize_t sret = sprintf(buffer + 6,
+                   "%02d-%02d %02d:%02d:%02d.%06ld %" PID_LENGTH_STRING "ld",
                    tm.tm_mon + 1, tm.tm_mday,
                    tm.tm_hour, tm.tm_min, tm.tm_sec,
                    static_cast<long>(tv.tv_usec),
-                   tid); // 5 might not really be correct since PID range vary.
+                   tid);
 
-    if (sret != 27) {
+    if (sret != 22 + PID_LENGTH) {
         return false;
     }
 
     // Fix the '\0'.
-    buffer[33] = ' ';
+    buffer[28 + PID_LENGTH] = ' ';
 
     // Don't occupy the last byte with '\0'.
     sret = vsnprintf(next, kMaximumLineLength + 1, format, va);
