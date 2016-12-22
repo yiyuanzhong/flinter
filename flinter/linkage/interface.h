@@ -27,18 +27,10 @@ class LinkagePeer;
 
 class Interface {
 public:
-    struct Parameter {
+    struct Socket {
         int domain;
         int type;
         int protocol;
-
-        // TCP only
-        bool tcp_defer_accept;
-        bool tcp_nodelay;
-
-        // UDP only
-        bool udp_broadcast;
-        bool udp_multicast;
 
         // TCP/UDP
         const char *socket_interface;
@@ -46,18 +38,34 @@ public:
         uint16_t socket_bind_port;
         uint16_t socket_port;
 
-        bool socket_close_on_exec;
-        bool socket_reuse_address;
-        bool socket_non_blocking;
-        bool socket_keepalive;
-
         // Unix socket
         const char *unix_abstract;
         const char *unix_pathname;
         mode_t unix_mode;
 
-        Parameter();
-    }; // struct Parameter
+        Socket();
+        void ToString(std::string *str) const;
+    }; // struct Socket
+
+    struct Option {
+        // TCP only
+        bool tcp_defer_accept;
+        bool tcp_nodelay;
+        bool tcp_cork;
+
+        // UDP only
+        bool udp_broadcast;
+        bool udp_multicast;
+
+        // Generic
+        bool socket_close_on_exec;
+        bool socket_reuse_address;
+        bool socket_non_blocking;
+        bool socket_keepalive;
+
+        Option();
+        void ToString(std::string *str) const;
+    }; // struct Option
 
     Interface();
     ~Interface();
@@ -114,13 +122,16 @@ public:
                     LinkagePeer *me = NULL);
 
     /// Low level listen.
-    bool Listen(const Parameter &parameter, LinkagePeer *me = NULL);
+    bool Listen(const Socket &socket,
+                const Option &option,
+                LinkagePeer *me = NULL);
 
     /// Low level accepted.
-    bool Accepted(const Parameter &parameter, int fd);
+    bool Accepted(const Option &option, int fd);
 
     /// Low level connect.
-    int Connect(const Parameter &parameter,
+    int Connect(const Socket &socket,
+                const Option &option,
                 LinkagePeer *peer = NULL,
                 LinkagePeer *me = NULL);
 
@@ -129,7 +140,7 @@ public:
     /// @retval <0 listen fd failure
     /// @retval  0 successful
     /// @retval >0 accepted fd failure
-    int Accept(const Parameter &parameter,
+    int Accept(const Option &option,
                LinkagePeer *peer,
                LinkagePeer *me = NULL);
 
@@ -159,19 +170,25 @@ private:
     int _socket;
     int _domain;
 
-    int DoConnectTcp4(const Parameter &parameter, LinkagePeer *peer, LinkagePeer *me);
-    int DoConnectTcp6(const Parameter &parameter, LinkagePeer *peer, LinkagePeer *me);
-    int DoConnectUnix(const Parameter &parameter, LinkagePeer *peer, LinkagePeer *me);
+    int DoConnectTcp4(const Socket &socket, const Option &option,
+                      LinkagePeer *peer, LinkagePeer *me);
 
-    bool DoListenTcp4(const Parameter &parameter, LinkagePeer *me);
-    bool DoListenTcp6(const Parameter &parameter, LinkagePeer *me);
-    bool DoListenUnix(const Parameter &parameter, LinkagePeer *me);
-    bool DoListenUnixSocket(const Parameter &parameter, LinkagePeer *me);
-    bool DoListenUnixNamespace(const Parameter &parameter, LinkagePeer *me);
+    int DoConnectTcp6(const Socket &socket, const Option &option,
+                      LinkagePeer *peer, LinkagePeer *me);
 
-    static bool InitializeSocket(const Parameter &parameter, int s);
-    static int CreateSocket(const Parameter &parameter);
-    static int CreateListenSocket(const Parameter &parameter,
+    int DoConnectUnix(const Socket &socket, const Option &option,
+                      LinkagePeer *peer, LinkagePeer *me);
+
+    bool DoListenTcp4(const Socket &socket, const Option &option, LinkagePeer *me);
+    bool DoListenTcp6(const Socket &socket, const Option &option, LinkagePeer *me);
+    bool DoListenUnix(const Socket &socket, const Option &option, LinkagePeer *me);
+    bool DoListenUnixSocket(const Socket &socket, const Option &option, LinkagePeer *me);
+    bool DoListenUnixNamespace(const Socket &socket, const Option &option, LinkagePeer *me);
+
+    static bool InitializeSocket(const Option &option, int s);
+    static int CreateSocket(const Socket &socket, const Option &option);
+    static int CreateListenSocket(const Socket &socket,
+                                  const Option &option,
                                   void *sockaddr,
                                   size_t addrlen);
 

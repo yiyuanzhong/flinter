@@ -30,6 +30,9 @@
 #include <string.h>
 #include <unistd.h>
 
+#include <iomanip>
+#include <sstream>
+
 #include "flinter/linkage/linkage_peer.h"
 #include "flinter/linkage/resolver.h"
 #include "flinter/logger.h"
@@ -84,27 +87,87 @@ int DoAccept(int s, LinkagePeer *peer, LinkagePeer *me)
     return 0;
 }
 
-Interface::Parameter::Parameter()
+Interface::Socket::Socket()
         : domain(AF_UNSPEC)
         , type(SOCK_STREAM)
         , protocol(0)
-        , tcp_defer_accept(false)
-        , tcp_nodelay(false)
-        , udp_broadcast(false)
-        , udp_multicast(false)
         , socket_interface(NULL)
         , socket_hostname(NULL)
         , socket_bind_port(0)
         , socket_port(0)
-        , socket_close_on_exec(false)
-        , socket_reuse_address(false)
-        , socket_non_blocking(false)
-        , socket_keepalive(false)
         , unix_abstract(NULL)
         , unix_pathname(NULL)
         , unix_mode(S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP | S_IROTH | S_IWOTH)
 {
     // Intended left blank.
+}
+
+void Interface::Socket::ToString(std::string *str) const
+{
+    assert(str);
+    std::ostringstream s;
+
+    if (domain == AF_UNIX) {
+        if (unix_pathname && *unix_pathname) {
+            s << "unix://" << unix_pathname << ","
+              << std::oct << std::setfill('0') << std::setw(4) << unix_mode;
+        } else if (unix_abstract && *unix_abstract) {
+            s << "unix://[" << unix_abstract << "]";
+        } else {
+            s << "unix://<invalid>";
+        }
+    } else if (domain == AF_INET6 && type == SOCK_STREAM) {
+        s << "tcp6://["
+          << (socket_hostname && *socket_hostname ? socket_hostname : "::")
+          << "]:" << (socket_bind_port ? socket_bind_port : socket_port);
+    } else if (domain == AF_INET6 && type == SOCK_DGRAM) {
+        s << "udp6://["
+          << (socket_hostname && *socket_hostname ? socket_hostname : "::")
+          << "]:" << (socket_bind_port ? socket_bind_port : socket_port);
+    } else if (domain == AF_INET && type == SOCK_STREAM) {
+        s << "tcp4://"
+          << (socket_hostname && *socket_hostname ? socket_hostname : "0.0.0.0")
+          << ":" << (socket_bind_port ? socket_bind_port : socket_port);
+    } else if (domain == AF_INET && type == SOCK_DGRAM) {
+        s << "udp4://"
+          << (socket_hostname && *socket_hostname ? socket_hostname : "0.0.0.0")
+          << ":" << (socket_bind_port ? socket_bind_port : socket_port);
+    } else {
+        s << "unknown://[" << domain << "," << type << "," << protocol << "]";
+    }
+
+    str->assign(s.str());
+}
+
+Interface::Option::Option()
+        : tcp_defer_accept(false)
+        , tcp_nodelay(false)
+        , udp_broadcast(false)
+        , udp_multicast(false)
+        , socket_close_on_exec(false)
+        , socket_reuse_address(false)
+        , socket_non_blocking(false)
+        , socket_keepalive(false)
+{
+    // Intended left blank.
+}
+
+void Interface::Option::ToString(std::string *str) const
+{
+    assert(str);
+    std::ostringstream s;
+    const char *delim = "";
+
+    if (tcp_defer_accept    ) { s << delim << "Ta"; delim = ","; }
+    if (tcp_nodelay         ) { s << delim << "Td"; delim = ","; }
+    if (udp_broadcast       ) { s << delim << "Ub"; delim = ","; }
+    if (udp_multicast       ) { s << delim << "Um"; delim = ","; }
+    if (socket_close_on_exec) { s << delim << "Se"; delim = ","; }
+    if (socket_reuse_address) { s << delim << "Sr"; delim = ","; }
+    if (socket_non_blocking ) { s << delim << "Sn"; delim = ","; }
+    if (socket_keepalive    ) { s << delim << "Sk"; delim = ","; }
+
+    str->assign(s.str());
 }
 
 Interface::Interface() : _socket(-1), _domain(AF_UNSPEC)
@@ -123,11 +186,12 @@ int Interface::Bind(int s, void *sockaddr, size_t addrlen)
                    static_cast<socklen_t>(addrlen));
 }
 
-int Interface::CreateListenSocket(const Parameter &parameter,
+int Interface::CreateListenSocket(const Socket &socket,
+                                  const Option &option,
                                   void *sockaddr,
                                   size_t addrlen)
 {
-    int s = CreateSocket(parameter);
+    int s = CreateSocket(socket, option);
     if (s < 0) {
         return -1;
     }
@@ -137,7 +201,7 @@ int Interface::CreateListenSocket(const Parameter &parameter,
         return -1;
     }
 
-    if (parameter.type == SOCK_STREAM) {
+    if (socket.type == SOCK_STREAM) {
         if (listen(s, kMaximumQueueLength)) {
             safe_close(s);
             return -1;
@@ -147,14 +211,14 @@ int Interface::CreateListenSocket(const Parameter &parameter,
     return s;
 }
 
-int Interface::CreateSocket(const Parameter &parameter)
+int Interface::CreateSocket(const Socket &socket, const Option &option)
 {
-    int s = socket(parameter.domain, parameter.type, parameter.protocol);
+    int s = ::socket(socket.domain, socket.type, socket.protocol);
     if (s < 0) {
         return -1;
     }
 
-    if (!InitializeSocket(parameter, s)) {
+    if (!InitializeSocket(option, s)) {
         safe_close(s);
         return -1;
     }
@@ -162,45 +226,45 @@ int Interface::CreateSocket(const Parameter &parameter)
     return s;
 }
 
-bool Interface::InitializeSocket(const Parameter &parameter, int s)
+bool Interface::InitializeSocket(const Option &option, int s)
 {
-    if (parameter.socket_reuse_address) {
+    if (option.socket_reuse_address) {
         if (set_socket_reuse_address(s)) {
             return false;
         }
     }
 
-    if (parameter.socket_non_blocking) {
+    if (option.socket_non_blocking) {
         if (set_non_blocking_mode(s)) {
             return false;
         }
     }
 
-    if (parameter.socket_close_on_exec) {
+    if (option.socket_close_on_exec) {
         if (set_close_on_exec(s)) {
             return false;
         }
     }
 
-    if (parameter.socket_keepalive) {
+    if (option.socket_keepalive) {
         if (set_socket_keepalive(s)) {
             return false;
         }
     }
 
-    if (parameter.tcp_defer_accept) {
+    if (option.tcp_defer_accept) {
         if (set_tcp_defer_accept(s)) {
             return false;
         }
     }
 
-    if (parameter.tcp_nodelay) {
+    if (option.tcp_nodelay) {
         if (set_tcp_nodelay(s)) {
             return false;
         }
     }
 
-    if (parameter.udp_broadcast) {
+    if (option.udp_broadcast) {
         if (set_socket_broadcast(s)) {
             return false;
         }
@@ -209,13 +273,14 @@ bool Interface::InitializeSocket(const Parameter &parameter, int s)
     return true;
 }
 
-int Interface::DoConnectTcp4(const Parameter &parameter,
+int Interface::DoConnectTcp4(const Socket &socket,
+                             const Option &option,
                              LinkagePeer *peer,
                              LinkagePeer *me)
 {
-    if (!parameter.socket_hostname  ||
-        !*parameter.socket_hostname ||
-        !parameter.socket_port      ){
+    if (!socket.socket_hostname  ||
+        !*socket.socket_hostname ||
+        !socket.socket_port      ){
 
         errno = EINVAL;
         return -1;
@@ -224,7 +289,7 @@ int Interface::DoConnectTcp4(const Parameter &parameter,
     Resolver *const resolver = Resolver::GetInstance();
     struct sockaddr_in addr;
 
-    int s = CreateSocket(parameter);
+    int s = CreateSocket(socket, option);
     if (s < 0) {
         CLOG.Verbose("Interface: failed to initialize socket: %d: %s",
                      errno, strerror(errno));
@@ -232,9 +297,9 @@ int Interface::DoConnectTcp4(const Parameter &parameter,
         return -1;
     }
 
-    if (parameter.socket_interface && *parameter.socket_interface) {
-        if (!resolver->Resolve(parameter.socket_interface,
-                               parameter.socket_bind_port,
+    if (socket.socket_interface && *socket.socket_interface) {
+        if (!resolver->Resolve(socket.socket_interface,
+                               socket.socket_bind_port,
                                &addr)) {
 
             safe_close(s);
@@ -250,8 +315,8 @@ int Interface::DoConnectTcp4(const Parameter &parameter,
         }
     }
 
-    if (!resolver->Resolve(parameter.socket_hostname,
-                           parameter.socket_port,
+    if (!resolver->Resolve(socket.socket_hostname,
+                           socket.socket_port,
                            &addr)) {
 
         safe_close(s);
@@ -285,16 +350,17 @@ int Interface::DoConnectTcp4(const Parameter &parameter,
     return ret == 0 ? 0 : 1;
 }
 
-int Interface::DoConnectUnix(const Parameter &parameter,
+int Interface::DoConnectUnix(const Socket &socket,
+                             const Option &option,
                              LinkagePeer *peer,
                              LinkagePeer * /*me*/)
 {
     bool file_based = true;
     const char *name = NULL;
-    if (parameter.unix_pathname && *parameter.unix_pathname) {
-        name = parameter.unix_pathname;
-    } else if (parameter.unix_abstract && *parameter.unix_abstract) {
-        name = parameter.unix_abstract;
+    if (socket.unix_pathname && *socket.unix_pathname) {
+        name = socket.unix_pathname;
+    } else if (socket.unix_abstract && *socket.unix_abstract) {
+        name = socket.unix_abstract;
         file_based = false;
     }
 
@@ -314,7 +380,7 @@ int Interface::DoConnectUnix(const Parameter &parameter,
     }
 
     len += sizeof(aun) - sizeof(aun.sun_path) + 1;
-    int s = CreateSocket(parameter);
+    int s = CreateSocket(socket, option);
     if (s < 0) {
         return -1;
     }
@@ -338,53 +404,56 @@ int Interface::DoConnectUnix(const Parameter &parameter,
     return 0;
 }
 
-int Interface::Connect(const Parameter &parameter,
+int Interface::Connect(const Socket &socket,
+                       const Option &option,
                        LinkagePeer *peer,
                        LinkagePeer *me)
 {
     // For connecting, SOCK_STREAM and SOCK_DGRAM share the same actions.
-    if (parameter.type != SOCK_STREAM && parameter.type != SOCK_DGRAM) {
+    if (socket.type != SOCK_STREAM && socket.type != SOCK_DGRAM) {
         errno = EINVAL;
         return -1;
 
     } else if (!Close()) {
         return -1;
 
-    } else if (parameter.domain == AF_INET6) {
-        //return DoConnectTcp6(parameter, peer, me); // UDP as well.
+    } else if (socket.domain == AF_INET6) {
+        //return DoConnectTcp6(socket, option, peer, me); // UDP as well.
 
-    } else if (parameter.domain == AF_INET  ) {
-        return DoConnectTcp4(parameter, peer, me); // UDP as well.
+    } else if (socket.domain == AF_INET  ) {
+        return DoConnectTcp4(socket, option, peer, me); // UDP as well.
 
-    } else if (parameter.domain == AF_UNIX  ) {
-        return DoConnectUnix(parameter, peer, me);
+    } else if (socket.domain == AF_UNIX  ) {
+        return DoConnectUnix(socket, option, peer, me);
     }
 
     CLOG.Fatal("Interface: BUG: unsupported socket type: <%d:%d:%d>",
-               parameter.domain, parameter.type, parameter.protocol);
+               socket.domain, socket.type, socket.protocol);
 
     return -1;
 }
 
-bool Interface::DoListenTcp4(const Parameter &parameter, LinkagePeer *me)
+bool Interface::DoListenTcp4(const Socket &socket,
+                             const Option &option,
+                             LinkagePeer *me)
 {
     struct ip_mreqn mreqn;
     struct sockaddr_in ain;
     bool multicast = false;
 
     Resolver *const resolver = Resolver::GetInstance();
-    if (parameter.type == SOCK_DGRAM && parameter.udp_multicast) {
+    if (socket.type == SOCK_DGRAM && option.udp_multicast) {
         memset(&mreqn, 0, sizeof(mreqn));
-        if (!parameter.socket_interface                                     ||
-            !*parameter.socket_interface                                    ||
-            inet_aton(parameter.socket_interface, &mreqn.imr_address) != 1  ){
+        if (!socket.socket_interface                                     ||
+            !*socket.socket_interface                                    ||
+            inet_aton(socket.socket_interface, &mreqn.imr_address) != 1  ){
 
             errno = EINVAL;
             return false;
         }
 
-        if (!resolver->Resolve(parameter.socket_hostname,
-                               parameter.socket_bind_port,
+        if (!resolver->Resolve(socket.socket_hostname,
+                               socket.socket_bind_port,
                                &ain, Resolver::kFirst)) {
 
             return false;
@@ -395,16 +464,16 @@ bool Interface::DoListenTcp4(const Parameter &parameter, LinkagePeer *me)
 
     } else {
         const char *hostname = "0.0.0.0";
-        if (parameter.socket_interface && *parameter.socket_interface) {
-            hostname = parameter.socket_interface;
+        if (socket.socket_interface && *socket.socket_interface) {
+            hostname = socket.socket_interface;
         }
 
-        if (!resolver->Resolve(hostname, parameter.socket_bind_port, &ain, Resolver::kFirst)) {
+        if (!resolver->Resolve(hostname, socket.socket_bind_port, &ain, Resolver::kFirst)) {
             return false;
         }
     }
 
-    int s = CreateListenSocket(parameter, &ain, sizeof(ain));
+    int s = CreateListenSocket(socket, option, &ain, sizeof(ain));
     if (s < 0) {
         return false;
     }
@@ -425,30 +494,32 @@ bool Interface::DoListenTcp4(const Parameter &parameter, LinkagePeer *me)
 
     char buffer[128];
     CLOG.Verbose("Interface: LISTEN<%d> %s4 <%s:%u>", s,
-                 parameter.type == SOCK_STREAM ? "TCP" : "UDP",
+                 socket.type == SOCK_STREAM ? "TCP" : "UDP",
                  inet_ntop(AF_INET, &ain.sin_addr, buffer, sizeof(buffer)),
-                 parameter.socket_bind_port);
+                 socket.socket_bind_port);
 
     return true;
 }
 
-bool Interface::DoListenTcp6(const Parameter &parameter, LinkagePeer *me)
+bool Interface::DoListenTcp6(const Socket &socket,
+                             const Option &option,
+                             LinkagePeer *me)
 {
     struct sockaddr_in6 ai6;
     const char *hostname = "::";
-    if (parameter.socket_interface && *parameter.socket_interface) {
-        hostname = parameter.socket_interface;
+    if (socket.socket_interface && *socket.socket_interface) {
+        hostname = socket.socket_interface;
     }
 
     Resolver *const resolver = Resolver::GetInstance();
     if (!resolver->Resolve(hostname,
-                           parameter.socket_bind_port,
+                           socket.socket_bind_port,
                            &ai6, Resolver::kFirst)) {
 
         return false;
     }
 
-    int s = CreateListenSocket(parameter, &ai6, sizeof(ai6));
+    int s = CreateListenSocket(socket, option, &ai6, sizeof(ai6));
     if (s < 0) {
         return false;
     }
@@ -462,30 +533,31 @@ bool Interface::DoListenTcp6(const Parameter &parameter, LinkagePeer *me)
 
     char buffer[128];
     CLOG.Verbose("Interface: LISTEN<%d> %s6 <[%s]:%u>", s,
-                 parameter.type == SOCK_STREAM ? "TCP" : "UDP",
+                 socket.type == SOCK_STREAM ? "TCP" : "UDP",
                  inet_ntop(AF_INET6, &ai6.sin6_addr, buffer, sizeof(buffer)),
-                 parameter.socket_bind_port);
+                 socket.socket_bind_port);
 
     return true;
 }
 
-bool Interface::DoListenUnixSocket(const Parameter &parameter,
+bool Interface::DoListenUnixSocket(const Socket &socket,
+                                   const Option &option,
                                    LinkagePeer * /*me*/)
 {
     struct sockaddr_un aun;
     memset(&aun, 0, sizeof(aun));
     aun.sun_family = AF_UNIX;
 
-    size_t len = strlen(parameter.unix_pathname);
+    size_t len = strlen(socket.unix_pathname);
     if (len >= sizeof(aun.sun_path)) {
         errno = EINVAL;
         return false;
     }
 
-    memcpy(aun.sun_path, parameter.unix_pathname, len);
+    memcpy(aun.sun_path, socket.unix_pathname, len);
     len += sizeof(aun) - sizeof(aun.sun_path) + 1;
 
-    int s = CreateSocket(parameter);
+    int s = CreateSocket(socket, option);
     if (s < 0) {
         return false;
     }
@@ -495,45 +567,46 @@ bool Interface::DoListenUnixSocket(const Parameter &parameter,
         return false;
     }
 
-    if (chmod(parameter.unix_pathname, parameter.unix_mode)) {
+    if (chmod(socket.unix_pathname, socket.unix_mode)) {
         safe_close(s);
-        unlink(parameter.unix_pathname);
+        unlink(socket.unix_pathname);
         return false;
     }
 
     if (listen(s, kMaximumQueueLength)) {
         safe_close(s);
-        unlink(parameter.unix_pathname);
+        unlink(socket.unix_pathname);
         return false;
     }
 
     _socket = s;
     _domain = AF_UNIX;
-    _sockname = parameter.unix_pathname;
+    _sockname = socket.unix_pathname;
     CLOG.Verbose("Interface: LISTEN<%d> PATHNAME%c [%s]", s,
-                 parameter.type == SOCK_STREAM ? 's' : 'd',
-                 parameter.unix_abstract);
+                 socket.type == SOCK_STREAM ? 's' : 'd',
+                 socket.unix_abstract);
 
     return true;
 }
 
-bool Interface::DoListenUnixNamespace(const Parameter &parameter,
+bool Interface::DoListenUnixNamespace(const Socket &socket,
+                                      const Option &option,
                                       LinkagePeer * /*me*/)
 {
     struct sockaddr_un aun;
     memset(&aun, 0, sizeof(aun));
     aun.sun_family = AF_UNIX;
 
-    size_t len = strlen(parameter.unix_abstract);
+    size_t len = strlen(socket.unix_abstract);
     if (len >= sizeof(aun.sun_path)) {
         errno = EINVAL;
         return false;
     }
 
-    memcpy(aun.sun_path + 1, parameter.unix_pathname, len);
+    memcpy(aun.sun_path + 1, socket.unix_pathname, len);
     len += sizeof(aun) - sizeof(aun.sun_path) + 1;
 
-    int s = CreateListenSocket(parameter, &aun, len);
+    int s = CreateListenSocket(socket, option, &aun, len);
     if (s < 0) {
         return false;
     }
@@ -541,19 +614,21 @@ bool Interface::DoListenUnixNamespace(const Parameter &parameter,
     _socket = s;
     _domain = AF_UNIX;
     CLOG.Verbose("Interface: LISTEN<%d> ABSTRACT%c [%s]", s,
-                 parameter.type == SOCK_STREAM ? 's' : 'd',
-                 parameter.unix_abstract);
+                 socket.type == SOCK_STREAM ? 's' : 'd',
+                 socket.unix_abstract);
 
     return true;
 }
 
-bool Interface::DoListenUnix(const Parameter &parameter, LinkagePeer *me)
+bool Interface::DoListenUnix(const Socket &socket,
+                             const Option &option,
+                             LinkagePeer *me)
 {
-    if (parameter.unix_pathname && *parameter.unix_pathname) {
-        return DoListenUnixSocket(parameter, me);
+    if (socket.unix_pathname && *socket.unix_pathname) {
+        return DoListenUnixSocket(socket, option, me);
 
-    } else if (parameter.unix_abstract && *parameter.unix_abstract) {
-        return DoListenUnixNamespace(parameter, me);
+    } else if (socket.unix_abstract && *socket.unix_abstract) {
+        return DoListenUnixNamespace(socket, option, me);
     }
 
     CLOG.Fatal("Interface: BUG: neither pathname nor abstract namespace "
@@ -563,27 +638,29 @@ bool Interface::DoListenUnix(const Parameter &parameter, LinkagePeer *me)
     return false;
 }
 
-bool Interface::Listen(const Parameter &parameter, LinkagePeer *me)
+bool Interface::Listen(const Socket &socket,
+                       const Option &option,
+                       LinkagePeer *me)
 {
-    if (parameter.type != SOCK_STREAM && parameter.type != SOCK_DGRAM) {
+    if (socket.type != SOCK_STREAM && socket.type != SOCK_DGRAM) {
         errno = EINVAL;
         return false;
 
     } else if (!Close()) {
         return false;
 
-    } else if (parameter.domain == AF_INET6) {
-        return DoListenTcp6(parameter, me); // UDP as well.
+    } else if (socket.domain == AF_INET6) {
+        return DoListenTcp6(socket, option, me); // UDP as well.
 
-    } else if (parameter.domain == AF_INET ) {
-        return DoListenTcp4(parameter, me); // UDP as well.
+    } else if (socket.domain == AF_INET ) {
+        return DoListenTcp4(socket, option, me); // UDP as well.
 
-    } else if (parameter.domain == AF_UNIX ) {
-        return DoListenUnix(parameter, me);
+    } else if (socket.domain == AF_UNIX ) {
+        return DoListenUnix(socket, option, me);
     }
 
     CLOG.Fatal("Interface: BUG: unsupported socket type: <%d:%d:%d>",
-               parameter.domain, parameter.type, parameter.protocol);
+               socket.domain, socket.type, socket.protocol);
 
     errno = EINVAL;
     return false;
@@ -591,28 +668,32 @@ bool Interface::Listen(const Parameter &parameter, LinkagePeer *me)
 
 bool Interface::ListenTcp6(uint16_t port, bool loopback)
 {
-    Parameter p;
-    p.domain = AF_INET6;
-    p.type = SOCK_STREAM;
-    p.socket_bind_port = port;
-    p.socket_non_blocking = true;
-    p.socket_reuse_address = true;
-    p.socket_close_on_exec = true;
-    p.socket_interface = loopback ? "::1" : "::";
-    return Listen(p);
+    Socket s;
+    s.domain = AF_INET6;
+    s.type = SOCK_STREAM;
+    s.socket_bind_port = port;
+    s.socket_interface = loopback ? "::1" : "::";
+
+    Option o;
+    o.socket_non_blocking = true;
+    o.socket_reuse_address = true;
+    o.socket_close_on_exec = true;
+    return Listen(s, o);
 }
 
 bool Interface::ListenTcp4(uint16_t port, bool loopback)
 {
-    Parameter p;
-    p.domain = AF_INET;
-    p.type = SOCK_STREAM;
-    p.socket_bind_port = port;
-    p.socket_non_blocking = true;
-    p.socket_reuse_address = true;
-    p.socket_close_on_exec = true;
-    p.socket_interface = loopback ? "127.0.0.1" : "0.0.0.0";
-    return Listen(p);
+    Socket s;
+    s.domain = AF_INET;
+    s.type = SOCK_STREAM;
+    s.socket_bind_port = port;
+    s.socket_interface = loopback ? "127.0.0.1" : "0.0.0.0";
+
+    Option o;
+    o.socket_non_blocking = true;
+    o.socket_reuse_address = true;
+    o.socket_close_on_exec = true;
+    return Listen(s, o);
 }
 
 bool Interface::ListenTcp(uint16_t port, bool loopback)
@@ -627,20 +708,23 @@ bool Interface::ListenUnix(const std::string &sockname, bool file_based, bool pr
                                 | S_IRGRP | S_IWGRP
                                 | S_IROTH | S_IWOTH;
 
-    Parameter p;
-    p.domain = AF_UNIX;
-    p.type = SOCK_STREAM;
-    p.socket_non_blocking = true;
-    p.socket_close_on_exec = true;
+    Socket s;
+    s.domain = AF_UNIX;
+    s.type = SOCK_STREAM;
+
+    Option o;
+    o.socket_non_blocking = true;
+    o.socket_close_on_exec = true;
+
     if (file_based) {
-        p.unix_pathname = sockname.c_str();
-        p.unix_mode = privileged ? kPriviledged : kNormal;
+        s.unix_pathname = sockname.c_str();
+        s.unix_mode = privileged ? kPriviledged : kNormal;
 
     } else {
-        p.unix_abstract = sockname.c_str();
+        s.unix_abstract = sockname.c_str();
     }
 
-    return Listen(p);
+    return Listen(s, o);
 }
 
 bool Interface::Shutdown()
@@ -689,15 +773,15 @@ bool Interface::Close()
 
 int Interface::Accept(LinkagePeer *peer, LinkagePeer *me)
 {
-    Parameter p;
-    p.socket_close_on_exec = true;
-    p.socket_non_blocking = true;
-    return Accept(p, peer, me);
+    Option o;
+    o.socket_close_on_exec = true;
+    o.socket_non_blocking = true;
+    return Accept(o, peer, me);
 }
 
-int Interface::Accept(const Parameter &parameter,
-                       LinkagePeer *peer,
-                       LinkagePeer *me)
+int Interface::Accept(const Option &option,
+                      LinkagePeer *peer,
+                      LinkagePeer *me)
 {
     assert(_socket >= 0);
     assert(peer);
@@ -714,13 +798,16 @@ int Interface::Accept(const Parameter &parameter,
 
     } else if (_domain == AF_UNIX) {
         ret = DoAccept<struct sockaddr_un >(_socket, peer, me);
+
+    } else {
+        errno = ESOCKTNOSUPPORT;
     }
 
     if (ret) {
         return ret;
     }
 
-    if (!InitializeSocket(parameter, peer->fd())) {
+    if (!InitializeSocket(option, peer->fd())) {
         safe_close(peer->fd());
         return 1;
     }
@@ -730,19 +817,19 @@ int Interface::Accept(const Parameter &parameter,
 
 bool Interface::Accepted(int fd)
 {
-    Parameter p;
-    p.socket_non_blocking = true;
-    p.socket_close_on_exec = true;
-    return Accepted(p, fd);
+    Option o;
+    o.socket_non_blocking = true;
+    o.socket_close_on_exec = true;
+    return Accepted(o, fd);
 }
 
-bool Interface::Accepted(const Parameter &parameter, int fd)
+bool Interface::Accepted(const Option &option, int fd)
 {
-    if (!Close() || !InitializeSocket(parameter, fd)) {
+    if (!Close() || !InitializeSocket(option, fd)) {
         return false;
     }
 
-    _domain = parameter.domain;
+    _domain = AF_UNSPEC;
     _socket = fd;
     return true;
 }
@@ -752,19 +839,21 @@ int Interface::ConnectUnix(const std::string &sockname,
                            LinkagePeer *peer,
                            LinkagePeer *me)
 {
-    Parameter p;
-    p.domain = AF_UNIX;
-    p.type = SOCK_STREAM;
-    p.socket_non_blocking = true;
-    p.socket_close_on_exec = true;
+    Socket s;
+    s.domain = AF_UNIX;
+    s.type = SOCK_STREAM;
+
+    Option o;
+    o.socket_non_blocking = true;
+    o.socket_close_on_exec = true;
 
     if (file_based) {
-        p.unix_pathname = sockname.c_str();
+        s.unix_pathname = sockname.c_str();
     } else {
-        p.unix_abstract = sockname.c_str();
+        s.unix_abstract = sockname.c_str();
     }
 
-    return Connect(p, peer, me);
+    return Connect(s, o, peer, me);
 }
 
 int Interface::ConnectTcp4(const std::string &hostname,
@@ -772,14 +861,17 @@ int Interface::ConnectTcp4(const std::string &hostname,
                            LinkagePeer *peer,
                            LinkagePeer *me)
 {
-    Parameter p;
-    p.domain = AF_INET;
-    p.type = SOCK_STREAM;
-    p.socket_port = port;
-    p.socket_non_blocking = true;
-    p.socket_close_on_exec = true;
-    p.socket_hostname = hostname.c_str();
-    return Connect(p, peer, me);
+    Socket s;
+    s.domain = AF_INET;
+    s.type = SOCK_STREAM;
+    s.socket_port = port;
+    s.socket_hostname = hostname.c_str();
+
+    Option o;
+    o.socket_non_blocking = true;
+    o.socket_close_on_exec = true;
+
+    return Connect(s, o, peer, me);
 }
 
 bool Interface::WaitUntilConnected(int64_t timeout)

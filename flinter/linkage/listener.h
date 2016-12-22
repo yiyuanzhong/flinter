@@ -19,11 +19,11 @@
 #include <set>
 #include <string>
 
+#include <flinter/linkage/interface.h>
 #include <flinter/linkage/linkage_base.h>
 
 namespace flinter {
 
-class Interface;
 class LinkagePeer;
 
 /// This class can be attached to multiple LinkageWorkers.
@@ -31,6 +31,10 @@ class Listener : public LinkageBase {
 public:
     Listener();
     virtual ~Listener();
+    explicit Listener(const Interface::Option &acceptedOption);
+
+    bool Listen(const Interface::Socket &socket,
+                const Interface::Option &option);
 
     bool ListenTcp6(uint16_t port, bool loopback);
     bool ListenTcp4(uint16_t port, bool loopback);
@@ -61,7 +65,8 @@ protected:
     virtual int Shutdown();
 
 private:
-    Interface *_listener;
+    Interface _listener;
+    Interface::Option _option;
     std::set<LinkageWorker *> _workers;
 
 }; // class Listener

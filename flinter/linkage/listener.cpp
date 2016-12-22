@@ -27,14 +27,20 @@
 
 namespace flinter {
 
-Listener::Listener() : _listener(new Interface)
+Listener::Listener()
 {
-    // Intended left blank.
+    _option.socket_close_on_exec = true;
+    _option.socket_non_blocking = true;
+}
+
+Listener::Listener(const Interface::Option &option)
+{
+    _option = option;
 }
 
 Listener::~Listener()
 {
-    delete _listener;
+    // Intended left blank.
 }
 
 bool Listener::Cleanup(int64_t /*now*/)
@@ -50,7 +56,7 @@ bool Listener::Attach(LinkageWorker *worker)
         return true;
     }
 
-    if (!DoAttach(worker, _listener->fd(), true, false, false)) {
+    if (!DoAttach(worker, _listener.fd(), true, false, false)) {
         return false;
     }
 
@@ -78,8 +84,8 @@ int Listener::OnReadable(LinkageWorker *worker)
 {
     LinkagePeer me;
     LinkagePeer peer;
-    Interface::Parameter p;
-    int ret = _listener->Accept(p, &peer, &me);
+    Interface::Option o;
+    int ret = _listener.Accept(o, &peer, &me);
     if (ret < 0) {
         if (errno == EINTR          ||
             errno == EAGAIN         ||
@@ -112,9 +118,39 @@ int Listener::OnReadable(LinkageWorker *worker)
     return 1;
 }
 
+bool Listener::Listen(const Interface::Socket &socket,
+                      const Interface::Option &option)
+{
+    bool ret;
+    if (socket.domain == AF_UNSPEC) {
+        Interface::Socket s(socket);
+        s.domain = AF_INET6;
+        ret = _listener.Listen(s, option);
+        if (!ret) {
+            s.domain = AF_INET;
+            ret = _listener.Listen(s, option);
+        }
+    } else {
+        ret = _listener.Listen(socket, option);
+    }
+
+    if (!ret) {
+        std::string s;
+        std::string o;
+        socket.ToString(&s);
+        option.ToString(&o);
+        CLOG.Warn("Listener: failed to listen on %s {%s}: %d: %s",
+                  s.c_str(), o.c_str(), errno, strerror(errno));
+
+        return false;
+    }
+
+    return true;
+}
+
 bool Listener::ListenTcp6(uint16_t port, bool loopback)
 {
-    if (!_listener->ListenTcp6(port, loopback)) {
+    if (!_listener.ListenTcp6(port, loopback)) {
         CLOG.Warn("Listener: failed to listen on TCPv6 %s:%u",
                   loopback ? "loopback" : "any", port);
 
@@ -126,7 +162,7 @@ bool Listener::ListenTcp6(uint16_t port, bool loopback)
 
 bool Listener::ListenTcp4(uint16_t port, bool loopback)
 {
-    if (!_listener->ListenTcp4(port, loopback)) {
+    if (!_listener.ListenTcp4(port, loopback)) {
         CLOG.Warn("Listener: failed to listen on TCPv4 %s:%u",
                   loopback ? "loopback" : "any", port);
 
@@ -138,7 +174,7 @@ bool Listener::ListenTcp4(uint16_t port, bool loopback)
 
 bool Listener::ListenTcp(uint16_t port, bool loopback)
 {
-    if (!_listener->ListenTcp(port, loopback)) {
+    if (!_listener.ListenTcp(port, loopback)) {
         CLOG.Warn("Listener: failed to listen on TCP %s:%u",
                   loopback ? "loopback" : "any", port);
 
@@ -151,7 +187,7 @@ bool Listener::ListenTcp(uint16_t port, bool loopback)
 bool Listener::ListenUnix(const std::string &sockname,
                           bool file_based, bool privileged)
 {
-    if (!_listener->ListenUnix(sockname, file_based, privileged)) {
+    if (!_listener.ListenUnix(sockname, file_based, privileged)) {
         CLOG.Warn("Listener: failed to listen on %s%s [%s]",
                   privileged ? "privileged " : "",
                   file_based ? "file" : "namespace",
@@ -165,7 +201,7 @@ bool Listener::ListenUnix(const std::string &sockname,
 
 int Listener::Shutdown()
 {
-    if (!_listener->Shutdown()) {
+    if (!_listener.Shutdown()) {
         return -1;
     }
 
@@ -216,7 +252,7 @@ int Listener::Disconnect(bool /*finish_write*/)
         worker->SetWannaRead(this, false);
     }
 
-    if (!_listener->Shutdown()) {
+    if (!_listener.Shutdown()) {
         return -1;
     }
 

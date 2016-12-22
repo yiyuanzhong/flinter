@@ -15,6 +15,8 @@
 
 #include <gtest/gtest.h>
 
+#include <netinet/in.h>
+
 #include "flinter/linkage/file_descriptor_io.h"
 #include "flinter/linkage/interface.h"
 #include "flinter/linkage/listener.h"
@@ -94,7 +96,14 @@ TEST(echoServer, TestListen)
     g_handler = &handler;
 
     L listener;
-    ASSERT_TRUE(listener.ListenTcp(5566, false));
+    flinter::Interface::Socket s;
+    s.type = SOCK_STREAM;
+    s.socket_bind_port = 5566;
+
+    flinter::Interface::Option o;
+    o.socket_non_blocking = true;
+    o.socket_close_on_exec = true;
+    ASSERT_TRUE(listener.Listen(s, o));
 
     flinter::LinkageWorker worker;
     ASSERT_TRUE(listener.Attach(&worker));
