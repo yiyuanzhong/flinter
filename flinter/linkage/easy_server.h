@@ -20,10 +20,12 @@
 #include <stdint.h>
 
 #include <list>
+#include <ostream>
 #include <queue>
 #include <string>
 #include <vector>
 
+#include <flinter/linkage/interface.h>
 #include <flinter/types/atomic.h>
 #include <flinter/types/unordered_map.h>
 #include <flinter/factory.h>
@@ -65,6 +67,18 @@ public:
 
     }; // struct Configure
 
+    struct ListenOption {
+        Interface::Socket listen_socket;
+        Interface::Option listen_socket_option;
+        Interface::Option accepted_sockets_option;
+        Factory<EasyHandler> *easy_factory;
+        EasyHandler *easy_handler;
+        SslContext *ssl;
+
+        ListenOption();
+        void ToString(std::string *str) const;
+    }; // struct ListenOption
+
     EasyServer();
     virtual ~EasyServer();
 
@@ -76,6 +90,11 @@ public:
     /// @param repeat nanoseconds.
     /// @param timer will be released after executed.
     bool RegisterTimer(int64_t after, int64_t repeat, Runnable *timer);
+
+    /// Call before Initialize().
+    /// Either handler or factory must be set.
+    /// handler/factory life span NOT taken, keep it valid.
+    bool Listen(const ListenOption &o);
 
     /// Call before Initialize().
     /// @param easy_handler life span NOT taken, keep it valid.
@@ -234,12 +253,6 @@ private:
     }
 
     // Locked.
-    bool DoListen(uint16_t port,
-                  EasyHandler *easy_handler,
-                  Factory<EasyHandler> *easy_factory,
-                  SslContext *ssl);
-
-    // Locked.
     channel_t DoConnectTcp4(const std::string &host,
                             uint16_t port,
                             EasyHandler *easy_handler,
@@ -292,5 +305,7 @@ private:
 }; // class EasyServer
 
 } // namespace flinter
+
+std::ostream &operator << (std::ostream &s, const flinter::EasyServer::ListenOption &d);
 
 #endif // __FLINTER_LINKAGE_EASY_SERVER_H__

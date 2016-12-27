@@ -106,36 +106,7 @@ void Interface::Socket::ToString(std::string *str) const
 {
     assert(str);
     std::ostringstream s;
-
-    if (domain == AF_UNIX) {
-        if (unix_pathname && *unix_pathname) {
-            s << "unix://" << unix_pathname << ","
-              << std::oct << std::setfill('0') << std::setw(4) << unix_mode;
-        } else if (unix_abstract && *unix_abstract) {
-            s << "unix://[" << unix_abstract << "]";
-        } else {
-            s << "unix://<invalid>";
-        }
-    } else if (domain == AF_INET6 && type == SOCK_STREAM) {
-        s << "tcp6://["
-          << (socket_hostname && *socket_hostname ? socket_hostname : "::")
-          << "]:" << (socket_bind_port ? socket_bind_port : socket_port);
-    } else if (domain == AF_INET6 && type == SOCK_DGRAM) {
-        s << "udp6://["
-          << (socket_hostname && *socket_hostname ? socket_hostname : "::")
-          << "]:" << (socket_bind_port ? socket_bind_port : socket_port);
-    } else if (domain == AF_INET && type == SOCK_STREAM) {
-        s << "tcp4://"
-          << (socket_hostname && *socket_hostname ? socket_hostname : "0.0.0.0")
-          << ":" << (socket_bind_port ? socket_bind_port : socket_port);
-    } else if (domain == AF_INET && type == SOCK_DGRAM) {
-        s << "udp4://"
-          << (socket_hostname && *socket_hostname ? socket_hostname : "0.0.0.0")
-          << ":" << (socket_bind_port ? socket_bind_port : socket_port);
-    } else {
-        s << "unknown://[" << domain << "," << type << "," << protocol << "]";
-    }
-
+    s << *this;
     str->assign(s.str());
 }
 
@@ -156,17 +127,7 @@ void Interface::Option::ToString(std::string *str) const
 {
     assert(str);
     std::ostringstream s;
-    const char *delim = "";
-
-    if (tcp_defer_accept    ) { s << delim << "Ta"; delim = ","; }
-    if (tcp_nodelay         ) { s << delim << "Td"; delim = ","; }
-    if (udp_broadcast       ) { s << delim << "Ub"; delim = ","; }
-    if (udp_multicast       ) { s << delim << "Um"; delim = ","; }
-    if (socket_close_on_exec) { s << delim << "Se"; delim = ","; }
-    if (socket_reuse_address) { s << delim << "Sr"; delim = ","; }
-    if (socket_non_blocking ) { s << delim << "Sn"; delim = ","; }
-    if (socket_keepalive    ) { s << delim << "Sk"; delim = ","; }
-
+    s << *this;
     str->assign(s.str());
 }
 
@@ -584,7 +545,7 @@ bool Interface::DoListenUnixSocket(const Socket &socket,
     _sockname = socket.unix_pathname;
     CLOG.Verbose("Interface: LISTEN<%d> PATHNAME%c [%s]", s,
                  socket.type == SOCK_STREAM ? 's' : 'd',
-                 socket.unix_abstract);
+                 socket.unix_pathname);
 
     return true;
 }
@@ -915,5 +876,55 @@ bool Interface::TestIfConnected()
 }
 
 } // namespace flinter
+
+std::ostream &operator << (std::ostream &s, const flinter::Interface::Socket &d)
+{
+    if (d.domain == AF_UNIX) {
+        if (d.unix_pathname && *d.unix_pathname) {
+            s << "unix://" << d.unix_pathname << ","
+              << std::oct << std::setfill('0') << std::setw(4) << d.unix_mode;
+        } else if (d.unix_abstract && *d.unix_abstract) {
+            s << "unix://[" << d.unix_abstract << "]";
+        } else {
+            s << "unix://<invalid>";
+        }
+    } else if (d.domain == AF_INET6 && d.type == SOCK_STREAM) {
+        s << "tcp6://["
+          << (d.socket_hostname && *d.socket_hostname ? d.socket_hostname : "::")
+          << "]:" << (d.socket_bind_port ? d.socket_bind_port : d.socket_port);
+    } else if (d.domain == AF_INET6 && d.type == SOCK_DGRAM) {
+        s << "udp6://["
+          << (d.socket_hostname && *d.socket_hostname ? d.socket_hostname : "::")
+          << "]:" << (d.socket_bind_port ? d.socket_bind_port : d.socket_port);
+    } else if (d.domain == AF_INET && d.type == SOCK_STREAM) {
+        s << "tcp4://"
+          << (d.socket_hostname && *d.socket_hostname ? d.socket_hostname : "0.0.0.0")
+          << ":" << (d.socket_bind_port ? d.socket_bind_port : d.socket_port);
+    } else if (d.domain == AF_INET && d.type == SOCK_DGRAM) {
+        s << "udp4://"
+          << (d.socket_hostname && *d.socket_hostname ? d.socket_hostname : "0.0.0.0")
+          << ":" << (d.socket_bind_port ? d.socket_bind_port : d.socket_port);
+    } else {
+        s << "unknown://[" << d.domain << "," << d.type << "," << d.protocol << "]";
+    }
+
+    return s;
+}
+
+std::ostream &operator << (std::ostream &s, const flinter::Interface::Option &d)
+{
+    const char *delim = "";
+
+    if (d.tcp_defer_accept    ) { s << delim << "Ta"; delim = ","; }
+    if (d.tcp_nodelay         ) { s << delim << "Td"; delim = ","; }
+    if (d.udp_broadcast       ) { s << delim << "Ub"; delim = ","; }
+    if (d.udp_multicast       ) { s << delim << "Um"; delim = ","; }
+    if (d.socket_close_on_exec) { s << delim << "Se"; delim = ","; }
+    if (d.socket_reuse_address) { s << delim << "Sr"; delim = ","; }
+    if (d.socket_non_blocking ) { s << delim << "Sn"; delim = ","; }
+    if (d.socket_keepalive    ) { s << delim << "Sk"; delim = ","; }
+
+    return s;
+}
 
 #endif // defined(__unix__)

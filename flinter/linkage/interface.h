@@ -19,6 +19,7 @@
 #include <sys/types.h>
 #include <stdint.h>
 
+#include <ostream>
 #include <string>
 
 namespace flinter {
@@ -197,5 +198,8 @@ private:
 }; // class Interface
 
 } // namespace flinter
+
+std::ostream &operator << (std::ostream &s, const flinter::Interface::Socket &d);
+std::ostream &operator << (std::ostream &s, const flinter::Interface::Option &d);
 
 #endif //__FLINTER_LINKAGE_INTERFACE_H__

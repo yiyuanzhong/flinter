@@ -15,6 +15,7 @@
 
 #include "flinter/linkage/easy_server.h"
 
+#include <sys/socket.h>
 #include <assert.h>
 #include <string.h>
 
@@ -61,6 +62,29 @@ const EasyServer::Configure EasyServer::kDefaultConfigure = {
     /* outgoing_idle_timeout        = */ 60000000000LL,
     /* maximum_active_connections   = */ 50000,
 };
+
+EasyServer::ListenOption::ListenOption()
+        : easy_factory(NULL)
+        , easy_handler(NULL)
+{
+    listen_socket.domain = AF_INET6;
+    listen_socket.type = SOCK_STREAM;
+
+    listen_socket_option.socket_close_on_exec = true;
+    listen_socket_option.socket_reuse_address = true;
+    listen_socket_option.socket_non_blocking = true;
+
+    accepted_sockets_option.socket_close_on_exec = true;
+    accepted_sockets_option.socket_non_blocking = true;
+}
+
+void EasyServer::ListenOption::ToString(std::string *str) const
+{
+    assert(str);
+    std::ostringstream s;
+    s << *this;
+    str->assign(s.str());
+}
 
 const EasyServer::channel_t EasyServer::kInvalidChannel = 0;
 const size_t EasyServer::kMaximumWorkers = 16384;
@@ -128,12 +152,14 @@ private:
 class EasyServer::ProxyHandler : public LinkageHandler {
 public:
     virtual ~ProxyHandler() {}
-    ProxyHandler(EasyHandler *easy_handler,
+    ProxyHandler(const Interface::Option &accepted_option,
+                 EasyHandler *easy_handler,
                  Factory<EasyHandler> *easy_factory,
                  SslContext *ssl)
             : _ssl(ssl)
             , _easy_handler(easy_handler)
-            , _easy_factory(easy_factory) {}
+            , _easy_factory(easy_factory)
+            , _accepted_option(accepted_option) {}
 
     virtual ssize_t GetMessageLength(Linkage *linkage,
                                      const void *buffer,
@@ -156,6 +182,11 @@ public:
         return _ssl;
     }
 
+    const Interface::Option &accepted_option() const
+    {
+        return _accepted_option;
+    }
+
     EasyHandler *easy_handler() const
     {
         return _easy_handler;
@@ -170,6 +201,7 @@ private:
     SslContext *const _ssl;
     EasyHandler *const _easy_handler;
     Factory<EasyHandler> *const _easy_factory;
+    Interface::Option _accepted_option;
 
 }; // class EasyServer::ProxyHandler
 
@@ -485,9 +517,9 @@ bool EasyServer::JobWorker::Job::Run()
     EasyServer *s = _context->easy_server();
     EasyHandler *h = _context->easy_handler();
 
-    LOG(VERBOSE) << "JobWorker: executing [" << this << "]";
+    CLOG.Verbose("JobWorker: executing [%p]", this);
     int ret = h->OnMessage(*_context, _message.data(), _message.length());
-    LOG(VERBOSE) << "JobWorker: job [" << this << "] returned " << ret;
+    CLOG.Verbose("JobWorker: job [%p] returned %d", this, ret);
 
     // Simulate LinkageWorker since we're running on our own.
     if (ret < 0) {
@@ -548,18 +580,27 @@ EasyServer::~EasyServer()
     delete _incoming;
 }
 
-bool EasyServer::DoListen(uint16_t port,
-                          EasyHandler *easy_handler,
-                          Factory<EasyHandler> *easy_factory,
-                          SslContext *ssl)
+bool EasyServer::Listen(const ListenOption &o)
 {
-    ProxyHandler *proxy_handler = new ProxyHandler(easy_handler,
-                                                   easy_factory,
-                                                   ssl);
+    if (!!o.easy_handler == !!o.easy_factory) {
+        LOG(FATAL) << "EasyServer: BUG: either handler or factory must be configured.";
+        return false;
+    }
+
+    if (o.listen_socket.type != SOCK_STREAM) {
+        LOG(FATAL) << "EasyServer: BUG: support SOCK_STREAM only.";
+        return false;
+    }
+
+    ProxyHandler *proxy_handler = new ProxyHandler(
+            o.accepted_sockets_option,
+            o.easy_handler,
+            o.easy_factory,
+            o.ssl);
 
     Listener *listener = new ProxyListener(this, proxy_handler);
 
-    if (!listener->ListenTcp4(port, false)) {
+    if (!listener->Listen(o.listen_socket, o.listen_socket_option)) {
         delete listener;
         delete proxy_handler;
         return false;
@@ -584,7 +625,11 @@ bool EasyServer::Listen(uint16_t port, EasyHandler *easy_handler)
         return false;
     }
 
-    return DoListen(port, easy_handler, NULL, NULL);
+    ListenOption o;
+    o.listen_socket.domain = AF_INET;
+    o.listen_socket.socket_bind_port = port;
+    o.easy_handler = easy_handler;
+    return Listen(o);
 }
 
 bool EasyServer::SslListen(uint16_t port,
@@ -601,7 +646,12 @@ bool EasyServer::SslListen(uint16_t port,
         return false;
     }
 
-    return DoListen(port, easy_handler, NULL, ssl);
+    ListenOption o;
+    o.listen_socket.domain = AF_INET;
+    o.listen_socket.socket_bind_port = port;
+    o.easy_handler = easy_handler;
+    o.ssl = ssl;
+    return Listen(o);
 }
 
 bool EasyServer::Listen(uint16_t port, Factory<EasyHandler> *easy_factory)
@@ -611,7 +661,11 @@ bool EasyServer::Listen(uint16_t port, Factory<EasyHandler> *easy_factory)
         return false;
     }
 
-    return DoListen(port, NULL, easy_factory, NULL);
+    ListenOption o;
+    o.listen_socket.domain = AF_INET;
+    o.listen_socket.socket_bind_port = port;
+    o.easy_factory = easy_factory;
+    return Listen(o);
 }
 
 bool EasyServer::SslListen(uint16_t port,
@@ -628,7 +682,12 @@ bool EasyServer::SslListen(uint16_t port,
         return false;
     }
 
-    return DoListen(port, NULL, easy_factory, ssl);
+    ListenOption o;
+    o.listen_socket.domain = AF_INET;
+    o.listen_socket.socket_bind_port = port;
+    o.easy_factory = easy_factory;
+    o.ssl = ssl;
+    return Listen(o);
 }
 
 bool EasyServer::RegisterTimer(int64_t interval, Runnable *timer)
@@ -902,7 +961,7 @@ Linkage *EasyServer::AllocateChannel(LinkageWorker *worker,
     channel_t channel = AllocateChannel(ioc, true);
 
     Interface *interface = new Interface;
-    if (!interface->Accepted(peer.fd())) {
+    if (!interface->Accepted(proxy_handler->accepted_option(), peer.fd())) {
         _incoming_connections.SubAndFetch(1);
         delete interface;
         return NULL;
@@ -1252,7 +1311,8 @@ EasyServer::channel_t EasyServer::DoConnectTcp4(
     IoContext *const ioc = _io_context[static_cast<size_t>(thread_id)];
 
     MutexLocker locker(ioc->_mutex);
-    ProxyHandler *proxy_handler = new ProxyHandler(easy_handler,
+    ProxyHandler *proxy_handler = new ProxyHandler(Interface::Option(),
+                                                   easy_handler,
                                                    easy_factory,
                                                    ssl);
 
@@ -1346,3 +1406,16 @@ EasyServer::channel_t EasyServer::AllocateChannel(IoContext *ioc,
 }
 
 } // namespace flinter
+
+std::ostream &operator << (std::ostream &s, const flinter::EasyServer::ListenOption &d)
+{
+    s <<   "L[" << d.listen_socket
+      << "] O[" << d.listen_socket_option
+      << "] A[" << d.accepted_sockets_option
+      << "] H[" << d.easy_handler
+      << "] F[" << d.easy_factory
+      << "] S[" << d.ssl
+      << "]";
+
+    return s;
+}
