@@ -1341,6 +1341,11 @@ EasyServer::ProxyLinkage *EasyServer::DoReconnect(
 
 EasyServer::channel_t EasyServer::Connect(const ConnectOption &o)
 {
+    if (!!o.easy_handler == !!o.easy_factory) {
+        LOG(FATAL) << "EasyServer: BUG: either handler or factory must be configured.";
+        return false;
+    }
+
     MutexLocker glocker(_gmutex);
     if (_io_workers.empty()) {
         throw std::logic_error("EasyServer only connects after Initialize()");
