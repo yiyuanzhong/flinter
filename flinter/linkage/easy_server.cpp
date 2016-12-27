@@ -1297,16 +1297,16 @@ EasyServer::ProxyLinkage *EasyServer::DoReconnect(
     IoContext *const ioc = GetIoContext(channel);
     assert(ioc);
 
-    std::pair<EasyHandler *, bool> h = GetEasyHandler(info->proxy_handler());
-
     LinkagePeer me;
     LinkagePeer peer;
+    Interface *interface = new Interface;
+    std::pair<EasyHandler *, bool> h = GetEasyHandler(info->proxy_handler());
+    int ret = interface->Connect(info->socket(), info->option(), &peer, &me);
+
     EasyContext *context = new EasyContext(this, h.first, h.second,
                                            channel, peer, me,
                                            worker->thread_id());
 
-    Interface *interface = new Interface;
-    int ret = interface->Connect(info->socket(), info->option(), &peer, &me);
     if (ret < 0) {
         h.first->OnError(*context, false, errno);
         h.first->OnDisconnected(*context);
