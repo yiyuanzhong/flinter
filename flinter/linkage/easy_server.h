@@ -69,8 +69,8 @@ public:
 
     struct ListenOption {
         Interface::Socket listen_socket;
-        Interface::Option listen_socket_option;
-        Interface::Option accepted_sockets_option;
+        Interface::Option listen_option;
+        Interface::Option accepted_option;
         Factory<EasyHandler> *easy_factory;
         EasyHandler *easy_handler;
         SslContext *ssl;
@@ -78,6 +78,18 @@ public:
         ListenOption();
         void ToString(std::string *str) const;
     }; // struct ListenOption
+
+    struct ConnectOption {
+        Interface::Socket connect_socket;
+        Interface::Option connect_option;
+        Factory<EasyHandler> *easy_factory;
+        EasyHandler *easy_handler;
+        SslContext *ssl;
+        int thread_id;
+
+        ConnectOption();
+        void ToString(std::string *str) const;
+    }; // struct ConnectOption
 
     EasyServer();
     virtual ~EasyServer();
@@ -95,6 +107,13 @@ public:
     /// Either handler or factory must be set.
     /// handler/factory life span NOT taken, keep it valid.
     bool Listen(const ListenOption &o);
+
+    /// Allocate channel for outgoing connection.
+    /// Call after Initialize().
+    /// @sa Forget()
+    /// Either handler or factory must be set.
+    /// handler/factory life span NOT taken, keep it valid.
+    channel_t Connect(const ConnectOption &o);
 
     /// Call before Initialize().
     /// @param easy_handler life span NOT taken, keep it valid.
@@ -252,14 +271,6 @@ private:
         return _io_context[static_cast<size_t>(GetThreadId(channel))];
     }
 
-    // Locked.
-    channel_t DoConnectTcp4(const std::string &host,
-                            uint16_t port,
-                            EasyHandler *easy_handler,
-                            Factory<EasyHandler> *easy_factory,
-                            SslContext *ssl,
-                            int thread_id);
-
     // thread_id can be out of range so a random one is picked.
     ProxyLinkageWorker *GetIoWorker(int thread_id) const;
 
@@ -307,5 +318,6 @@ private:
 } // namespace flinter
 
 std::ostream &operator << (std::ostream &s, const flinter::EasyServer::ListenOption &d);
+std::ostream &operator << (std::ostream &s, const flinter::EasyServer::ConnectOption &d);
 
 #endif // __FLINTER_LINKAGE_EASY_SERVER_H__

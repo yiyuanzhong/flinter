@@ -70,15 +70,35 @@ EasyServer::ListenOption::ListenOption()
     listen_socket.domain = AF_INET6;
     listen_socket.type = SOCK_STREAM;
 
-    listen_socket_option.socket_close_on_exec = true;
-    listen_socket_option.socket_reuse_address = true;
-    listen_socket_option.socket_non_blocking = true;
+    listen_option.socket_close_on_exec = true;
+    listen_option.socket_reuse_address = true;
+    listen_option.socket_non_blocking = true;
 
-    accepted_sockets_option.socket_close_on_exec = true;
-    accepted_sockets_option.socket_non_blocking = true;
+    accepted_option.socket_close_on_exec = true;
+    accepted_option.socket_non_blocking = true;
+}
+
+EasyServer::ConnectOption::ConnectOption()
+        : easy_factory(NULL)
+        , easy_handler(NULL)
+        , thread_id(-1)
+{
+    connect_socket.domain = AF_INET6;
+    connect_socket.type = SOCK_STREAM;
+
+    connect_option.socket_close_on_exec = true;
+    connect_option.socket_non_blocking = true;
 }
 
 void EasyServer::ListenOption::ToString(std::string *str) const
+{
+    assert(str);
+    std::ostringstream s;
+    s << *this;
+    str->assign(s.str());
+}
+
+void EasyServer::ConnectOption::ToString(std::string *str) const
 {
     assert(str);
     std::ostringstream s;
@@ -93,22 +113,50 @@ const size_t EasyServer::kMaximumSlots = 128;
 class EasyServer::OutgoingInformation {
 public:
     OutgoingInformation(ProxyHandler *proxy_handler,
-                        const std::string &host,
-                        uint16_t port,
+                        const Interface::Socket &socket,
+                        const Interface::Option &option,
                         int thread_id) : _proxy_handler(proxy_handler)
-                                       , _host(host), _port(port)
-                                       , _thread_id(thread_id) {}
+                                       , _socket(socket)
+                                       , _option(option)
+                                       , _thread_id(thread_id)
+    {
+        if (_socket.socket_interface) {
+            _socket_interface = _socket.socket_interface;
+            _socket.socket_interface = _socket_interface.c_str();
+        }
 
-    ProxyHandler *proxy_handler() const { return _proxy_handler; }
-    const std::string &host() const     { return _host;          }
-    uint16_t port() const               { return _port;          }
-    int thread_id() const               { return _thread_id;     }
+        if (_socket.socket_hostname) {
+            _socket_hostname = _socket.socket_hostname;
+            _socket.socket_hostname = _socket_hostname.c_str();
+        }
+
+        if (_socket.unix_abstract) {
+            _unix_abstract = _socket.unix_abstract;
+            _socket.unix_abstract = _unix_abstract.c_str();
+        }
+
+        if (_socket.unix_pathname) {
+            _unix_pathname = _socket.unix_pathname;
+            _socket.unix_pathname = _unix_pathname.c_str();
+        }
+    }
+
+    ProxyHandler *proxy_handler()     const { return _proxy_handler; }
+    const Interface::Socket &socket() const { return _socket;        }
+    const Interface::Option &option() const { return _option;        }
+    int thread_id()                   const { return _thread_id;     }
 
 private:
     ProxyHandler *const _proxy_handler;
-    const std::string _host;
-    const uint16_t _port;
+    Interface::Socket _socket;
+    Interface::Option _option;
     const int _thread_id;
+
+    // Deep copy of _socket, ugly but put it like this now
+    std::string _socket_interface;
+    std::string _socket_hostname;
+    std::string _unix_abstract;
+    std::string _unix_pathname;
 
 }; // class OutgoingInformation
 
@@ -593,14 +641,14 @@ bool EasyServer::Listen(const ListenOption &o)
     }
 
     ProxyHandler *proxy_handler = new ProxyHandler(
-            o.accepted_sockets_option,
+            o.accepted_option,
             o.easy_handler,
             o.easy_factory,
             o.ssl);
 
     Listener *listener = new ProxyListener(this, proxy_handler);
 
-    if (!listener->Listen(o.listen_socket, o.listen_socket_option)) {
+    if (!listener->Listen(o.listen_socket, o.listen_option)) {
         delete listener;
         delete proxy_handler;
         return false;
@@ -1249,23 +1297,23 @@ EasyServer::ProxyLinkage *EasyServer::DoReconnect(
     IoContext *const ioc = GetIoContext(channel);
     assert(ioc);
 
+    std::pair<EasyHandler *, bool> h = GetEasyHandler(info->proxy_handler());
+
     LinkagePeer me;
     LinkagePeer peer;
-    Interface *interface = new Interface;
-    int ret = interface->ConnectTcp4(info->host(), info->port(), &peer, &me);
-    if (ret < 0) {
-        CLOG.Verbose("EasyServer: failed to connect to [%s:%u]: %d: %s",
-                     info->host().c_str(), info->port(),
-                     errno, strerror(errno));
-
-        delete interface;
-        return NULL;
-    }
-
-    std::pair<EasyHandler *, bool> h = GetEasyHandler(info->proxy_handler());
     EasyContext *context = new EasyContext(this, h.first, h.second,
                                            channel, peer, me,
                                            worker->thread_id());
+
+    Interface *interface = new Interface;
+    int ret = interface->Connect(info->socket(), info->option(), &peer, &me);
+    if (ret < 0) {
+        h.first->OnError(*context, false, errno);
+        h.first->OnDisconnected(*context);
+        delete interface;
+        delete context;
+        return NULL;
+    }
 
     AbstractIo *io = GetAbstractIo(info->proxy_handler(),
                                    interface,
@@ -1291,19 +1339,14 @@ EasyServer::ProxyLinkage *EasyServer::DoReconnect(
     return linkage;
 }
 
-EasyServer::channel_t EasyServer::DoConnectTcp4(
-        const std::string &host,
-        uint16_t port,
-        EasyHandler *easy_handler,
-        Factory<EasyHandler> *easy_factory,
-        SslContext *ssl,
-        int thread_id)
+EasyServer::channel_t EasyServer::Connect(const ConnectOption &o)
 {
     MutexLocker glocker(_gmutex);
     if (_io_workers.empty()) {
         throw std::logic_error("EasyServer only connects after Initialize()");
     }
 
+    int thread_id = o.thread_id;
     if (thread_id < 0 || static_cast<size_t>(thread_id) >= _io_workers.size()) {
         thread_id = rand() % static_cast<int>(_io_workers.size());
     }
@@ -1312,12 +1355,15 @@ EasyServer::channel_t EasyServer::DoConnectTcp4(
 
     MutexLocker locker(ioc->_mutex);
     ProxyHandler *proxy_handler = new ProxyHandler(Interface::Option(),
-                                                   easy_handler,
-                                                   easy_factory,
-                                                   ssl);
+                                                   o.easy_handler,
+                                                   o.easy_factory,
+                                                   o.ssl);
 
     OutgoingInformation *info =
-            new OutgoingInformation(proxy_handler, host, port, thread_id);
+            new OutgoingInformation(proxy_handler,
+                                    o.connect_socket,
+                                    o.connect_option,
+                                    thread_id);
 
     channel_t c = AllocateChannel(ioc, false);
     ioc->_connect_proxy_handlers.insert(std::make_pair(c, proxy_handler));
@@ -1336,7 +1382,14 @@ EasyServer::channel_t EasyServer::ConnectTcp4(
         return kInvalidChannel;
     }
 
-    return DoConnectTcp4(host, port, easy_handler, NULL, NULL, thread_id);
+    ConnectOption o;
+    o.connect_socket.domain = AF_INET;
+    o.connect_socket.socket_hostname = host.c_str();
+    o.connect_socket.socket_port = port;
+    o.easy_handler = easy_handler;
+    o.thread_id = thread_id;
+
+    return Connect(o);
 }
 
 EasyServer::channel_t EasyServer::SslConnectTcp4(
@@ -1356,7 +1409,15 @@ EasyServer::channel_t EasyServer::SslConnectTcp4(
         return kInvalidChannel;
     }
 
-    return DoConnectTcp4(host, port, easy_handler, NULL, ssl, thread_id);
+    ConnectOption o;
+    o.connect_socket.domain = AF_INET;
+    o.connect_socket.socket_hostname = host.c_str();
+    o.connect_socket.socket_port = port;
+    o.easy_handler = easy_handler;
+    o.thread_id = thread_id;
+    o.ssl = ssl;
+
+    return Connect(o);
 }
 
 EasyServer::channel_t EasyServer::ConnectTcp4(
@@ -1370,7 +1431,14 @@ EasyServer::channel_t EasyServer::ConnectTcp4(
         return kInvalidChannel;
     }
 
-    return DoConnectTcp4(host, port, NULL, easy_factory, NULL, thread_id);
+    ConnectOption o;
+    o.connect_socket.domain = AF_INET;
+    o.connect_socket.socket_hostname = host.c_str();
+    o.connect_socket.socket_port = port;
+    o.easy_factory = easy_factory;
+    o.thread_id = thread_id;
+
+    return Connect(o);
 }
 
 EasyServer::channel_t EasyServer::SslConnectTcp4(
@@ -1390,7 +1458,15 @@ EasyServer::channel_t EasyServer::SslConnectTcp4(
         return kInvalidChannel;
     }
 
-    return DoConnectTcp4(host, port, NULL, easy_factory, ssl, thread_id);
+    ConnectOption o;
+    o.connect_socket.domain = AF_INET;
+    o.connect_socket.socket_hostname = host.c_str();
+    o.connect_socket.socket_port = port;
+    o.easy_factory = easy_factory;
+    o.thread_id = thread_id;
+    o.ssl = ssl;
+
+    return Connect(o);
 }
 
 EasyServer::channel_t EasyServer::AllocateChannel(IoContext *ioc,
@@ -1410,11 +1486,24 @@ EasyServer::channel_t EasyServer::AllocateChannel(IoContext *ioc,
 std::ostream &operator << (std::ostream &s, const flinter::EasyServer::ListenOption &d)
 {
     s <<   "L[" << d.listen_socket
-      << "] O[" << d.listen_socket_option
-      << "] A[" << d.accepted_sockets_option
+      << "] O[" << d.listen_option
+      << "] A[" << d.accepted_option
       << "] H[" << d.easy_handler
       << "] F[" << d.easy_factory
       << "] S[" << d.ssl
+      << "]";
+
+    return s;
+}
+
+std::ostream &operator << (std::ostream &s, const flinter::EasyServer::ConnectOption &d)
+{
+    s <<   "L[" << d.connect_socket
+      << "] O[" << d.connect_option
+      << "] H[" << d.easy_handler
+      << "] F[" << d.easy_factory
+      << "] S[" << d.ssl
+      << "] T[" << d.thread_id
       << "]";
 
     return s;

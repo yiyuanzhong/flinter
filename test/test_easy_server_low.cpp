@@ -54,9 +54,9 @@ int main()
     g_server = &s;
 
     flinter::EasyServer::ListenOption o;
-    o.accepted_sockets_option.tcp_nodelay = true;
     o.listen_socket.socket_bind_port = 5566;
     o.listen_socket.domain = AF_INET6;
+    o.accepted_option.tcp_nodelay = true;
     o.easy_handler = &handler1;
 
     if (!s.Listen(o)) {
@@ -64,7 +64,7 @@ int main()
     }
 
     o.listen_socket.unix_pathname = "/tmp/test_easy_server_low.sock";
-    o.accepted_sockets_option.tcp_nodelay = false;
+    o.accepted_option.tcp_nodelay = false;
     o.listen_socket.domain = AF_UNIX;
     o.easy_handler = &handler2;
     if (!s.Listen(o)) {
