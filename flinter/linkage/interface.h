@@ -171,11 +171,9 @@ private:
     int _socket;
     int _domain;
 
-    int DoConnectTcp4(const Socket &socket, const Option &option,
-                      LinkagePeer *peer, LinkagePeer *me);
-
-    int DoConnectTcp6(const Socket &socket, const Option &option,
-                      LinkagePeer *peer, LinkagePeer *me);
+    template <class T>
+    int DoConnectTcp(const Socket &socket, const Option &option,
+                     LinkagePeer *peer, LinkagePeer *me);
 
     int DoConnectUnix(const Socket &socket, const Option &option,
                       LinkagePeer *peer, LinkagePeer *me);

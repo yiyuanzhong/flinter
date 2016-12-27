@@ -234,10 +234,11 @@ bool Interface::InitializeSocket(const Option &option, int s)
     return true;
 }
 
-int Interface::DoConnectTcp4(const Socket &socket,
-                             const Option &option,
-                             LinkagePeer *peer,
-                             LinkagePeer *me)
+template <class T>
+int Interface::DoConnectTcp(const Socket &socket,
+                            const Option &option,
+                            LinkagePeer *peer,
+                            LinkagePeer *me)
 {
     if (!socket.socket_hostname  ||
         !*socket.socket_hostname ||
@@ -248,7 +249,7 @@ int Interface::DoConnectTcp4(const Socket &socket,
     }
 
     Resolver *const resolver = Resolver::GetInstance();
-    struct sockaddr_in addr;
+    T addr;
 
     int s = CreateSocket(socket, option);
     if (s < 0) {
@@ -295,7 +296,7 @@ int Interface::DoConnectTcp4(const Socket &socket,
         }
     }
 
-    if (!GetPeerOrClose<struct sockaddr_in>(s, NULL, me)) {
+    if (!GetPeerOrClose<T>(s, NULL, me)) {
         return -1;
     }
 
@@ -378,13 +379,13 @@ int Interface::Connect(const Socket &socket,
     } else if (!Close()) {
         return -1;
 
-    } else if (socket.domain == AF_INET6) {
-        //return DoConnectTcp6(socket, option, peer, me); // UDP as well.
+    } else if (socket.domain == AF_INET6) { // UDP as well.
+        return DoConnectTcp<struct sockaddr_in6>(socket, option, peer, me);
 
-    } else if (socket.domain == AF_INET  ) {
-        return DoConnectTcp4(socket, option, peer, me); // UDP as well.
+    } else if (socket.domain == AF_INET ) { // UDP as well.
+        return DoConnectTcp<struct sockaddr_in>(socket, option, peer, me);
 
-    } else if (socket.domain == AF_UNIX  ) {
+    } else if (socket.domain == AF_UNIX ) {
         return DoConnectUnix(socket, option, peer, me);
     }
 
