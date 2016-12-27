@@ -81,6 +81,7 @@ EasyServer::ListenOption::ListenOption()
 EasyServer::ConnectOption::ConnectOption()
         : easy_factory(NULL)
         , easy_handler(NULL)
+        , ssl(NULL)
         , thread_id(-1)
 {
     connect_socket.domain = AF_INET6;
