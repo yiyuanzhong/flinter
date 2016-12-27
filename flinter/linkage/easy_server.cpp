@@ -66,6 +66,7 @@ const EasyServer::Configure EasyServer::kDefaultConfigure = {
 EasyServer::ListenOption::ListenOption()
         : easy_factory(NULL)
         , easy_handler(NULL)
+        , ssl(NULL)
 {
     listen_socket.domain = AF_INET6;
     listen_socket.type = SOCK_STREAM;
