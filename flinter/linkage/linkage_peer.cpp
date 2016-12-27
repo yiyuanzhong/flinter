@@ -110,7 +110,17 @@ bool LinkagePeer::Set(const struct sockaddr_un *ip, HANDLE fd)
 
     } while (false);
 
-    _ip_str.clear();
+    if (ip->sun_path[0]) {
+        _ip_str.assign("file://");
+        _ip_str.append(ip->sun_path,
+                       strnlen(ip->sun_path, sizeof(ip->sun_path)));
+
+    } else {
+        _ip_str.assign("unix://");
+        _ip_str.append(ip->sun_path + 1,
+                       strnlen(ip->sun_path + 1, sizeof(ip->sun_path) - 1));
+    }
+
     _ip.clear();
     _port = 0;
     _fd = fd;
