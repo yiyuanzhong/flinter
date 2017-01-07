@@ -682,7 +682,7 @@ int Linkage::Shutdown(AbstractIo::Status *status)
 
 bool Linkage::Send(const void *buffer, size_t length)
 {
-    static const size_t kMaximumBytes = INT_MAX - 1024;
+    static const size_t kMaximumBytes = 64 * 1024 * 1024;
     if (!buffer || length >= kMaximumBytes || !_worker || _graceful) {
         return false;
     } else if (length == 0) {
