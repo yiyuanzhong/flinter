@@ -102,12 +102,24 @@ bool Linkage::OnConnected()
     return _handler->OnConnected(this);
 }
 
-void Linkage::AppendSendingBuffer(const void *buffer, size_t length)
+bool Linkage::AppendSendingBuffer(const void *buffer, size_t length)
 {
+    static const size_t kMaximumBytes = 64 * 1024 * 1024;
+
     assert(buffer);
     assert(length);
+
     const unsigned char *p = reinterpret_cast<const unsigned char *>(buffer);
+    size_t left = kMaximumBytes - _wbuffer.size();
+    if (left < length) {
+        CLOG.Verbose("Linkage: only [%lu] bytes left for fd = %d",
+                     left, _peer->fd());
+
+        return false;
+    }
+
     _wbuffer.insert(_wbuffer.end(), p, p + length);
+    return true;
 }
 
 void Linkage::PickSendingBuffer(const void **buffer, size_t *length)
@@ -682,8 +694,7 @@ int Linkage::Shutdown(AbstractIo::Status *status)
 
 bool Linkage::Send(const void *buffer, size_t length)
 {
-    static const size_t kMaximumBytes = 64 * 1024 * 1024;
-    if (!buffer || length >= kMaximumBytes || !_worker || _graceful) {
+    if (!buffer || length > INT_MAX || !_worker || _graceful) {
         return false;
     } else if (length == 0) {
         return true;
@@ -691,8 +702,11 @@ bool Linkage::Send(const void *buffer, size_t length)
 
     CLOG.Verbose("Linkage: sending [%lu] bytes for fd = %d", length, _peer->fd());
     if (!_worker || _action != AbstractIo::kActionNone || GetSendingBufferSize()) {
+        if (!AppendSendingBuffer(buffer, length)) {
+            return false;
+        }
+
         CLOG.Verbose("Linkage: queued [%lu] bytes for fd = %d", length, _peer->fd());
-        AppendSendingBuffer(buffer, length);
         return true;
     }
 
@@ -701,15 +715,21 @@ bool Linkage::Send(const void *buffer, size_t length)
     AbstractIo::Status status = _io->Write(buffer, length, &retlen);
     switch (status) {
     case AbstractIo::kStatusJammed:
+        if (!AppendSendingBuffer(buffer, length)) {
+            return false;
+        }
+
         CLOG.Verbose("Linkage: queued [%lu] bytes for fd = %d", length, _peer->fd());
-        AppendSendingBuffer(buffer, length);
         _worker->SetWanna(this, false, true);
         UpdateLastSent(false, true);
         break;
 
     case AbstractIo::kStatusWannaRead:
+        if (!AppendSendingBuffer(buffer, length)) {
+            return false;
+        }
+
         CLOG.Verbose("Linkage: queued [%lu] bytes for fd = %d", length, _peer->fd());
-        AppendSendingBuffer(buffer, length);
         _action = AbstractIo::kActionWrite;
         _worker->SetWanna(this, true, false);
         UpdateLastSent(false, true);
@@ -717,8 +737,11 @@ bool Linkage::Send(const void *buffer, size_t length)
         break;
 
     case AbstractIo::kStatusWannaWrite:
+        if (!AppendSendingBuffer(buffer, length)) {
+            return false;
+        }
+
         CLOG.Verbose("Linkage: queued [%lu] bytes for fd = %d", length, _peer->fd());
-        AppendSendingBuffer(buffer, length);
         _action = AbstractIo::kActionWrite;
         _worker->SetWanna(this, false, true);
         UpdateLastSent(false, true);
@@ -727,11 +750,14 @@ bool Linkage::Send(const void *buffer, size_t length)
 
     case AbstractIo::kStatusOk:
         if (retlen < length) {
+            const unsigned char *buf = reinterpret_cast<const unsigned char *>(buffer);
+            if (!AppendSendingBuffer(buf + retlen, length - retlen)) {
+                return false;
+            }
+
             CLOG.Verbose("Linkage: sent [%lu] bytes, queued [%lu] bytes for fd = %d",
                          retlen, length - retlen, _peer->fd());
 
-            const unsigned char *buf = reinterpret_cast<const unsigned char *>(buffer);
-            AppendSendingBuffer(buf + retlen, length - retlen);
             _worker->SetWannaWrite(this, true);
             UpdateLastSent(true, true);
 

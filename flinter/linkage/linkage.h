@@ -120,7 +120,7 @@ private:
     static const char *GetActionString(const AbstractIo::Action &action);
 
     int DoReceived(const void *buffer, size_t length, size_t *consumed);
-    void AppendSendingBuffer(const void *buffer, size_t length);
+    bool AppendSendingBuffer(const void *buffer, size_t length);
     void PickSendingBuffer(const void **buffer, size_t *length);
     void ConsumeSendingBuffer(size_t length);
     size_t GetSendingBufferSize() const;

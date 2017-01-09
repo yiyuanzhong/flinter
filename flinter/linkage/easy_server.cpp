@@ -1213,7 +1213,12 @@ void EasyServer::DoRealSend(ProxyLinkageWorker *worker,
         return;
     }
 
-    linkage->Send(buffer, length);
+    if (!linkage->Send(buffer, length)) {
+        const EasyContext &context = *linkage->context();
+        EasyHandler *h = context.easy_handler();
+        h->OnError(context, false, ENOMEM);
+        linkage->Disconnect(false);
+    }
 }
 
 bool EasyServer::Send(channel_t channel, const void *buffer, size_t length)
