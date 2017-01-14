@@ -38,6 +38,23 @@ public:
                                      const void *buffer,
                                      size_t length) = 0;
 
+    /// Called within I/O threads.
+    ///
+    /// Hash the message before actually handle it, the returned value will be
+    /// mapped to worker threads. Has no use if there's no worker thread.
+    ///
+    /// By hashing messages into a specified worker, one can make sure all
+    /// related messages (same connection, same user, or any other key) go to
+    /// the same thread and get processed sequentially. However, this reduces
+    /// throughput.
+    ///
+    /// By default it returns -1.
+    ///
+    /// @return -1 any worker can handle it.
+    virtual int HashMessage(const EasyContext &context,
+                            const void *buffer,
+                            size_t length);
+
     /// Called within worker threads, in case there's none, within I/O threads.
     ///
     /// @return >0 keep coming.

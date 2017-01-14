@@ -196,7 +196,8 @@ public:
 
     /// Run job in any job threads, or current thread if there's none.
     /// @param job will be released after executed.
-    void QueueOrExecuteJob(Runnable *job);
+    /// @param hash to map to worker thread if appliable, -1 for any worker.
+    void QueueOrExecuteJob(Runnable *job, int hash = -1);
 
     /// Queue job in specified I/O thread, assertion if thread_id is invalid.
     bool QueueIo(Runnable *job, int thread_id);
@@ -234,7 +235,7 @@ private:
     void ReleaseChannel(channel_t channel);
 
     // Called by JobWorker thread.
-    Runnable *GetJob();
+    Runnable *GetJob(size_t id);
 
     // Called by ProxyListener.
     Linkage *AllocateChannel(LinkageWorker *worker,
@@ -251,8 +252,8 @@ private:
 
     channel_t AllocateChannel(IoContext *ioc, bool incoming_or_outgoing);
     bool AttachListeners(LinkageWorker *worker);
+    void DoAppendJob(Runnable *job, int hash); // No lock.
     bool DoShutdown(MutexLocker *locker);
-    void DoAppendJob(Runnable *job); // No lock.
     void DoDumpJobs();
 
     // Locked.
@@ -293,6 +294,7 @@ private:
 
     std::list<std::pair<Runnable *, std::pair<int64_t, int64_t> > > _timers;
     std::list<ProxyHandler *> _listen_proxy_handlers;
+    std::vector<std::queue<Runnable *> > _hashjobs;
     std::vector<ProxyLinkageWorker *> _io_workers;
     std::vector<JobWorker *> _job_workers;
     std::list<Listener *> _listeners;

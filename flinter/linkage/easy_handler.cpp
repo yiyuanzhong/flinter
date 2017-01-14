@@ -21,6 +21,13 @@
 
 namespace flinter {
 
+int EasyHandler::HashMessage(const EasyContext & /*context*/,
+                             const void * /*buffer*/,
+                             size_t /*length*/)
+{
+    return -1;
+}
+
 void EasyHandler::OnError(const EasyContext &context,
                           bool reading_or_writing,
                           int errnum)

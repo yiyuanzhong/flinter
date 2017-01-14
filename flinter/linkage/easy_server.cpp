@@ -277,8 +277,9 @@ private:
 
 class EasyServer::JobWorker : public Runnable {
 public:
-    JobWorker(EasyServer *easy_server, EasyTuner *easy_tuner)
-            : _easy_tuner(easy_tuner)
+    JobWorker(EasyServer *easy_server, EasyTuner *easy_tuner, size_t id)
+            : _id(id)
+            , _easy_tuner(easy_tuner)
             , _easy_server(easy_server) {}
 
     virtual ~JobWorker() {}
@@ -286,6 +287,7 @@ public:
     class Job;
 
 private:
+    const size_t _id;
     EasyTuner *const _easy_tuner;
     EasyServer *const _easy_server;
 
@@ -473,8 +475,11 @@ int EasyServer::ProxyHandler::OnMessage(Linkage *linkage,
     // skip locking to get better performance.
     if (s->_workers) {
         JobWorker::Job *job = new JobWorker::Job(l->context(), buffer, length);
+        int hash = l->context()->easy_handler()->HashMessage(
+                *l->context(), buffer, length);
+
         MutexLocker glocker(s->_gmutex);
-        s->DoAppendJob(job);
+        s->DoAppendJob(job, hash);
         return 1;
     }
 
@@ -540,8 +545,9 @@ bool EasyServer::JobWorker::Run()
         }
     }
 
+    CLOG.Verbose("EasyServer: worker %lu started.", _id);
     while (true) {
-        Runnable *job = _easy_server->GetJob();
+        Runnable *job = _easy_server->GetJob(_id);
         if (!job) {
             break;
         }
@@ -549,6 +555,7 @@ bool EasyServer::JobWorker::Run()
         job->Run();
         delete job;
     }
+    CLOG.Verbose("EasyServer: worker %lu quit.", _id);
 
     if (_easy_tuner) {
         _easy_tuner->OnJobThreadShutdown();
@@ -828,6 +835,8 @@ bool EasyServer::Initialize(size_t slots,
         _io_context.push_back(new IoContext(static_cast<int>(i)));
     }
 
+    _hashjobs.resize(workers);
+
     // Now multi-threading.
     for (std::vector<ProxyLinkageWorker *>::const_iterator
          p = _io_workers.begin(); p != _io_workers.end(); ++p) {
@@ -840,7 +849,7 @@ bool EasyServer::Initialize(size_t slots,
     }
 
     for (size_t i = 0; i < workers; ++i) {
-        JobWorker *worker = new JobWorker(this, easy_tuner);
+        JobWorker *worker = new JobWorker(this, easy_tuner, i);
         _job_workers.push_back(worker);
 
         if (!_pool->AppendJob(worker, true)) {
@@ -865,13 +874,22 @@ void EasyServer::DoDumpJobs()
         delete _jobs.front();
         _jobs.pop();
     }
+
+    for (std::vector<std::queue<Runnable *> >::iterator p = _hashjobs.begin();
+         p != _hashjobs.end(); ++p) {
+
+        while (!p->empty()) {
+            delete p->front();
+            p->pop();
+        }
+    }
 }
 
 bool EasyServer::DoShutdown(MutexLocker *locker)
 {
     DoDumpJobs();
     for (size_t i = 0; i < _workers; ++i) {
-        DoAppendJob(NULL);
+        DoAppendJob(NULL, static_cast<int>(i));
     }
 
     for (std::vector<ProxyLinkageWorker *>::const_iterator
@@ -917,6 +935,7 @@ bool EasyServer::DoShutdown(MutexLocker *locker)
     _io_workers.clear();
     _io_context.clear();
     _listeners.clear();
+    _hashjobs.clear();
     _timers.clear();
     _workers = 0;
     _slots = 0;
@@ -939,23 +958,40 @@ bool EasyServer::AttachListeners(LinkageWorker *worker)
     return true;
 }
 
-Runnable *EasyServer::GetJob()
+Runnable *EasyServer::GetJob(size_t id)
 {
     MutexLocker glocker(_gmutex);
-    while (_jobs.empty()) {
+    while (_jobs.empty() && _hashjobs[id].empty()) {
         _incoming->Wait(_gmutex);
     }
 
-    Runnable *job = _jobs.front();
-    _jobs.pop();
+    Runnable *job;
+    if (!_hashjobs[id].empty()) {
+        CLOG.Verbose("EasyServer: got job from my queue.");
+        job = _hashjobs[id].front();
+        _hashjobs[id].pop();
+    } else {
+        CLOG.Verbose("EasyServer: got job from global queue.");
+        job = _jobs.front();
+        _jobs.pop();
+    }
+
     return job;
 }
 
-void EasyServer::DoAppendJob(Runnable *job)
+void EasyServer::DoAppendJob(Runnable *job, int hash)
 {
-    _jobs.push(job);
-    _incoming->WakeOne();
-    LOG(VERBOSE) << "EasyServer: appended job [" << job << "]";
+    if (hash < 0) {
+        _jobs.push(job);
+        _incoming->WakeOne();
+    } else {
+        assert(!_hashjobs.empty());
+        size_t i = static_cast<size_t>(hash) % _hashjobs.size();
+        _hashjobs[i].push(job);
+        _incoming->WakeAll();
+    }
+
+    CLOG.Verbose("EasyServer: appended job [%p] %d", job, hash);
 }
 
 std::pair<EasyHandler *, bool> EasyServer::GetEasyHandler(ProxyHandler *proxy_handler)
@@ -1062,7 +1098,7 @@ void EasyServer::ReleaseChannel(channel_t channel)
     ioc->_connect_proxy_handlers.erase(p);
 }
 
-void EasyServer::QueueOrExecuteJob(Runnable *job)
+void EasyServer::QueueOrExecuteJob(Runnable *job, int id)
 {
     if (!job) {
         return;
@@ -1072,7 +1108,7 @@ void EasyServer::QueueOrExecuteJob(Runnable *job)
     // skip locking to get better performance.
     if (_workers) {
         MutexLocker glocker(_gmutex);
-        DoAppendJob(job);
+        DoAppendJob(job, id);
         return;
     }
 
