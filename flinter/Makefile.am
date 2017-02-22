@@ -83,6 +83,7 @@ include_thread_HEADERS = thread/abstract_thread_pool.h \
                          thread/read_locker.h \
                          thread/read_write_lock.h \
                          thread/semaphore.h \
+                         thread/spinlock.h \
                          thread/tls.h \
                          thread/write_locker.h
 

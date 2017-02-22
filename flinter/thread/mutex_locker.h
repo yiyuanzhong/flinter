@@ -30,7 +30,7 @@ class MutexLocker {
 public:
     /// Constructor.
     /// @warning Don't operate the mutex since on.
-    MutexLocker(Mutex *mutex) : _mutex(mutex), _locked(true)
+    explicit MutexLocker(Mutex *mutex) : _mutex(mutex), _locked(true)
     {
         assert(mutex);
         mutex->Lock();

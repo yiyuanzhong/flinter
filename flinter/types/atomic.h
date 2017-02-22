@@ -27,14 +27,39 @@ public:
     Atomic() : _t(T()) {}
     Atomic(const T &t) : _t(t) {}
 
+    // No barrier
     T Get() const
     {
         return _t;
     }
 
-    T Set(const T &t)
+    // No barrier
+    void Set(const T &t)
+    {
+        _t = t;
+    }
+
+    T BarrierGet() const
+    {
+        return __sync_add_and_fetch(&_t, 0);
+    }
+
+    // Acquire barrier
+    T BarrierSet(const T &t)
     {
         return __sync_lock_test_and_set(&_t, t);
+    }
+
+    // Acquire barrier
+    bool Lock()
+    {
+        return __sync_lock_test_and_set(&_t, 1) == 0;
+    }
+
+    // Release barrier
+    void Unlock()
+    {
+        __sync_lock_release(&_t);
     }
 
     __ATOMIC_IMPL(FetchAndAdd , __sync_fetch_and_add );
@@ -63,6 +88,7 @@ private:
 
 }; // class Atomic
 
+typedef Atomic<int>      atomic_t;
 typedef Atomic<int8_t>   atomic8_t;
 typedef Atomic<int16_t>  atomic16_t;
 typedef Atomic<int32_t>  atomic32_t;
