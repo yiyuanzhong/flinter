@@ -58,6 +58,7 @@ public:
     static void ThreadDetach();
 
     static void SetColorful(bool colorful);
+    static void SetWithFilename(bool filename);
 
     // Don't call this thing explicitly.
     CLogger(const char *file, int line) : _file(file), _line(line) {}

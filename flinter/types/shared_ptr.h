@@ -23,7 +23,7 @@ namespace flinter {
 template <class T>
 class shared_ptr {
 public:
-    explicit shared_ptr(T *t) : _c(new atomic64_t), _t(t)
+    explicit shared_ptr(T *t) : _c(new atomic_t), _t(t)
     {
         _c->AddAndFetch(1);
     }
@@ -73,7 +73,7 @@ public:
 
 private:
     shared_ptr<T> &operator = (const shared_ptr<T> &);
-    atomic64_t *const _c;
+    atomic_t *const _c;
     T *const _t;
 
 }; // class shared_ptr

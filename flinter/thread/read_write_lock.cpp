@@ -203,10 +203,30 @@ void ReadWriteLock::Unlock()
 ReadWriteLock::ReadWriteLock() : _context(NULL)
 {
     pthread_rwlock_t *rwlock = new pthread_rwlock_t;
+
+#if HAVE_PTHREAD_RWLOCKATTR_SETKIND_NP
+    pthread_rwlockattr_t attr;
+    if (pthread_rwlockattr_init(&attr)) {
+        delete rwlock;
+        throw std::runtime_error("ReadWriteLock::ReadWriteLock()");
+    }
+
+    if (pthread_rwlockattr_setkind_np(&attr, PTHREAD_RWLOCK_PREFER_WRITER_NONRECURSIVE_NP) ||
+        pthread_rwlock_init(rwlock, &attr)) {
+
+        pthread_rwlockattr_destroy(&attr);
+        delete rwlock;
+        throw std::runtime_error("ReadWriteLock::ReadWriteLock()");
+    }
+
+    pthread_rwlockattr_destroy(&attr);
+#else
     if (pthread_rwlock_init(rwlock, NULL)) {
         delete rwlock;
         throw std::runtime_error("ReadWriteLock::ReadWriteLock()");
     }
+#endif
+
     _context = reinterpret_cast<Context *>(rwlock);
 }
 

@@ -30,8 +30,9 @@
 #include <sstream>
 #include <string>
 
-#include "flinter/thread/mutex.h"
-#include "flinter/thread/mutex_locker.h"
+#include "flinter/thread/read_write_lock.h"
+#include "flinter/thread/write_locker.h"
+#include "flinter/thread/read_locker.h"
 #include "flinter/cmdline.h"
 #include "flinter/mkdirs.h"
 #include "flinter/safeio.h"
@@ -53,36 +54,22 @@ static Logger::Level g_filter = Logger::kLevelTrace;
 static Logger::Level g_filter = Logger::kLevelDebug;
 #endif
 
+static bool g_with_filename = true;
 static std::string g_filename;
 static bool g_colorful = true;
+static ReadWriteLock g_mutex;
 static struct stat g_fstat;
 static time_t g_stated;
-static Mutex g_mutex;
 static int g_fd = -1;
 
-static void DoProcessDetach(bool clear)
+static void DoProcessDetach()
 {
-    int fd = g_fd;
+    safe_close(g_fd);
     g_fd = -1;
-
-    if (fd < 0) {
-        return;
-    }
-
-    safe_close(fd);
-
-    if (clear) {
-        g_filename.clear();
-    }
 }
 
 static bool DoProcessAttach(const std::string &filename)
 {
-    if (filename.empty()) {
-        DoProcessDetach(true);
-        return true;
-    }
-
     std::string file(filename);
     char *fn = cmdline_get_absolute_path(filename.c_str(), 0);
     if (fn) {
@@ -112,7 +99,10 @@ static bool DoProcessAttach(const std::string &filename)
         return false;
     }
 
-    g_filename = filename;
+    if (g_fd >= 0) {
+        safe_close(g_fd);
+    }
+
     fstat(fd, &g_fstat);
     time(&g_stated);
     g_fd = fd;
@@ -120,31 +110,49 @@ static bool DoProcessAttach(const std::string &filename)
     return true;
 }
 
-static bool MaybeReopen(const time_t &now)
+static bool Write(time_t now, const void *buffer, size_t length)
 {
+    ReadLocker locker(&g_mutex);
+
+    bool reopen = false;
     if (g_filename.empty()) {
-        return true;
-    }
+        // Nothing
 
-    if (g_fd >= 0) {
-        if (now >= g_stated && now - g_stated < 5) {
-            return true;
-        }
+    } else if (g_fd < 0) {
+        reopen = true;
 
+    } else if (now < g_stated || now - g_stated > 5) {
+        g_stated = now;
         struct stat st;
-        if (stat(g_filename.c_str(), &st) == 0 &&
-            st.st_dev == g_fstat.st_dev        &&
-            st.st_ino == g_fstat.st_ino        ){
+        if (stat(g_filename.c_str(), &st) ||
+            st.st_dev != g_fstat.st_dev   ||
+            st.st_ino != g_fstat.st_ino   ){
 
-            time(&g_stated);
-            return true;
+            reopen = true;
         }
-
-        // Oops, it changed.
-        DoProcessDetach(false);
     }
 
-    return DoProcessAttach(g_filename);
+    if (reopen) {
+        time_t stated = g_stated;
+        locker.Unlock();
+        g_mutex.WriterLock();
+
+        // Multiple threads can enter here one by one.
+        if (stated == g_stated) {
+            DoProcessDetach();
+            if (!DoProcessAttach(g_filename)) {
+                g_mutex.Unlock();
+                return false;
+            }
+        }
+
+        g_mutex.Unlock();
+        locker.Relock();
+    }
+
+    int fd = g_fd < 0 ? STDERR_FILENO : g_fd;
+    ssize_t sret = safe_write(fd, buffer, length);
+    return static_cast<size_t>(sret) == length;
 }
 
 static bool Log(const Logger::Level &level,
@@ -252,25 +260,28 @@ static bool Log(const Logger::Level &level,
     size_t ret = static_cast<size_t>(sret);
     next += ret;
 
-    memcpy(next, " [", 2);
-    next += 2;
+    if (g_with_filename) {
+        memcpy(next, " [", 2);
+        next += 2;
 
-    ret = strlen(file);
-    if (ret > kMaximumFileLength) {
-        file += ret - kMaximumFileLength;
-        ret = kMaximumFileLength;
+        ret = strlen(file);
+        if (ret > kMaximumFileLength) {
+            file += ret - kMaximumFileLength;
+            ret = kMaximumFileLength;
+        }
+
+        memcpy(next, file, ret);
+        next += ret;
+        *next++ = ':';
+        sret = sprintf(next, "%d", line);
+        if (sret < 0) {
+            return false;
+        }
+
+        next += sret;
+        *next++ = ']';
     }
 
-    memcpy(next, file, ret);
-    next += ret;
-    *next++ = ':';
-    sret = sprintf(next, "%d", line);
-    if (sret < 0) {
-        return false;
-    }
-
-    next += sret;
-    *next++ = ']';
     if (color) {
         memcpy(next, "\033[0m", 4);
         next += 4;
@@ -278,19 +289,7 @@ static bool Log(const Logger::Level &level,
 
     *next++ = '\n';
     ret = static_cast<size_t>(next - buffer);
-
-    MutexLocker locker(&g_mutex);
-    if (!MaybeReopen(tv.tv_sec)) {
-        return false;
-    }
-
-    int fd = g_fd < 0 ? STDERR_FILENO : g_fd;
-    sret = safe_write(fd, buffer, ret);
-    if (static_cast<size_t>(sret) != ret) {
-        return false;
-    }
-
-    return true;
+    return Write(tv.tv_sec, buffer, ret);
 }
 
 static bool Log(const Logger::Level &level,
@@ -305,6 +304,11 @@ static bool Log(const Logger::Level &level,
 }
 
 } // anonymous namespace
+
+void CLogger::SetWithFilename(bool with_filename)
+{
+    g_with_filename = with_filename;
+}
 
 void CLogger::SetColorful(bool colorful)
 {
@@ -324,14 +328,28 @@ bool CLogger::IsFiltered(int level)
 bool CLogger::ProcessAttach(const std::string &filename, int filter_level)
 {
     SetFilter(filter_level);
-    MutexLocker locker(&g_mutex);
-    return DoProcessAttach(filename);
+
+    WriteLocker locker(&g_mutex);
+    g_filename.clear();
+    DoProcessDetach();
+
+    if (filename.empty()) {
+        return true;
+    }
+
+    if (!DoProcessAttach(filename)) {
+        return false;
+    }
+
+    g_filename = filename;
+    return true;
 }
 
 void CLogger::ProcessDetach()
 {
-    MutexLocker locker(&g_mutex);
-    DoProcessDetach(true);
+    WriteLocker locker(&g_mutex);
+    g_filename.clear();
+    DoProcessDetach();
 }
 
 bool CLogger::ThreadAttach()
