@@ -18,6 +18,8 @@
 #include <errno.h>
 #include <string.h>
 
+#include <stdexcept>
+
 #include "flinter/linkage/interface.h"
 #include "flinter/linkage/linkage_peer.h"
 #include "flinter/linkage/linkage_worker.h"
@@ -93,6 +95,22 @@ int Listener::OnReadable(LinkageWorker *worker)
             errno == ECONNABORTED   ){
 
             return 1;
+
+        } else if (errno == ENFILE || errno == EMFILE) {
+            // It's not designed to deal with extreme conditions, you should
+            // always set ulimit:nofile to a reasonable large value, or limit
+            // maximum fd opened in the program logically.
+            //
+            // Once ENFILE/EMFILE is triggered, the program can either spin or
+            // crash, since it's now impossible to accept() new fd and close it
+            // afterwards. Here I choose to crash.
+            CLOG.Fatal("Listener: failed to accept: %d: %s", errno, strerror(errno));
+            throw std::runtime_error("Open file limit exceeded");
+
+        } else if (errno == ENOMEM) {
+            // Spin or crash? It's simple, if I don't crash here, you'll crash
+            // somewhere else.
+            throw std::bad_alloc();
         }
 
         CLOG.Warn("Listener: failed to accept: %d: %s", errno, strerror(errno));
