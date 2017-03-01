@@ -112,7 +112,7 @@ static bool DoProcessAttach(const std::string &filename)
 
 static bool Write(time_t now, const void *buffer, size_t length)
 {
-    ReadLocker locker(&g_mutex);
+    ReadLocker rlocker(&g_mutex);
 
     bool reopen = false;
     if (g_filename.empty()) {
@@ -134,20 +134,19 @@ static bool Write(time_t now, const void *buffer, size_t length)
 
     if (reopen) {
         time_t stated = g_stated;
-        locker.Unlock();
-        g_mutex.WriterLock();
+        rlocker.Unlock();
+        WriteLocker wlocker(&g_mutex);
 
         // Multiple threads can enter here one by one.
         if (stated == g_stated) {
             DoProcessDetach();
             if (!DoProcessAttach(g_filename)) {
-                g_mutex.Unlock();
                 return false;
             }
         }
 
-        g_mutex.Unlock();
-        locker.Relock();
+        wlocker.Unlock();
+        rlocker.Relock();
     }
 
     int fd = g_fd < 0 ? STDERR_FILENO : g_fd;
