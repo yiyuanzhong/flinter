@@ -13,8 +13,8 @@
  * limitations under the License.
  */
 
-#ifndef __FLINTER_OPENSSL_H__
-#define __FLINTER_OPENSSL_H__
+#ifndef FLINTER_OPENSSL_H
+#define FLINTER_OPENSSL_H
 
 namespace flinter {
 
@@ -36,4 +36,4 @@ private:
 
 } // namespace flinter
 
-#endif // __FLINTER_OPENSSL_H__
+#endif // FLINTER_OPENSSL_H

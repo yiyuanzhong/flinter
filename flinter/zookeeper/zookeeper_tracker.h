@@ -13,8 +13,8 @@
  * limitations under the License.
  */
 
-#ifndef __FLINTER_ZOOKEEPER_ZOOKEEPER_TRACKER_H__
-#define __FLINTER_ZOOKEEPER_ZOOKEEPER_TRACKER_H__
+#ifndef FLINTER_ZOOKEEPER_ZOOKEEPER_TRACKER_H
+#define FLINTER_ZOOKEEPER_ZOOKEEPER_TRACKER_H
 
 #include <list>
 #include <map>
@@ -189,4 +189,4 @@ private:
 
 } // namespace flinter
 
-#endif // __FLINTER_ZOOKEEPER_ZOOKEEPER_TRACKER_H__
+#endif // FLINTER_ZOOKEEPER_ZOOKEEPER_TRACKER_H

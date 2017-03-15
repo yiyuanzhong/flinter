@@ -13,8 +13,8 @@
  * limitations under the License.
  */
 
-#ifndef __FLINTER_OBJECT_POOL_H__
-#define __FLINTER_OBJECT_POOL_H__
+#ifndef FLINTER_OBJECT_POOL_H
+#define FLINTER_OBJECT_POOL_H
 
 #include <assert.h>
 
@@ -175,4 +175,4 @@ inline void ObjectPool<T>::Clear(bool all)
 
 } // namespace flinter
 
-#endif // __FLINTER_OBJECT_POOL_H__
+#endif // FLINTER_OBJECT_POOL_H

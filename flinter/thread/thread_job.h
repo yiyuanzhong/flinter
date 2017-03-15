@@ -13,8 +13,8 @@
  * limitations under the License.
  */
 
-#ifndef __FLINTER_THREAD_THREAD_JOB_H__
-#define __FLINTER_THREAD_THREAD_JOB_H__
+#ifndef FLINTER_THREAD_THREAD_JOB_H
+#define FLINTER_THREAD_THREAD_JOB_H
 
 namespace flinter {
 
@@ -49,4 +49,4 @@ private:
 } // namespace internal
 } // namespace flinter
 
-#endif // __FLINTER_THREAD_THREAD_JOB_H__
+#endif // FLINTER_THREAD_THREAD_JOB_H

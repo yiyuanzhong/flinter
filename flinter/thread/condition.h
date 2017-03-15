@@ -13,8 +13,8 @@
  * limitations under the License.
  */
 
-#ifndef __FLINTER_THREAD_CONDITION_H__
-#define __FLINTER_THREAD_CONDITION_H__
+#ifndef FLINTER_THREAD_CONDITION_H
+#define FLINTER_THREAD_CONDITION_H
 
 #include <stdint.h>
 
@@ -46,4 +46,4 @@ private:
 
 } // namespace flinter
 
-#endif // __FLINTER_THREAD_CONDITION_H__
+#endif // FLINTER_THREAD_CONDITION_H

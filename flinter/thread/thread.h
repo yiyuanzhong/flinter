@@ -13,8 +13,8 @@
  * limitations under the License.
  */
 
-#ifndef __FLINTER_THREAD_THREAD_H__
-#define __FLINTER_THREAD_THREAD_H__
+#ifndef FLINTER_THREAD_THREAD_H
+#define FLINTER_THREAD_THREAD_H
 
 #include <assert.h>
 
@@ -72,4 +72,4 @@ private:
 } // namespace internal
 } // namespace flinter
 
-#endif // __FLINTER_THREAD_THREAD_H__
+#endif // FLINTER_THREAD_THREAD_H

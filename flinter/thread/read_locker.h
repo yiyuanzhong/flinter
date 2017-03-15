@@ -13,8 +13,8 @@
  * limitations under the License.
  */
 
-#ifndef __FLINTER_THREAD_READLOCKER_H__
-#define __FLINTER_THREAD_READLOCKER_H__
+#ifndef FLINTER_THREAD_READ_LOCKER_H
+#define FLINTER_THREAD_READ_LOCKER_H
 
 #include <assert.h>
 
@@ -68,4 +68,4 @@ private:
 
 } // namespace flinter
 
-#endif // __FLINTER_THREAD_READLOCKER_H__
+#endif // FLINTER_THREAD_READ_LOCKER_H

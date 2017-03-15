@@ -13,8 +13,8 @@
  * limitations under the License.
  */
 
-#ifndef __FLINTER_CRAWLER_H__
-#define __FLINTER_CRAWLER_H__
+#ifndef FLINTER_CRAWLER_H
+#define FLINTER_CRAWLER_H
 
 #include <deque>
 #include <map>
@@ -114,4 +114,4 @@ void Crawler::SetHeader(const std::string &key, const T &value)
 
 } // namespace flinter
 
-#endif // __FLINTER_CRAWLER_H__
+#endif // FLINTER_CRAWLER_H

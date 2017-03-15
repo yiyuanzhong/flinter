@@ -13,8 +13,8 @@
  * limitations under the License.
  */
 
-#ifndef __FLINTER_TYPES_UUID_H__
-#define __FLINTER_TYPES_UUID_H__
+#ifndef FLINTER_TYPES_UUID_H
+#define FLINTER_TYPES_UUID_H
 
 #include <string>
 
@@ -122,4 +122,4 @@ inline Uuid Uuid::CreateRandom()
 
 } // namespace flinter
 
-#endif // __FLINTER_TYPES_UUID_H__
+#endif // FLINTER_TYPES_UUID_H

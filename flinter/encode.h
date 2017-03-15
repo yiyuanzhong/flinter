@@ -13,8 +13,8 @@
  * limitations under the License.
  */
 
-#ifndef __FLINTER_ENCODE_H__
-#define __FLINTER_ENCODE_H__
+#ifndef FLINTER_ENCODE_H
+#define FLINTER_ENCODE_H
 
 #include <string>
 
@@ -36,4 +36,4 @@ extern std::string EscapeHtml(const std::string &html, bool ie_compatible = fals
 
 } // namespace flinter
 
-#endif // __FLINTER_ENCODE_H__
+#endif // FLINTER_ENCODE_H

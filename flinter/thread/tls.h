@@ -13,8 +13,8 @@
  * limitations under the License.
  */
 
-#ifndef __FLINTER_THREAD_TLS_H__
-#define __FLINTER_THREAD_TLS_H__
+#ifndef FLINTER_THREAD_TLS_H
+#define FLINTER_THREAD_TLS_H
 
 #include <stddef.h>
 
@@ -35,4 +35,4 @@ private:
 
 } // namespace flinter
 
-#endif // __FLINTER_THREAD_TLS_H__
+#endif // FLINTER_THREAD_TLS_H

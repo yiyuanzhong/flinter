@@ -13,8 +13,8 @@
  * limitations under the License.
  */
 
-#ifndef  __FLINTER_LINKAGE_INTERFACE_H__
-#define  __FLINTER_LINKAGE_INTERFACE_H__
+#ifndef  FLINTER_LINKAGE_INTERFACE_H
+#define  FLINTER_LINKAGE_INTERFACE_H
 
 #include <sys/types.h>
 #include <stdint.h>
@@ -200,4 +200,4 @@ private:
 std::ostream &operator << (std::ostream &s, const flinter::Interface::Socket &d);
 std::ostream &operator << (std::ostream &s, const flinter::Interface::Option &d);
 
-#endif //__FLINTER_LINKAGE_INTERFACE_H__
+#endif //FLINTER_LINKAGE_INTERFACE_H

@@ -13,8 +13,8 @@
  * limitations under the License.
  */
 
-#ifndef __FLINTER_XML_H__
-#define __FLINTER_XML_H__
+#ifndef FLINTER_XML_H
+#define FLINTER_XML_H
 
 #include <string>
 
@@ -65,4 +65,4 @@ private:
 
 } // namespace flinter
 
-#endif // __FLINTER_XML_H__
+#endif // FLINTER_XML_H

@@ -13,8 +13,8 @@
  * limitations under the License.
  */
 
-#ifndef __FLINTER_TYPES_ATOMIC_H__
-#define __FLINTER_TYPES_ATOMIC_H__
+#ifndef FLINTER_TYPES_ATOMIC_H
+#define FLINTER_TYPES_ATOMIC_H
 
 #include <stdint.h>
 
@@ -100,4 +100,4 @@ typedef Atomic<uint64_t> uatomic64_t;
 
 } // namespace flinter
 
-#endif // __FLINTER_TYPES_ATOMIC_H__
+#endif // FLINTER_TYPES_ATOMIC_H

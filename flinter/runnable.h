@@ -13,8 +13,8 @@
  * limitations under the License.
  */
 
-#ifndef __FLINTER_RUNNABLE_H__
-#define __FLINTER_RUNNABLE_H__
+#ifndef FLINTER_RUNNABLE_H
+#define FLINTER_RUNNABLE_H
 
 namespace flinter {
 
@@ -30,4 +30,4 @@ public:
 
 } // namespace flinter
 
-#endif // __FLINTER_RUNNABLE_H__
+#endif // FLINTER_RUNNABLE_H

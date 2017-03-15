@@ -13,8 +13,8 @@
  * limitations under the License.
  */
 
-#ifndef __FLINTER_SINGLETON_H__
-#define __FLINTER_SINGLETON_H__
+#ifndef FLINTER_SINGLETON_H
+#define FLINTER_SINGLETON_H
 
 #include <memory>
 
@@ -58,4 +58,4 @@ private: \
     explicit klass(const klass &); \
     klass &operator = (const klass &);
 
-#endif // __FLINTER_SINGLETON_H__
+#endif // FLINTER_SINGLETON_H

@@ -13,8 +13,8 @@
  * limitations under the License.
  */
 
-#ifndef __FLINTER_THREAD_SPINLOCK_H__
-#define __FLINTER_THREAD_SPINLOCK_H__
+#ifndef FLINTER_THREAD_SPINLOCK_H
+#define FLINTER_THREAD_SPINLOCK_H
 
 #include <assert.h>
 
@@ -106,4 +106,4 @@ private:
 
 } // namespace flinter
 
-#endif // __FLINTER_THREAD_SPINLOCK_H__
+#endif // FLINTER_THREAD_SPINLOCK_H

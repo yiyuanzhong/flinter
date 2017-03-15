@@ -13,8 +13,8 @@
  * limitations under the License.
  */
 
-#ifndef __FLINTER_DAEMON_H__
-#define __FLINTER_DAEMON_H__
+#ifndef FLINTER_DAEMON_H
+#define FLINTER_DAEMON_H
 
 #if defined(__unix__) || defined(__MACH__)
 
@@ -77,4 +77,4 @@ extern int daemon_main(const daemon_configure_t *configure, int argc, char *argv
 
 #endif /* defined(__unix__) || defined(__MACH__) */
 
-#endif /* __FLINTER_DAEMON_H__ */
+#endif /* FLINTER_DAEMON_H */

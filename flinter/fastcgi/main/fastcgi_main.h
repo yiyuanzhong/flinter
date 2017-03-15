@@ -13,8 +13,8 @@
  * limitations under the License.
  */
 
-#ifndef __FLINTER_FASTCGI_MAIN_FASTCGI_MAIN_H__
-#define __FLINTER_FASTCGI_MAIN_FASTCGI_MAIN_H__
+#ifndef FLINTER_FASTCGI_MAIN_FASTCGI_MAIN_H
+#define FLINTER_FASTCGI_MAIN_FASTCGI_MAIN_H
 
 #ifdef __cplusplus
 extern "C" {
@@ -26,4 +26,4 @@ extern int fastcgi_main(int argc, char *argv[]);
 }
 #endif
 
-#endif /* __FLINTER_FASTCGI_MAIN_FASTCGI_MAIN_H__ */
+#endif /* FLINTER_FASTCGI_MAIN_FASTCGI_MAIN_H */

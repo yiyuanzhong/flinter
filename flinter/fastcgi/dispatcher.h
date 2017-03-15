@@ -13,8 +13,8 @@
  * limitations under the License.
  */
 
-#ifndef __FLINTER_FASTCGI_DISPATCHER_H__
-#define __FLINTER_FASTCGI_DISPATCHER_H__
+#ifndef FLINTER_FASTCGI_DISPATCHER_H
+#define FLINTER_FASTCGI_DISPATCHER_H
 
 #include <stdarg.h>
 
@@ -164,4 +164,4 @@ private: \
     ::flinter::FactoryDirect< ::flinter::DefaultHandler, klass > _factory; \
 } _CGI_DISPATCH_OBJECT_NAME(klass,DeFaUlT);
 
-#endif // __FLINTER_FASTCGI_DISPATCHER_H__
+#endif // FLINTER_FASTCGI_DISPATCHER_H

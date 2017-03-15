@@ -13,8 +13,8 @@
  * limitations under the License.
  */
 
-#ifndef __FLINTER_PIDFILE_H__
-#define __FLINTER_PIDFILE_H__
+#ifndef FLINTER_PIDFILE_H
+#define FLINTER_PIDFILE_H
 
 #if defined(__unix__) || defined(__MACH__)
 
@@ -57,4 +57,4 @@ extern pid_t pidfile_check(const char *filename);
 
 #endif /* defined(__unix__) || defined(__MACH__) */
 
-#endif /* __FLINTER_PIDFILE_H__ */
+#endif /* FLINTER_PIDFILE_H */

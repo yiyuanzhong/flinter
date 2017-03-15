@@ -13,8 +13,8 @@
  * limitations under the License.
  */
 
-#ifndef __FLINTER_ZOOKEEPER_ZOOKEEPER_WATCHER_H__
-#define __FLINTER_ZOOKEEPER_ZOOKEEPER_WATCHER_H__
+#ifndef FLINTER_ZOOKEEPER_ZOOKEEPER_WATCHER_H
+#define FLINTER_ZOOKEEPER_ZOOKEEPER_WATCHER_H
 
 namespace flinter {
 
@@ -42,4 +42,4 @@ protected:
 
 } // namespace flinter
 
-#endif // __FLINTER_ZOOKEEPER_ZOOKEEPER_WATCHER_H__
+#endif // FLINTER_ZOOKEEPER_ZOOKEEPER_WATCHER_H

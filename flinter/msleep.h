@@ -13,8 +13,8 @@
  * limitations under the License.
  */
 
-#ifndef __FLINTER_MSLEEP_H__
-#define __FLINTER_MSLEEP_H__
+#ifndef FLINTER_MSLEEP_H
+#define FLINTER_MSLEEP_H
 
 #include <signal.h>
 
@@ -55,4 +55,4 @@ extern int msleep_signal(int milliseconds,
 }
 #endif
 
-#endif /* __FLINTER_MSLEEP_H__ */
+#endif /* FLINTER_MSLEEP_H */

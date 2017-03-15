@@ -13,8 +13,8 @@
  * limitations under the License.
  */
 
-#ifndef __FLINTER_CMDLINE_H__
-#define __FLINTER_CMDLINE_H__
+#ifndef FLINTER_CMDLINE_H
+#define FLINTER_CMDLINE_H
 
 #include <sys/types.h>
 #include <stdlib.h>
@@ -91,4 +91,4 @@ extern const char *cmdline_module_basename();
 }
 #endif /* __cplusplus */
 
-#endif /* __FLINTER_CMDLINE_H__ */
+#endif /* FLINTER_CMDLINE_H */

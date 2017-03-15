@@ -13,8 +13,8 @@
  * limitations under the License.
  */
 
-#ifndef __FLINTER_LINKAGE_EASY_TUNER_H__
-#define __FLINTER_LINKAGE_EASY_TUNER_H__
+#ifndef FLINTER_LINKAGE_EASY_TUNER_H
+#define FLINTER_LINKAGE_EASY_TUNER_H
 
 namespace flinter {
 
@@ -44,4 +44,4 @@ public:
 
 } // namespace flinter
 
-#endif // __FLINTER_LINKAGE_EASY_TUNER_H__
+#endif // FLINTER_LINKAGE_EASY_TUNER_H

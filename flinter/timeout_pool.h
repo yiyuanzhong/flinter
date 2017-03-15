@@ -13,8 +13,8 @@
  * limitations under the License.
  */
 
-#ifndef __FLINTER_TIMEOUT_POOL_H__
-#define __FLINTER_TIMEOUT_POOL_H__
+#ifndef FLINTER_TIMEOUT_POOL_H
+#define FLINTER_TIMEOUT_POOL_H
 
 #include <stdint.h>
 
@@ -127,4 +127,4 @@ private:
 
 } // namespace flinter
 
-#endif // __FLINTER_TIMEOUT_POOL_H__
+#endif // FLINTER_TIMEOUT_POOL_H

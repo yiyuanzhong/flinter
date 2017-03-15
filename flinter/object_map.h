@@ -13,8 +13,8 @@
  * limitations under the License.
  */
 
-#ifndef __FLINTER_OBJECT_MAP_H__
-#define __FLINTER_OBJECT_MAP_H__
+#ifndef FLINTER_OBJECT_MAP_H
+#define FLINTER_OBJECT_MAP_H
 
 #include <assert.h>
 
@@ -363,4 +363,4 @@ inline void ObjectMap<K, T>::SetAll(iterator begin, iterator end)
 
 } // namespace flinter
 
-#endif // __FLINTER_OBJECT_MAP_H__
+#endif // FLINTER_OBJECT_MAP_H

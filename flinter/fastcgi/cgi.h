@@ -13,8 +13,8 @@
  * limitations under the License.
  */
 
-#ifndef __FLINTER_FASTCGI_CGI_H__
-#define __FLINTER_FASTCGI_CGI_H__
+#ifndef FLINTER_FASTCGI_CGI_H
+#define FLINTER_FASTCGI_CGI_H
 
 #include <stdarg.h>
 #include <time.h>
@@ -228,4 +228,4 @@ private:
 
 } // namespace flinter
 
-#endif // __FLINTER_FASTCGI_CGI_H__
+#endif // FLINTER_FASTCGI_CGI_H

@@ -13,8 +13,8 @@
  * limitations under the License.
  */
 
-#ifndef __FLINTER_BABYSITTER_H__
-#define __FLINTER_BABYSITTER_H__
+#ifndef FLINTER_BABYSITTER_H
+#define FLINTER_BABYSITTER_H
 
 #if defined(__unix__) || defined(__MACH__)
 
@@ -49,4 +49,4 @@ extern void babysitter_feed(void);
 
 #endif /* defined(__unix__) || defined(__MACH__) */
 
-#endif /* __FLINTER_BABYSITTER_H__ */
+#endif /* FLINTER_BABYSITTER_H */

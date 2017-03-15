@@ -13,8 +13,8 @@
  * limitations under the License.
  */
 
-#ifndef __FLINTER_TYPES_AUTO_BUFFER_H__
-#define __FLINTER_TYPES_AUTO_BUFFER_H__
+#ifndef FLINTER_TYPES_AUTO_BUFFER_H
+#define FLINTER_TYPES_AUTO_BUFFER_H
 
 #include <stdlib.h>
 
@@ -104,4 +104,4 @@ private:
 
 } // namespace flinter
 
-#endif // __FLINTER_TYPES_AUTO_BUFFER_H__
+#endif // FLINTER_TYPES_AUTO_BUFFER_H

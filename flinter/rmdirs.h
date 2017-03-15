@@ -13,8 +13,8 @@
  * limitations under the License.
  */
 
-#ifndef __FLINTER_RMDIRS_H__
-#define __FLINTER_RMDIRS_H__
+#ifndef FLINTER_RMDIRS_H
+#define FLINTER_RMDIRS_H
 
 #ifdef __cplusplus
 extern "C" {
@@ -31,4 +31,4 @@ extern int rmdirs_inside(const char *pathname);
 }
 #endif /* __cplusplus */
 
-#endif /* __FLINTER_RMDIRS_H__ */
+#endif /* FLINTER_RMDIRS_H */

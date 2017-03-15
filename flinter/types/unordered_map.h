@@ -13,8 +13,8 @@
  * limitations under the License.
  */
 
-#ifndef __FLINTER_TYPES_UNORDERED_MAP_H__
-#define __FLINTER_TYPES_UNORDERED_MAP_H__
+#ifndef FLINTER_TYPES_UNORDERED_MAP_H
+#define FLINTER_TYPES_UNORDERED_MAP_H
 
 #include <flinter/types/unordered_hash.h>
 
@@ -96,4 +96,4 @@ public:
 #  error Unsupported: std::unordered_map
 # endif
 #endif
-#endif // __FLINTER_TYPES_UNORDERED_MAP_H__
+#endif // FLINTER_TYPES_UNORDERED_MAP_H

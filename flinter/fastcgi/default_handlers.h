@@ -13,8 +13,8 @@
  * limitations under the License.
  */
 
-#ifndef __FLINTER_FASTCGI_DEFAULT_HANDLERS_H__
-#define __FLINTER_FASTCGI_DEFAULT_HANDLERS_H__
+#ifndef FLINTER_FASTCGI_DEFAULT_HANDLERS_H
+#define FLINTER_FASTCGI_DEFAULT_HANDLERS_H
 
 #include <string>
 
@@ -61,4 +61,4 @@ public:
 
 } // namespace flinter
 
-#endif // __FLINTER_FASTCGI_DEFAULT_HANDLERS_H__
+#endif // FLINTER_FASTCGI_DEFAULT_HANDLERS_H

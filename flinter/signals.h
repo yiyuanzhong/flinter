@@ -13,8 +13,8 @@
  * limitations under the License.
  */
 
-#ifndef __FLINTER_SIGNALS_H__
-#define __FLINTER_SIGNALS_H__
+#ifndef FLINTER_SIGNALS_H
+#define FLINTER_SIGNALS_H
 
 #include <signal.h>
 
@@ -48,4 +48,4 @@ extern int signals_set_action(int signum, void (*action)(int, siginfo_t *, void 
 }
 #endif
 
-#endif /* __FLINTER_SIGNALS_H__ */
+#endif /* FLINTER_SIGNALS_H */

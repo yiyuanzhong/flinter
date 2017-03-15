@@ -13,8 +13,8 @@
  * limitations under the License.
  */
 
-#ifndef __FLINTER_COMMON_H__
-#define __FLINTER_COMMON_H__
+#ifndef FLINTER_COMMON_H
+#define FLINTER_COMMON_H
 
 /** __attribute__ is used by GCC and can be safely ignored if not supported. */
 #ifndef __GNUC__
@@ -95,4 +95,4 @@ typedef int HANDLE;
 typedef int SOCKET;
 #endif
 
-#endif /* __FLINTER_COMMON_H__ */
+#endif /* FLINTER_COMMON_H */

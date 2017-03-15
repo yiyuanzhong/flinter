@@ -13,8 +13,8 @@
  * limitations under the License.
  */
 
-#ifndef __FLINTER_THREAD_FIXED_THREAD_POOL_H__
-#define __FLINTER_THREAD_FIXED_THREAD_POOL_H__
+#ifndef FLINTER_THREAD_FIXED_THREAD_POOL_H
+#define FLINTER_THREAD_FIXED_THREAD_POOL_H
 
 #include <set>
 #include <vector>
@@ -88,4 +88,4 @@ private:
 
 } // namespace flinter
 
-#endif // __FLINTER_THREAD_FIXED_THREAD_POOL_H__
+#endif // FLINTER_THREAD_FIXED_THREAD_POOL_H

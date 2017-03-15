@@ -13,8 +13,8 @@
  * limitations under the License.
  */
 
-#ifndef __FLINTER_LINKAGE_SSL_PEER_H__
-#define __FLINTER_LINKAGE_SSL_PEER_H__
+#ifndef FLINTER_LINKAGE_SSL_PEER_H
+#define FLINTER_LINKAGE_SSL_PEER_H
 
 #include <stdint.h>
 
@@ -84,4 +84,4 @@ private:
 
 } // namespace flinter
 
-#endif // __FLINTER_LINKAGE_SSL_PEER_H__
+#endif // FLINTER_LINKAGE_SSL_PEER_H

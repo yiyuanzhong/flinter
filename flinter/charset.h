@@ -13,8 +13,8 @@
  * limitations under the License.
  */
 
-#ifndef __FLINTER_CHARSET_H__
-#define __FLINTER_CHARSET_H__
+#ifndef FLINTER_CHARSET_H
+#define FLINTER_CHARSET_H
 
 #include <stdint.h>
 
@@ -65,4 +65,4 @@ extern int charset_utf32_to_utf16(const std::basic_string<uint32_t> &u32,
 
 } // namespace flinter
 
-#endif /* __FLINTER_CHARSET_H__ */
+#endif /* FLINTER_CHARSET_H */

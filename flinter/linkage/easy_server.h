@@ -13,8 +13,8 @@
  * limitations under the License.
  */
 
-#ifndef __FLINTER_LINKAGE_EASY_SERVER_H__
-#define __FLINTER_LINKAGE_EASY_SERVER_H__
+#ifndef FLINTER_LINKAGE_EASY_SERVER_H
+#define FLINTER_LINKAGE_EASY_SERVER_H
 
 #include <stddef.h>
 #include <stdint.h>
@@ -322,4 +322,4 @@ private:
 std::ostream &operator << (std::ostream &s, const flinter::EasyServer::ListenOption &d);
 std::ostream &operator << (std::ostream &s, const flinter::EasyServer::ConnectOption &d);
 
-#endif // __FLINTER_LINKAGE_EASY_SERVER_H__
+#endif // FLINTER_LINKAGE_EASY_SERVER_H

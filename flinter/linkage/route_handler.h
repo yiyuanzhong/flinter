@@ -13,8 +13,8 @@
  * limitations under the License.
  */
 
-#ifndef __FLINTER_LINKAGE_ROUTE_HANDLER_H__
-#define __FLINTER_LINKAGE_ROUTE_HANDLER_H__
+#ifndef FLINTER_LINKAGE_ROUTE_HANDLER_H
+#define FLINTER_LINKAGE_ROUTE_HANDLER_H
 
 #include <stdint.h>
 
@@ -46,4 +46,4 @@ inline void RouteHandler<K, T, S, C>::OnTimeout(const S & /*seq*/, T * /*task*/)
 
 } // namespace flinter
 
-#endif // __FLINTER_LINKAGE_ROUTE_HANDLER_H__
+#endif // FLINTER_LINKAGE_ROUTE_HANDLER_H

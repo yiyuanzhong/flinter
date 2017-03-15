@@ -13,8 +13,8 @@
  * limitations under the License.
  */
 
-#ifndef __FLINTER_ENVVARS_H__
-#define __FLINTER_ENVVARS_H__
+#ifndef FLINTER_ENVVARS_H
+#define FLINTER_ENVVARS_H
 
 #ifdef __cplusplus
 extern "C" {
@@ -43,4 +43,4 @@ extern void envvars_filter_exact(const char *key);
 }
 #endif /* __cplusplus */
 
-#endif /* __FLINTER_ENVVARS_H__ */
+#endif /* FLINTER_ENVVARS_H */

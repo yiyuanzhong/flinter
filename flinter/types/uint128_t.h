@@ -13,8 +13,8 @@
  * limitations under the License.
  */
 
-#ifndef __FLINTER_TYPES_UINT128_T_H__
-#define __FLINTER_TYPES_UINT128_T_H__
+#ifndef FLINTER_TYPES_UINT128_T_H
+#define FLINTER_TYPES_UINT128_T_H
 
 #include <stdint.h>
 
@@ -197,4 +197,4 @@ private:
 
 } // namespace flinter
 
-#endif // __FLINTER_TYPES_UINT128_T_H__
+#endif // FLINTER_TYPES_UINT128_T_H

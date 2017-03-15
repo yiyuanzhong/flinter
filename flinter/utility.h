@@ -13,8 +13,8 @@
  * limitations under the License.
  */
 
-#ifndef __FLINTER_UTILITY_H__
-#define __FLINTER_UTILITY_H__
+#ifndef FLINTER_UTILITY_H
+#define FLINTER_UTILITY_H
 
 #include <sys/select.h>
 #include <sys/types.h>
@@ -119,4 +119,4 @@ extern ssize_t set_maximum_files(size_t nofile);
 }
 #endif
 
-#endif /* __FLINTER_UTILITY_H__ */
+#endif /* FLINTER_UTILITY_H */

@@ -13,8 +13,8 @@
  * limitations under the License.
  */
 
-#ifndef __FLINTER_FASTCGI_HTTP_EXCEPTION_H__
-#define __FLINTER_FASTCGI_HTTP_EXCEPTION_H__
+#ifndef FLINTER_FASTCGI_HTTP_EXCEPTION_H
+#define FLINTER_FASTCGI_HTTP_EXCEPTION_H
 
 #include <string>
 
@@ -44,4 +44,4 @@ private:
 
 } // namespace flinter
 
-#endif // __FLINTER_FASTCGI_HTTP_EXCEPTION_H__
+#endif // FLINTER_FASTCGI_HTTP_EXCEPTION_H

@@ -13,8 +13,8 @@
  * limitations under the License.
  */
 
-#ifndef __FLINTER_TYPES_UNORDERED_HASH_H__
-#define __FLINTER_TYPES_UNORDERED_HASH_H__
+#ifndef FLINTER_TYPES_UNORDERED_HASH_H
+#define FLINTER_TYPES_UNORDERED_HASH_H
 
 #if defined(_MSC_VER)
 # if _MSC_VER < 1310 // 2002 and prior don't have std::hash_xxx<>
@@ -57,4 +57,4 @@ public:
 # endif
 #endif
 
-#endif // __FLINTER_TYPES_UNORDERED_HASH_H__
+#endif // FLINTER_TYPES_UNORDERED_HASH_H

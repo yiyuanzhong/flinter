@@ -13,8 +13,8 @@
  * limitations under the License.
  */
 
-#ifndef __FACTORY_H__
-#define __FACTORY_H__
+#ifndef __FACTORY_H
+#define __FACTORY_H
 
 namespace flinter {
 
@@ -53,4 +53,4 @@ public:
 
 } // namespace flinter
 
-#endif // __FACTORY_H__
+#endif // __FACTORY_H

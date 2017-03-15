@@ -27,8 +27,8 @@
  * Non recursive, writer first.
  **/
 
-#ifndef __FLINTER_THREAD_READWRITELOCK_H__
-#define __FLINTER_THREAD_READWRITELOCK_H__
+#ifndef FLINTER_THREAD_READ_WRITE_LOCK_H
+#define FLINTER_THREAD_READ_WRITE_LOCK_H
 
 #include <flinter/common.h>
 
@@ -56,4 +56,4 @@ private:
 
 } // namespace flinter
 
-#endif // __FLINTER_THREAD_READWRITELOCK_H__
+#endif // FLINTER_THREAD_READ_WRITE_LOCK_H

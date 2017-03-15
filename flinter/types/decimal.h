@@ -13,8 +13,8 @@
  * limitations under the License.
  */
 
-#ifndef __FLINTER_TYPES_DECIMAL_H__
-#define __FLINTER_TYPES_DECIMAL_H__
+#ifndef FLINTER_TYPES_DECIMAL_H
+#define FLINTER_TYPES_DECIMAL_H
 
 #include <string>
 
@@ -122,4 +122,4 @@ private:
 
 } // namespace flinter
 
-#endif // __FLINTER_TYPES_DECIMAL_H__
+#endif // FLINTER_TYPES_DECIMAL_H

@@ -13,8 +13,8 @@
  * limitations under the License.
  */
 
-#ifndef __FLINTER_FASTCGI_HTTP_STATUS_CODES_H__
-#define __FLINTER_FASTCGI_HTTP_STATUS_CODES_H__
+#ifndef FLINTER_FASTCGI_HTTP_STATUS_CODES_H
+#define FLINTER_FASTCGI_HTTP_STATUS_CODES_H
 
 #include <map>
 
@@ -24,4 +24,4 @@ extern const std::map<int, const char *> kHttpStatusCodes;
 
 } // namespace flinter
 
-#endif // __FLINTER_FASTCGI_HTTP_STATUS_CODES_H__
+#endif // FLINTER_FASTCGI_HTTP_STATUS_CODES_H

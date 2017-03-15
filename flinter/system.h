@@ -13,8 +13,8 @@
  * limitations under the License.
  */
 
-#ifndef __FLINTER_SYSTEM_H__
-#define __FLINTER_SYSTEM_H__
+#ifndef FLINTER_SYSTEM_H
+#define FLINTER_SYSTEM_H
 
 #if defined(__unix__) || defined(__MACH__)
 
@@ -82,4 +82,4 @@ extern pid_t waitpid_timed(pid_t pid, int *status, int options, int timeout);
 
 #endif /* defined(__unix__) || defined(__MACH__) */
 
-#endif /* __FLINTER_SYSTEM_H__ */
+#endif /* FLINTER_SYSTEM_H */

@@ -13,8 +13,8 @@
  * limitations under the License.
  */
 
-#ifndef __FLINTER_SAFEIO_H__
-#define __FLINTER_SAFEIO_H__
+#ifndef FLINTER_SAFEIO_H
+#define FLINTER_SAFEIO_H
 
 #if defined(__unix__) || defined(__MACH__)
 
@@ -161,4 +161,4 @@ extern int safe_resolve_and_connect(int domain, int type, int protocol,
 
 #endif /* defined(__unix__) || defined(__MACH__) */
 
-#endif /* __FLINTER_SAFEIO_H__ */
+#endif /* FLINTER_SAFEIO_H */

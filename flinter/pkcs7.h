@@ -13,8 +13,8 @@
  * limitations under the License.
  */
 
-#ifndef __FLINTER_PKCS7_H__
-#define __FLINTER_PKCS7_H__
+#ifndef FLINTER_PKCS7_H
+#define FLINTER_PKCS7_H
 
 #include <stddef.h>
 
@@ -52,4 +52,4 @@ extern int pkcs7_verify_into_memory(const char *cacert,
 }
 #endif
 
-#endif /* __FLINTER_PKCS7_H__ */
+#endif /* FLINTER_PKCS7_H */

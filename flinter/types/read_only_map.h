@@ -13,8 +13,8 @@
  * limitations under the License.
  */
 
-#ifndef __FLINTER_TYPES_READ_ONLY_MAP_H__
-#define __FLINTER_TYPES_READ_ONLY_MAP_H__
+#ifndef FLINTER_TYPES_READ_ONLY_MAP_H
+#define FLINTER_TYPES_READ_ONLY_MAP_H
 
 #include <map>
 
@@ -65,4 +65,4 @@ private:
 
 } // namespace flinter
 
-#endif // __FLINTER_TYPES_READ_ONLY_MAP_H__
+#endif // FLINTER_TYPES_READ_ONLY_MAP_H

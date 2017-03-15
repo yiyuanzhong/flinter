@@ -13,8 +13,8 @@
  * limitations under the License.
  */
 
-#ifndef __FLINTER_LINKAGE_LINKAGE_BASE_H__
-#define __FLINTER_LINKAGE_LINKAGE_BASE_H__
+#ifndef FLINTER_LINKAGE_LINKAGE_BASE_H
+#define FLINTER_LINKAGE_LINKAGE_BASE_H
 
 #include <sys/types.h>
 #include <stddef.h>
@@ -76,4 +76,4 @@ protected:
 
 } // namespace flinter
 
-#endif // __FLINTER_LINKAGE_LINKAGE_BASE_H__
+#endif // FLINTER_LINKAGE_LINKAGE_BASE_H

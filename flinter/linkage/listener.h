@@ -13,8 +13,8 @@
  * limitations under the License.
  */
 
-#ifndef __FLINTER_LINKAGE_LISTENER_H__
-#define __FLINTER_LINKAGE_LISTENER_H__
+#ifndef FLINTER_LINKAGE_LISTENER_H
+#define FLINTER_LINKAGE_LISTENER_H
 
 #include <set>
 #include <string>
@@ -73,4 +73,4 @@ private:
 
 } // namespace flinter
 
-#endif // __FLINTER_LINKAGE_LISTENER_H__
+#endif // FLINTER_LINKAGE_LISTENER_H

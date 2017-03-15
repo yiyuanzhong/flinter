@@ -13,8 +13,8 @@
  * limitations under the License.
  */
 
-#ifndef __FLINTER_LINKAGE_ABSTRACT_IO_H__
-#define __FLINTER_LINKAGE_ABSTRACT_IO_H__
+#ifndef FLINTER_LINKAGE_ABSTRACT_IO_H
+#define FLINTER_LINKAGE_ABSTRACT_IO_H
 
 #include <stddef.h>
 
@@ -63,4 +63,4 @@ public:
 
 } // namespace flinter
 
-#endif // __FLINTER_LINKAGE_ABSTRACT_IO_H__
+#endif // FLINTER_LINKAGE_ABSTRACT_IO_H

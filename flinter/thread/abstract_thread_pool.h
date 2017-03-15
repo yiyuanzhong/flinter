@@ -13,8 +13,8 @@
  * limitations under the License.
  */
 
-#ifndef __FLINTER_THREAD_ABSTRACT_THREAD_POOL__
-#define __FLINTER_THREAD_ABSTRACT_THREAD_POOL__
+#ifndef FLINTER_THREAD_ABSTRACT_THREAD_POOL_H
+#define FLINTER_THREAD_ABSTRACT_THREAD_POOL_H
 
 #include <stddef.h>
 
@@ -55,4 +55,4 @@ private:
 
 } // namespace flinter
 
-#endif // __FLINTER_THREAD_ABSTRACT_THREAD_POOL__
+#endif // FLINTER_THREAD_ABSTRACT_THREAD_POOL_H

@@ -13,8 +13,8 @@
  * limitations under the License.
  */
 
-#ifndef __FLINTER_ZOOKEEPER_NAMING_H__
-#define __FLINTER_ZOOKEEPER_NAMING_H__
+#ifndef FLINTER_ZOOKEEPER_NAMING_H
+#define FLINTER_ZOOKEEPER_NAMING_H
 
 #include <stdint.h>
 
@@ -87,4 +87,4 @@ private:
 
 } // namespace flinter
 
-#endif // __FLINTER_ZOOKEEPER_NAMING_H__
+#endif // FLINTER_ZOOKEEPER_NAMING_H

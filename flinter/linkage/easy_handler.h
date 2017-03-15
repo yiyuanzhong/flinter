@@ -13,8 +13,8 @@
  * limitations under the License.
  */
 
-#ifndef __FLINTER_LINKAGE_EASY_HANDLER_H__
-#define __FLINTER_LINKAGE_EASY_HANDLER_H__
+#ifndef FLINTER_LINKAGE_EASY_HANDLER_H
+#define FLINTER_LINKAGE_EASY_HANDLER_H
 
 #include <sys/types.h>
 
@@ -82,4 +82,4 @@ public:
 
 } // namespace flinter
 
-#endif // __FLINTER_LINKAGE_EASY_HANDLER_H__
+#endif // FLINTER_LINKAGE_EASY_HANDLER_H

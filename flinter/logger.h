@@ -13,8 +13,8 @@
  * limitations under the License.
  */
 
-#ifndef __FLINTER_LOGGER_H__
-#define __FLINTER_LOGGER_H__
+#ifndef FLINTER_LOGGER_H
+#define FLINTER_LOGGER_H
 
 #include <stdarg.h>
 
@@ -104,4 +104,4 @@ private:
 #define CLOG (::flinter::CLogger(__FILE__, __LINE__))
 #define LOG(x) _FLINTER_LOG_##x
 
-#endif // __FLINTER_LOGGER_H__
+#endif // FLINTER_LOGGER_H

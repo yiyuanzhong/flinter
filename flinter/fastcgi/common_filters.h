@@ -13,8 +13,8 @@
  * limitations under the License.
  */
 
-#ifndef __FLINTER_FASTCGI_COMMON_FILTER_H__
-#define __FLINTER_FASTCGI_COMMON_FILTER_H__
+#ifndef FLINTER_FASTCGI_COMMON_FILTER_H
+#define FLINTER_FASTCGI_COMMON_FILTER_H
 
 #include <stdint.h>
 
@@ -76,4 +76,4 @@ private:
 
 } // namespace flinter
 
-#endif // __FLINTER_FASTCGI_COMMON_FILTER_H__
+#endif // FLINTER_FASTCGI_COMMON_FILTER_H

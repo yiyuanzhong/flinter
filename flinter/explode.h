@@ -13,8 +13,8 @@
  * limitations under the License.
  */
 
-#ifndef __FLINTER_EXPLODE_H__
-#define __FLINTER_EXPLODE_H__
+#ifndef FLINTER_EXPLODE_H
+#define FLINTER_EXPLODE_H
 
 #include <list>
 #include <set>
@@ -65,4 +65,4 @@ inline void implode(const std::string &glue,
 
 } // namespace flinter
 
-#endif // __FLINTER_EXPLODE_H__
+#endif // FLINTER_EXPLODE_H

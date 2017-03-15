@@ -13,8 +13,8 @@
  * limitations under the License.
  */
 
-#ifndef __FLINTER_TRIM_H__
-#define __FLINTER_TRIM_H__
+#ifndef FLINTER_TRIM_H
+#define FLINTER_TRIM_H
 
 #include <string>
 
@@ -26,4 +26,4 @@ std::string rtrim(const std::string &string);
 
 } // namespace flinter
 
-#endif // __FLINTER_TRIM_H__
+#endif // FLINTER_TRIM_H

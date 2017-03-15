@@ -13,8 +13,8 @@
  * limitations under the License.
  */
 
-#ifndef __FLINTER_THREAD_GROWABLE_THREAD_POOL_H__
-#define __FLINTER_THREAD_GROWABLE_THREAD_POOL_H__
+#ifndef FLINTER_THREAD_GROWABLE_THREAD_POOL_H
+#define FLINTER_THREAD_GROWABLE_THREAD_POOL_H
 
 #include <list>
 #include <set>
@@ -102,4 +102,4 @@ private:
 
 } // namespace flinter
 
-#endif // __FLINTER_THREAD_GROWABLE_THREAD_POOL_H__
+#endif // FLINTER_THREAD_GROWABLE_THREAD_POOL_H

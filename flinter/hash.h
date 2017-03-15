@@ -13,8 +13,8 @@
  * limitations under the License.
  */
 
-#ifndef __FLINTER_HASH_H__
-#define __FLINTER_HASH_H__
+#ifndef FLINTER_HASH_H
+#define FLINTER_HASH_H
 
 #include <stddef.h>
 #include <stdint.h>
@@ -72,4 +72,4 @@ extern int hash_sha256(const char *filename, int limit_rate, int milliseconds, c
 }
 #endif
 
-#endif /* __FLINTER_HASH_H__ */
+#endif /* FLINTER_HASH_H */

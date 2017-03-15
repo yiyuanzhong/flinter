@@ -13,8 +13,8 @@
  * limitations under the License.
  */
 
-#ifndef __FLINTER_CONVERT_H__
-#define __FLINTER_CONVERT_H__
+#ifndef FLINTER_CONVERT_H
+#define FLINTER_CONVERT_H
 
 #include <string>
 
@@ -29,4 +29,4 @@ const char *convert(const std::string &from,
 
 } // namespace flinter
 
-#endif // __FLINTER_CONVERT_H__
+#endif // FLINTER_CONVERT_H

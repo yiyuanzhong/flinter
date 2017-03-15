@@ -13,8 +13,8 @@
  * limitations under the License.
  */
 
-#ifndef __FLINTER_REVISION_H__
-#define __FLINTER_REVISION_H__
+#ifndef FLINTER_REVISION_H
+#define FLINTER_REVISION_H
 
 #include <stddef.h>
 #include <time.h>
@@ -57,5 +57,5 @@ extern int revision_get_project_version(char *buffer, size_t len);
 }
 #endif
 
-#endif /* __FLINTER_REVISION_H__ */
+#endif /* FLINTER_REVISION_H */
 

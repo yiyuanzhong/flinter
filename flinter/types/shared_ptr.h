@@ -13,8 +13,8 @@
  * limitations under the License.
  */
 
-#ifndef __FLINTER_TYPES_SHARED_PTR_H__
-#define __FLINTER_TYPES_SHARED_PTR_H__
+#ifndef FLINTER_TYPES_SHARED_PTR_H
+#define FLINTER_TYPES_SHARED_PTR_H
 
 #include <flinter/types/atomic.h>
 
@@ -80,4 +80,4 @@ private:
 
 } // namespace flinter
 
-#endif // __FLINTER_TYPES_SHARED_PTR_H__
+#endif // FLINTER_TYPES_SHARED_PTR_H

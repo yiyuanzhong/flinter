@@ -13,8 +13,8 @@
  * limitations under the License.
  */
 
-#ifndef __FLINTER_LINKAGE_ASYNC_ROUTER_H__
-#define __FLINTER_LINKAGE_ASYNC_ROUTER_H__
+#ifndef FLINTER_LINKAGE_ASYNC_ROUTER_H
+#define FLINTER_LINKAGE_ASYNC_ROUTER_H
 
 #include <assert.h>
 #include <stdint.h>
@@ -291,4 +291,4 @@ inline void AsyncRouter<K, T, S, C>::DestroyConnection(context_t *value)
 
 } // namespace flinter
 
-#endif // __FLINTER_LINKAGE_ASYNC_ROUTER_H__
+#endif // FLINTER_LINKAGE_ASYNC_ROUTER_H

@@ -13,8 +13,8 @@
  * limitations under the License.
  */
 
-#ifndef __FLINTER_MKDIRS_H__
-#define __FLINTER_MKDIRS_H__
+#ifndef FLINTER_MKDIRS_H
+#define FLINTER_MKDIRS_H
 
 #include <sys/types.h>
 
@@ -29,4 +29,4 @@ extern int mkdirs(const char *pathname, mode_t mode);
 }
 #endif /* __cplusplus */
 
-#endif /* __FLINTER_MKDIRS_H__ */
+#endif /* FLINTER_MKDIRS_H */
