@@ -546,12 +546,12 @@ void CGI::OutputBodyV(const char *fmt, va_list va)
     buf = new char[size + 1];
     ret = vsnprintf(buf, size + 1, fmt, va);
     if (static_cast<size_t>(ret) != size) {
-        free(buf);
+        delete [] buf;
         throw std::runtime_error("vsnprintf(3)");
     }
 
     OutputBody(buf, size);
-    free(buf);
+    delete [] buf;
 }
 
 void CGI::OutputBody(const void *body, size_t length)
