@@ -543,7 +543,7 @@ void CGI::OutputBodyV(const char *fmt, va_list va)
     }
 
     // Super large buffer?
-    buf = new char[size + 1];
+    buf = (char*)malloc(size + 1);
     ret = vsnprintf(buf, size + 1, fmt, va);
     if (static_cast<size_t>(ret) != size) {
         delete [] buf;
