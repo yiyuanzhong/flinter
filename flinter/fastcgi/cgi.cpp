@@ -365,19 +365,22 @@ void CGI::SetHeader(const std::string &key, const std::string &value)
     SetHeaderInternal(key, value);
 }
 
-void CGI::SetHeaderInternal(const std::string &key, const std::string &value)
+void CGI::SetHeaderInternal(const std::string &key,
+                            const std::string &value,
+                            bool allow_duplicate)
 {
     if (_header_sent) { // Oops, programming error.
         throw std::logic_error("trying to set header after body");
     }
 
+    if (value.empty()) {
+        _headers.erase(key);
+        return;
+    }
+
     std::map<std::string, std::string>::iterator p = _headers.find(key);
-    if (p == _headers.end() && value.empty()) {
-        // Nothing to do.
-    } else if (p == _headers.end()) {
+    if (p == _headers.end() || allow_duplicate) {
         _headers.insert(std::make_pair(key, value));
-    } else if (value.empty()) {
-        _headers.erase(p);
     } else {
         p->second = value;
     }
@@ -469,7 +472,7 @@ void CGI::SetCookie(const std::string &key,
         s << "; " << flags;
     }
 
-    SetHeaderInternal("Set-Cookie", s.str());
+    SetHeaderInternal("Set-Cookie", s.str(), true);
 }
 
 void CGI::OutputStatusHeader()
@@ -488,8 +491,8 @@ void CGI::OutputHeaders()
 
     _header_sent = true;
     OutputStatusHeader();
-    for (std::map<std::string, std::string>::const_iterator p = _headers.begin();
-         p != _headers.end(); ++p) {
+    for (std::multimap<std::string, std::string>::const_iterator
+         p = _headers.begin(); p != _headers.end(); ++p) {
 
         std::ostringstream s;
         s << p->first.c_str() << ": " << p->second << "\n";

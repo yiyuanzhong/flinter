@@ -130,6 +130,8 @@ public:
     void SetHeader(const std::string &key, const std::string &value);
     void Redirect(const std::string &url, bool moved_permanently = false);
 
+    // Won't de-duplicate
+    // If you set same `key` multiple times, it's up to browser what to do.
     void SetCookie(const std::string &key,
                    const std::string &value,
                    time_t max_age = 0, // 0 for session
@@ -197,13 +199,16 @@ private:
     static void RealOutput(const void *what, size_t len);
     static void RealOutput(const std::string &what);
 
-    void SetHeaderInternal(const std::string &key, const std::string &value);
+    void SetHeaderInternal(const std::string &key,
+                           const std::string &value,
+                           bool allow_duplicate = false);
+
     void OutputStatusHeader();
     bool ProcessRequest();
     void OutputHeaders();
     void FlushBody();
 
-    std::map<std::string, std::string> _headers;
+    std::multimap<std::string, std::string> _headers;
     std::deque<char> _buffered_body;
     std::string _request_body;
     bool _request_handled;
