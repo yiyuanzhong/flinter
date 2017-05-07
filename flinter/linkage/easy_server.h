@@ -141,6 +141,14 @@ public:
         return &_configure;
     }
 
+    /// @param slots I/O thread affinities, empty list means no affinity.
+    /// @param workers job threads affinities, NULL to share I/O threads.
+    /// @param easy_tuner life span NOT taken, keep it valid.
+    /// @sa explode_lists()
+    bool Initialize(const std::string &slots,
+                    const std::string *workers,
+                    EasyTuner *easy_tuner = NULL);
+
     /// @param slots how many I/O threads, typically 1~4.
     /// @param workers how many job threads, 0 to share I/O threads.
     /// @param easy_tuner life span NOT taken, keep it valid.

@@ -40,6 +40,7 @@
 
 #include "flinter/types/shared_ptr.h"
 
+#include "flinter/explode.h"
 #include "flinter/runnable.h"
 #include "flinter/logger.h"
 #include "flinter/utility.h"
@@ -165,8 +166,10 @@ private:
 class EasyServer::ProxyLinkageWorker : public LinkageWorker {
 public:
     virtual ~ProxyLinkageWorker() {}
-    ProxyLinkageWorker(EasyTuner *tuner, int thread_id)
-            : _tuner(tuner), _thread_id(thread_id) {}
+    ProxyLinkageWorker(EasyTuner *tuner,
+                       int thread_id,
+                       const std::vector<int> &affinities)
+            : _affinities(affinities), _tuner(tuner), _thread_id(thread_id) {}
 
     int thread_id() const
     {
@@ -178,6 +181,7 @@ protected:
     virtual void OnShutdown();
 
 private:
+    const std::vector<int> _affinities;
     EasyTuner *const _tuner;
     const int _thread_id;
 
@@ -277,10 +281,14 @@ private:
 
 class EasyServer::JobWorker : public Runnable {
 public:
-    JobWorker(EasyServer *easy_server, EasyTuner *easy_tuner, size_t id)
+    JobWorker(EasyServer *easy_server,
+              EasyTuner *easy_tuner,
+              size_t id,
+              const std::vector<int> &affinities)
             : _id(id)
             , _easy_tuner(easy_tuner)
-            , _easy_server(easy_server) {}
+            , _easy_server(easy_server)
+            , _affinities(affinities) {}
 
     virtual ~JobWorker() {}
     virtual bool Run();
@@ -290,6 +298,7 @@ private:
     const size_t _id;
     EasyTuner *const _easy_tuner;
     EasyServer *const _easy_server;
+    const std::vector<int> _affinities;
 
 }; // class EasyServer::JobWorker
 
@@ -424,6 +433,10 @@ public:
 
 bool EasyServer::ProxyLinkageWorker::OnInitialize()
 {
+    if (!_affinities.empty()) {
+        // TODO
+    }
+
     if (!_tuner) {
         return true;
     }
@@ -536,12 +549,14 @@ LinkageBase *EasyServer::ProxyListener::CreateLinkage(LinkageWorker *worker,
 
 bool EasyServer::JobWorker::Run()
 {
+    if (!_affinities.empty()) {
+        // TODO
+    }
+
     if (_easy_tuner) {
         if (!_easy_tuner->OnJobThreadInitialize()) {
             LOG(ERROR) << "EasyServer: failed to initialize job worker.";
-
-            // TODO(yiyuanzhong): but what can I do?
-            return false;
+            throw std::runtime_error("EasyServer: failed to initialize job worker.");
         }
     }
 
@@ -780,18 +795,23 @@ bool EasyServer::RegisterTimer(int64_t after, int64_t repeat, Runnable *timer)
     return worker->SendCommand(job);
 }
 
-bool EasyServer::Initialize(size_t slots,
-                            size_t workers,
+bool EasyServer::Initialize(const std::string &slots,
+                            const std::string *workers,
                             EasyTuner *easy_tuner)
 {
-    if (slots  == 0               ||
-        slots   > kMaximumSlots   ||
-        workers > kMaximumWorkers ){
+    std::vector<std::vector<int> > as;
+    std::vector<std::vector<int> > aw;
+    if (explode_lists(slots, &as, 256)                 ||
+        (workers && explode_lists(*workers, &aw, 256)) ||
+        as.empty()                                     ||
+        as.size() > kMaximumSlots                      ||
+        aw.size() > kMaximumWorkers                    ){
 
+        LOG(ERROR) << "EasyServer: invalid initializing parameters.";
         return false;
     }
 
-    size_t total = slots + workers;
+    size_t total = as.size() + aw.size();
     if (!_pool->Initialize(total)) {
         LOG(ERROR) << "EasyServer: failed to initialize thread pool.";
         return false;
@@ -799,15 +819,15 @@ bool EasyServer::Initialize(size_t slots,
 
     // Set constants before going multi-threaded.
     // DoShutdown() will reset them if anything bad happens.
-    _job_workers.reserve(workers);
-    _io_workers.reserve(slots);
-    _workers = workers;
-    _slots = slots;
+    _job_workers.reserve(aw.size());
+    _io_workers.reserve(as.size());
+    _workers = aw.size();
+    _slots = as.size();
 
     MutexLocker glocker(_gmutex);
-    for (size_t i = 0; i < slots; ++i) {
+    for (size_t i = 0; i < as.size(); ++i) {
         ProxyLinkageWorker *worker =
-                new ProxyLinkageWorker(easy_tuner, static_cast<int>(i));
+                new ProxyLinkageWorker(easy_tuner, static_cast<int>(i), as[i]);
 
         _io_workers.push_back(worker);
         if (!AttachListeners(worker)) {
@@ -830,12 +850,17 @@ bool EasyServer::Initialize(size_t slots,
         p = _timers.erase(p);
     }
 
-    _io_context.reserve(slots);
-    for (size_t i = 0; i < slots; ++i) {
+    _io_context.reserve(as.size());
+    for (size_t i = 0; i < as.size(); ++i) {
         _io_context.push_back(new IoContext(static_cast<int>(i)));
     }
 
-    _hashjobs.resize(workers);
+    for (size_t i = 0; i < aw.size(); ++i) {
+        JobWorker *worker = new JobWorker(this, easy_tuner, i, aw[i]);
+        _job_workers.push_back(worker);
+    }
+
+    _hashjobs.resize(aw.size());
 
     // Now multi-threading.
     for (std::vector<ProxyLinkageWorker *>::const_iterator
@@ -848,11 +873,10 @@ bool EasyServer::Initialize(size_t slots,
         }
     }
 
-    for (size_t i = 0; i < workers; ++i) {
-        JobWorker *worker = new JobWorker(this, easy_tuner, i);
-        _job_workers.push_back(worker);
+    for (std::vector<JobWorker *>::const_iterator
+         p = _job_workers.begin(); p != _job_workers.end(); ++p) {
 
-        if (!_pool->AppendJob(worker, true)) {
+        if (!_pool->AppendJob(*p, true)) {
             LOG(ERROR) << "EasyServer: failed to append job workers.";
             DoShutdown(&glocker);
             return false;
@@ -860,6 +884,37 @@ bool EasyServer::Initialize(size_t slots,
     }
 
     return true;
+}
+
+bool EasyServer::Initialize(size_t slots,
+                            size_t workers,
+                            EasyTuner *easy_tuner)
+{
+    if (slots  == 0               ||
+        slots   > kMaximumSlots   ||
+        workers > kMaximumWorkers ){
+
+        LOG(ERROR) << "EasyServer: invalid initializing parameters.";
+        return false;
+    }
+
+    const char *delim;
+
+    delim = "";
+    std::string as;
+    for (size_t i = 0; i < slots; ++i) {
+        as.append(delim);
+        delim = ";";
+    }
+
+    delim = "";
+    std::string aw;
+    for (size_t i = 0; i < workers; ++i) {
+        as.append(delim);
+        delim = ";";
+    }
+
+    return Initialize(as, workers ? &aw : NULL, easy_tuner);
 }
 
 bool EasyServer::Shutdown()

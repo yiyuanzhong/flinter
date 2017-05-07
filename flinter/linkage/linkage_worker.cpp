@@ -166,23 +166,23 @@ bool LinkageWorker::RegisterTimer(int64_t after,
 bool LinkageWorker::Run()
 {
     if (!OnInitialize()) {
-        return false;
+        CLOG.Error("Linkage: failed to initialize.");
+        throw std::runtime_error("Linkage: failed to initialize.");
     }
 
     HealthTimer *health = new HealthTimer(this);
     if (!RegisterTimer(1000000000LL, health, true)) {
         delete health;
-        return false;
+        CLOG.Error("Linkage: failed to register timers.");
+        throw std::runtime_error("Linkage: failed to initialize.");
     }
 
     _running_thread_id = get_current_thread_id();
     LOG(VERBOSE) << "Linkage: enter event loop [" << _running_thread_id << "]";
-    bool result = true;
     while (!_quit) {
         if (!ev_run(_loop, 0)) {
             CLOG.Error("Linkage: ev_run() returned false.");
-            result = false;
-            break;
+            throw std::runtime_error("Linkage: ev_run() returned false.");
         }
     }
     LOG(VERBOSE) << "Linkage: leave event loop [" << _running_thread_id << "]";
@@ -200,7 +200,7 @@ bool LinkageWorker::Run()
 
     _events.clear();
     _timers.clear();
-    return result;
+    return true;
 }
 
 bool LinkageWorker::Shutdown()

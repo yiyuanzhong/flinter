@@ -114,7 +114,7 @@ int Listener::OnReadable(LinkageWorker *worker)
         }
 
         CLOG.Warn("Listener: failed to accept: %d: %s", errno, strerror(errno));
-        return -1;
+        throw std::runtime_error("Failed to accept listening fd");
 
     } else if (ret > 0) {
         CLOG.Warn("Listener: failed to setup new fd: %d: %s", errno, strerror(errno));
