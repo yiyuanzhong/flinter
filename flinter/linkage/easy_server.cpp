@@ -434,7 +434,7 @@ public:
 bool EasyServer::ProxyLinkageWorker::OnInitialize()
 {
     if (!_affinities.empty()) {
-        // TODO
+        // TODO(yiyuanzong): implement this.
     }
 
     if (!_tuner) {
@@ -550,7 +550,7 @@ LinkageBase *EasyServer::ProxyListener::CreateLinkage(LinkageWorker *worker,
 bool EasyServer::JobWorker::Run()
 {
     if (!_affinities.empty()) {
-        // TODO
+        // TODO(yiyuanzong): implement this.
     }
 
     if (_easy_tuner) {

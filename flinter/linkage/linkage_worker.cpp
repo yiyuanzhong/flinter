@@ -174,7 +174,7 @@ bool LinkageWorker::Run()
     if (!RegisterTimer(1000000000LL, health, true)) {
         delete health;
         CLOG.Error("Linkage: failed to register timers.");
-        throw std::runtime_error("Linkage: failed to initialize.");
+        throw std::runtime_error("Linkage: failed to register timers.");
     }
 
     _running_thread_id = get_current_thread_id();
