@@ -34,9 +34,10 @@
 #include "flinter/linkage/ssl_io.h"
 
 #include "flinter/thread/condition.h"
+#include "flinter/thread/fixed_thread_pool.h"
 #include "flinter/thread/mutex.h"
 #include "flinter/thread/mutex_locker.h"
-#include "flinter/thread/fixed_thread_pool.h"
+#include "flinter/thread/scheduler.h"
 
 #include "flinter/types/shared_ptr.h"
 
@@ -433,8 +434,8 @@ public:
 
 bool EasyServer::ProxyLinkageWorker::OnInitialize()
 {
-    if (!_affinities.empty()) {
-        // TODO(yiyuanzong): implement this.
+    if (!Scheduler::SetAffinity(_affinities)) {
+        return false;
     }
 
     if (!_tuner) {
@@ -549,8 +550,9 @@ LinkageBase *EasyServer::ProxyListener::CreateLinkage(LinkageWorker *worker,
 
 bool EasyServer::JobWorker::Run()
 {
-    if (!_affinities.empty()) {
-        // TODO(yiyuanzong): implement this.
+    if (!Scheduler::SetAffinity(_affinities)) {
+        LOG(ERROR) << "EasyServer: failed to set thread affinities.";
+        throw std::runtime_error("EasyServer: failed to set thread affinities.");
     }
 
     if (_easy_tuner) {

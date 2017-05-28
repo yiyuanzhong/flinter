@@ -83,6 +83,7 @@ include_thread_HEADERS = thread/abstract_thread_pool.h \
                          thread/read_locker.h \
                          thread/read_write_lock.h \
                          thread/semaphore.h \
+                         thread/scheduler.h \
                          thread/spinlock.h \
                          thread/tls.h \
                          thread/write_locker.h
@@ -133,6 +134,7 @@ libflinter_la_SOURCES = $(libflinter_core_la_SOURCES) \
                         thread/keyed_thread_pool.cpp \
                         thread/mutex.cpp \
                         thread/read_write_lock.cpp \
+                        thread/scheduler.cpp \
                         thread/semaphore.cpp \
                         thread/thread.h \
                         thread/thread.cpp \

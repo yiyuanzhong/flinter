@@ -186,6 +186,7 @@ AC_CHECK_FUNCS([setproctitle])
 AC_CHECK_FUNCS([clock_gettime])
 AC_CHECK_FUNCS([gethostbyname2_r])
 AC_CHECK_FUNCS([sched_setaffinity])
+AC_CHECK_FUNCS([sched_setscheduler])
 AC_CHECK_FUNCS([cpuset_setaffinity])
 AC_CHECK_FUNCS([pthread_rwlockattr_setkind_np])
 
