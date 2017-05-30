@@ -912,7 +912,7 @@ bool EasyServer::Initialize(size_t slots,
     delim = "";
     std::string aw;
     for (size_t i = 0; i < workers; ++i) {
-        as.append(delim);
+        aw.append(delim);
         delim = ";";
     }
 
