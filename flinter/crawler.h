@@ -31,6 +31,17 @@ public:
                      const std::string &hostname = std::string());
 
     ~Crawler();
+    Crawler();
+
+    /*** Can be invoked before or after the first request ***/
+
+    bool SetUrl(const std::string &url);
+
+    /*** Can be invoked only before the first request ***/
+
+    void SetTimeout(long timeout);
+    void SetConnectTimeout(long timeout);
+    void SetHostname(const std::string &hostname);
 
     // Only verify peer if set.
     void SetCertificateAuthorityFile(const std::string &filename);
@@ -56,6 +67,8 @@ public:
     void SetHeader(const std::string &key, const char *value);
     void SetHeader(const std::string &key, const std::string &value);
 
+    /*** Can be invoked only after the first request ***/
+
     const std::string &effective_url() const
     {
         return _effective_url;
@@ -73,6 +86,8 @@ public:
 
 private:
     class Context;
+    explicit Crawler(const Crawler &other);
+    Crawler &operator = (const Crawler &other);
 
     static size_t WriteFunction(char *ptr, size_t size, size_t nmemb, void *userdata);
     static bool IsBlacklisted(const std::string &header);
@@ -85,8 +100,10 @@ private:
     std::map<std::string, std::string> _posts;
     std::deque<char> _result;
     std::string _hostname;
+    long _connect_timeout;
     std::string _cainfo;
     std::string _url;
+    long _timeout;
 
     std::string _effective_url;
     std::string _content_type;

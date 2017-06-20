@@ -45,10 +45,46 @@ public:
 
 }; // class Crawler::Context
 
-Crawler::Crawler(const std::string &url, const std::string &hostname)
-        : _hostname(hostname), _url(url), _status(0), _context(new Context)
+Crawler::Crawler() : _connect_timeout(5L), _timeout(300L)
+                   , _status(0), _context(new Context)
 {
     // Intended left blank.
+}
+
+Crawler::Crawler(const std::string &url, const std::string &hostname)
+        : _hostname(hostname), _connect_timeout(5L), _url(url)
+        , _timeout(300L), _status(0), _context(new Context)
+{
+    // Intended left blank.
+}
+
+bool Crawler::SetUrl(const std::string &url)
+{
+    _url = url;
+    if (!_context->curl) {
+        return true;
+    }
+
+    if (curl_easy_setopt(_context->curl, CURLOPT_URL, _url.c_str())) {
+        return false;
+    }
+
+    return true;
+}
+
+void Crawler::SetHostname(const std::string &hostname)
+{
+    _hostname = hostname;
+}
+
+void Crawler::SetConnectTimeout(long timeout)
+{
+    _connect_timeout = timeout;
+}
+
+void Crawler::SetTimeout(long timeout)
+{
+    _timeout = timeout;
 }
 
 Crawler::~Crawler()
@@ -216,20 +252,24 @@ bool Crawler::Initialize(const std::string &content_type)
         return true;
     }
 
+    if (_url.empty()) {
+        return false;
+    }
+
     CURL *curl = curl_easy_init();
     if (!curl) {
         return false;
     }
 
-    if (curl_easy_setopt(curl, CURLOPT_CONNECTTIMEOUT, 5L)             ||
-        curl_easy_setopt(curl, CURLOPT_TIMEOUT, 300L)                  ||
-        curl_easy_setopt(curl, CURLOPT_URL, _url.c_str())              ||
-        curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, WriteFunction)   ||
-        curl_easy_setopt(curl, CURLOPT_WRITEDATA, this)                ||
-        curl_easy_setopt(curl, CURLOPT_SSL_VERIFYHOST, 0L)             ||
-        curl_easy_setopt(curl, CURLOPT_SSL_VERIFYPEER, 0L)             ||
-        curl_easy_setopt(curl, CURLOPT_FOLLOWLOCATION, 1L)             ||
-        curl_easy_setopt(curl, CURLOPT_MAXREDIRS, 5L)                  ){
+    if (curl_easy_setopt(curl, CURLOPT_CONNECTTIMEOUT, _connect_timeout) ||
+        curl_easy_setopt(curl, CURLOPT_TIMEOUT, _timeout)                ||
+        curl_easy_setopt(curl, CURLOPT_URL, _url.c_str())                ||
+        curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, WriteFunction)     ||
+        curl_easy_setopt(curl, CURLOPT_WRITEDATA, this)                  ||
+        curl_easy_setopt(curl, CURLOPT_SSL_VERIFYHOST, 0L)               ||
+        curl_easy_setopt(curl, CURLOPT_SSL_VERIFYPEER, 0L)               ||
+        curl_easy_setopt(curl, CURLOPT_FOLLOWLOCATION, 1L)               ||
+        curl_easy_setopt(curl, CURLOPT_MAXREDIRS, 5L)                    ){
 
         curl_easy_cleanup(curl);
         return false;
