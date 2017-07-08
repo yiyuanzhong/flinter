@@ -39,23 +39,29 @@ namespace flinter {
 template <class T>
 class Singleton {
 public:
-    /// The only important method.
-    static T *GetInstance()
-    {
-        static std::auto_ptr<T> singleton(new T);
-        return singleton.get();
-    }
-
+    virtual ~Singleton() = 0;
 }; // class Singleton
+
+template <class T>
+inline Singleton<T>::~Singleton() {}
 
 } // namespace flinter
 
 #define DECLARE_SINGLETON(klass) \
-public: \
-    friend class ::flinter::Singleton<klass>; \
-    friend class std::auto_ptr<klass>; \
 private: \
+    class flinter_singleton_implementation { \
+    public: \
+        flinter_singleton_implementation() : _instance(new klass) {} \
+        ~flinter_singleton_implementation() { delete _instance; } \
+        klass *const _instance; \
+    }; \
     explicit klass(const klass &); \
-    klass &operator = (const klass &);
+    klass &operator = (const klass &); \
+public: \
+    static klass *GetInstance() { \
+        static std::unique_ptr<flinter_singleton_implementation> instance(new flinter_singleton_implementation); \
+        return instance.get()->_instance; \
+    } \
+private:
 
 #endif // FLINTER_SINGLETON_H
