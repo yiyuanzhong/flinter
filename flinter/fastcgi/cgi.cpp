@@ -428,7 +428,7 @@ void CGI::RemoveCookie(const std::string &key,
                        const std::string &domain)
 {
     // From PHP: 1 year and 1 second ago.
-    SetCookie(key, "deleted", -31536001, std::string(), path, domain);
+    SetCookie(key, "deleted", -31536001, path, domain);
 }
 
 void CGI::SetCookie(const std::string &key,
