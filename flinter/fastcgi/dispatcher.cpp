@@ -372,8 +372,8 @@ CGI *Dispatcher::GetHandler()
     }
 
     if (*path != '/') {
-        free(path);
         std::cerr << "Invalid REQUEST_URI: " << path << std::endl;
+        free(path);
         return NULL;
     }
 
