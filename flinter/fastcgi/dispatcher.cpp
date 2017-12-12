@@ -160,13 +160,7 @@ void Dispatcher::RegisterDefaultFactory(const Factory<DefaultHandler> *factory)
 
 void Dispatcher::RegisterFactory(const Factory<CGI> &factory, const std::string &path)
 {
-    std::map<std::string, const Factory<CGI> *>::iterator p = _factories.find(path);
-    if (p != _factories.end()) {
-        delete p->second;
-        p->second = &factory;
-    } else {
-        _factories.insert(std::make_pair(path, &factory));
-    }
+    _factories[path] = &factory;
 }
 
 int Dispatcher::RunAsExecutable(int argc, char *argv[])
