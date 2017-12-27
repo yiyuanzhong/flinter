@@ -496,7 +496,7 @@ int Dispatcher::EmulatedPutenv(void *context, const char *key, const char *value
 
     size_t c = 0;
     for (char **p = request->envp; *p; ++p) {
-        if (memcmp(*p, n, kl + 1) == 0) {
+        if (strncmp(*p, n, kl + 1) == 0) {
             free(*p);
             *p = n;
             return 0;

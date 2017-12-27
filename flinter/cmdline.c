@@ -277,10 +277,9 @@ static int cmdline_get_module_path_via_stat(const char *argv)
 
     *third = '\0';
     argv_name = basename(cmdline_strdup(argv));
-    len = strlen(second);
 
     /* Looks like a truncation, proceed with argv. */
-    if (len == 15 && memcmp(argv_name, second, (size_t)15) == 0) {
+    if (strncmp(argv_name, second, 15) == 0) {
         g_module_basename = cmdline_strdup(argv_name);
     } else {
         g_module_basename = cmdline_strdup(second);

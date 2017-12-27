@@ -104,9 +104,8 @@ static int rmdirs_with_getdents(int dirfd, const char *name)
         do {
             d = (struct linux_dirent *)(dbuf + i);
             i += d->d_reclen;
-            if (memcmp(d->d_name, ".",  2) == 0 ||
-                memcmp(d->d_name, "..", 3) == 0 ){
-
+            if (strcmp(d->d_name, "." ) == 0 ||
+                strcmp(d->d_name, "..") == 0 ){
                 continue;
             }
 
@@ -209,9 +208,8 @@ static int rmdirs_with_readdir(int dirfd, const char *name)
             break;
         }
 
-        if (memcmp(d->d_name, ".",  2) == 0 ||
-            memcmp(d->d_name, "..", 3) == 0 ){
-
+        if (strcmp(d->d_name, "." ) == 0 ||
+            strcmp(d->d_name, "..") == 0 ){
             continue;
         }
 

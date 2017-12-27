@@ -95,8 +95,8 @@ NEOERR *CGI::Parser::Parse(::CGI *, char *, char *, void *rock)
 
     // ClearSilver will parse these special content type so skip them.
     const char *type = cgi->_SERVER["CONTENT_TYPE"].c_str();
-    if (memcmp(type, "application/x-www-form-urlencoded", 34) == 0 || // Exact
-        memcmp(type, "multipart/form-data", 19) == 0               ){ // Prefix
+    if (strcmp(type, "application/x-www-form-urlencoded") == 0 || // Exact
+        strncmp(type, "multipart/form-data", 19) == 0          ){ // Prefix
 
         return STATUS_OK;
     }

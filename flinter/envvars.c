@@ -25,7 +25,7 @@ void envvars_filter(const char *prefix)
 
     len = strlen(prefix);
     for (p = environ, q = environ; *p; ++p) {
-        if (memcmp(prefix, *p, len) == 0) {
+        if (strncmp(prefix, *p, len) == 0) {
             *q++ = *p;
         }
     }
@@ -41,7 +41,7 @@ void envvars_filter_out(const char *prefix)
 
     len = strlen(prefix);
     for (p = environ, q = environ; *p; ++p) {
-        if (memcmp(prefix, *p, len)) {
+        if (strncmp(prefix, *p, len)) {
             *q++ = *p;
         }
     }
