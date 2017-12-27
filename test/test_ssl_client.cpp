@@ -15,9 +15,6 @@
 
 #include <gtest/gtest.h>
 
-#include <openssl/err.h>
-#include <openssl/ssl.h>
-
 #include <flinter/linkage/interface.h>
 #include <flinter/linkage/linkage_handler.h>
 #include <flinter/linkage/linkage_peer.h>
@@ -27,6 +24,7 @@
 #include <flinter/linkage/ssl_io.h>
 #include <flinter/linkage/ssl_peer.h>
 #include <flinter/logger.h>
+#include <flinter/openssl.h>
 #include <flinter/signals.h>
 
 static flinter::LinkageWorker *g_worker;
@@ -37,7 +35,7 @@ public:
     virtual ssize_t GetMessageLength(flinter::Linkage *linkage,
                                      const void *buffer, size_t length)
     {
-        return length;
+        return static_cast<ssize_t>(length);
     }
 
     virtual int OnMessage(flinter::Linkage *linkage,
@@ -89,8 +87,7 @@ TEST(sslClient, TestConnect)
     signals_set_handler(SIGQUIT, on_signal_quit);
     signals_set_handler(SIGTERM, on_signal_quit);
 
-    ASSERT_TRUE(SSL_library_init());
-    SSL_load_error_strings();
+    flinter::OpenSSLInitializer openssl_initializer;
 
     flinter::SslContext *ssl = new flinter::SslContext(true);
     ASSERT_TRUE(ssl->SetVerifyPeer(true));
@@ -116,10 +113,4 @@ TEST(sslClient, TestConnect)
     ASSERT_TRUE(worker.Run());
 
     delete ssl;
-
-    SSL_library_cleanup();
-    EVP_cleanup();
-    CRYPTO_cleanup_all_ex_data();
-    ERR_remove_thread_state(NULL);
-    ERR_free_strings();
 }

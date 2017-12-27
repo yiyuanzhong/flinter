@@ -15,9 +15,6 @@
 
 #include <gtest/gtest.h>
 
-#include <openssl/err.h>
-#include <openssl/ssl.h>
-
 #include <flinter/linkage/interface.h>
 #include <flinter/linkage/listener.h>
 #include <flinter/linkage/linkage.h>
@@ -28,6 +25,7 @@
 #include <flinter/linkage/ssl_io.h>
 #include <flinter/linkage/ssl_peer.h>
 #include <flinter/logger.h>
+#include <flinter/openssl.h>
 #include <flinter/signals.h>
 
 static flinter::LinkageHandler *g_handler;
@@ -115,8 +113,7 @@ TEST(sumServer, TestListen)
     signals_set_handler(SIGQUIT, on_signal_quit);
     signals_set_handler(SIGTERM, on_signal_quit);
 
-    ASSERT_TRUE(SSL_library_init());
-    SSL_load_error_strings();
+    flinter::OpenSSLInitializer openssl_initializer;
 
     g_ssl = new flinter::SslContext(false);
     ASSERT_TRUE(g_ssl->SetVerifyPeer(false));
@@ -139,10 +136,4 @@ TEST(sumServer, TestListen)
     ASSERT_TRUE(worker.Run());
 
     delete g_ssl;
-
-    SSL_library_cleanup();
-    EVP_cleanup();
-    CRYPTO_cleanup_all_ex_data();
-    ERR_remove_thread_state(NULL);
-    ERR_free_strings();
 }

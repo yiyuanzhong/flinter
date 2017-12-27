@@ -3,9 +3,6 @@
 #include <stdlib.h>
 #include <string.h>
 
-#include <openssl/err.h>
-#include <openssl/ssl.h>
-
 #include <flinter/linkage/easy_context.h>
 #include <flinter/linkage/easy_handler.h>
 #include <flinter/linkage/easy_server.h>
@@ -14,6 +11,7 @@
 
 #include <flinter/logger.h>
 #include <flinter/msleep.h>
+#include <flinter/openssl.h>
 #include <flinter/signals.h>
 
 class Handler : public flinter::EasyHandler {
@@ -24,7 +22,7 @@ public:
                                      size_t length)
     {
         LOG(INFO) << "Handler: GetMessageLength(" << context.channel() << ")";
-        return length;
+        return static_cast<ssize_t>(length);
     }
 
     virtual int OnMessage(const flinter::EasyContext &context,
@@ -52,8 +50,7 @@ TEST(easyClient, TestSslConnect4)
     flinter::Logger::SetFilter(flinter::Logger::kLevelVerbose);
     signals_ignore(SIGPIPE);
 
-    ASSERT_TRUE(SSL_library_init());
-    SSL_load_error_strings();
+    flinter::OpenSSLInitializer openssl_initializer;
 
     flinter::SslContext *ssl = new flinter::SslContext(false);
     ASSERT_TRUE(ssl->SetVerifyPeer(true));
@@ -79,9 +76,4 @@ TEST(easyClient, TestSslConnect4)
 
     s.Shutdown();
     delete ssl;
-    SSL_library_cleanup();
-    EVP_cleanup();
-    CRYPTO_cleanup_all_ex_data();
-    ERR_remove_thread_state(NULL);
-    ERR_free_strings();
 }
