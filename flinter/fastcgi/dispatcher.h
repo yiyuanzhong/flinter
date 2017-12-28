@@ -27,6 +27,7 @@
 namespace flinter {
 
 class CGI;
+class CustomDispatcher;
 class DefaultHandler;
 class FixedThreadPool;
 class HttpException;
@@ -46,7 +47,11 @@ public:
     const std::string &site_root() { return _site_root; }
     const Mode &mode() { return _mode; }
 
+    // Must be in format of "/" or "/some/path/"
     static void set_site_root(const std::string &site_root);
+
+    // Life span taken
+    static void set_custom_dispatcher(CustomDispatcher *custom_dispatcher);
 
     // Should Dispatcher capture signals internally?
     // If not, call Dispatcher::on_sigterm() when you receive terminating signals, and try
@@ -92,6 +97,7 @@ public:
 
 private:
     class Worker;
+    class PassthroughDispatcher;
 
     static int   EmulatedRead   (void *context, char *buf, int buf_len);
     static int   EmulatedWrite  (void *context, const char *buf, int buf_len);
@@ -107,6 +113,7 @@ private:
     void ProcessException(const CGI *cgi, const HttpException &e);
     void InitializeClearSilverForFastCGI();
     void InitializeFastCGI();
+    CGI *GetDefaultHandler();
     bool DispatchRequest();
     CGI *GetHandler();
 
@@ -120,6 +127,7 @@ private:
     static const std::map<std::string, const Factory<CGI> *> kSystemFactories;
     std::map<std::string, const Factory<CGI> *> _factories;
     const Factory<DefaultHandler> *_default_factory;
+    CustomDispatcher *_custom_dispatcher;
     std::string _site_root;
     int _listen_fd;
     Mode _mode;

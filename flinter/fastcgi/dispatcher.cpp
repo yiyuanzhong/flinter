@@ -29,6 +29,7 @@
 #include <fcgiapp.h>
 
 #include "flinter/fastcgi/cgi.h"
+#include "flinter/fastcgi/custom_dispatcher.h"
 #include "flinter/fastcgi/default_handlers.h"
 #include "flinter/fastcgi/http_exception.h"
 #include "flinter/thread/fixed_thread_pool.h"
@@ -55,6 +56,17 @@ const std::map<std::string, const Factory<CGI> *> Dispatcher::kSystemFactories(
 bool Dispatcher::_handle_signals_internally = true;
 bool Dispatcher::_single_handler_mode = true;
 bool Dispatcher::_run = true;
+
+class Dispatcher::PassthroughDispatcher : public CustomDispatcher {
+public:
+    virtual ~PassthroughDispatcher() {}
+
+    virtual std::string RequestUriToHandlerPath(const std::string &request_uri)
+    {
+        return request_uri.substr(0, request_uri.find('?'));
+    }
+
+}; // class Dispatcher::PassThroughDispatcher
 
 class Dispatcher::Worker : public Runnable {
 public:
@@ -96,11 +108,26 @@ private:
 
 }; // class Dispatcher::Worker
 
+void Dispatcher::set_custom_dispatcher(CustomDispatcher *custom_dispatcher)
+{
+    if (!custom_dispatcher) {
+        throw std::invalid_argument("invalid custom dispatcher specified");
+    }
+
+    Dispatcher *const dispatcher = GetInstance();
+    delete dispatcher->_custom_dispatcher;
+    dispatcher->_custom_dispatcher = custom_dispatcher;
+}
+
 void Dispatcher::set_site_root(const std::string &site_root)
 {
-    assert(!site_root.empty());
-    assert(site_root[0] == '/');
-    assert(site_root[site_root.length() - 1] == '/');
+    if (site_root.empty()                        ||
+        site_root[0] != '/'                      ||
+        site_root[site_root.length() - 1] != '/' ){
+
+        throw std::invalid_argument("invalid site root specified");
+    }
+
     GetInstance()->_site_root = site_root;
 }
 
@@ -134,6 +161,7 @@ int Dispatcher::main(int argc, char *argv[])
 }
 
 Dispatcher::Dispatcher() : _default_factory(&g_default_factory)
+                         , _custom_dispatcher(new PassthroughDispatcher)
                          , _site_root("/")
                          , _listen_fd(STDIN_FILENO)
                          , _mode(kModeAutomatic)
@@ -145,6 +173,7 @@ Dispatcher::Dispatcher() : _default_factory(&g_default_factory)
 
 Dispatcher::~Dispatcher()
 {
+    delete _custom_dispatcher;
     delete _sfc_pool;
     delete _sfc_tls;
 }
@@ -371,30 +400,45 @@ CGI *Dispatcher::GetHandler()
         return NULL;
     }
 
-    char *qmark = strchr(path, '?');
+    char *const qmark = strchr(path, '?');
     if (qmark) {
         *qmark = '\0';
     }
 
-    std::string rpath = path;
-    free(path);
-
-    if (rpath.length() >= _site_root.length()                   &&
-        rpath.compare(0, _site_root.length(), _site_root) == 0  ){
-
-        std::map<std::string, const Factory<CGI> *>::const_iterator p;
-        rpath = rpath.substr(_site_root.length() - 1);
-        p = _factories.find(rpath);
-        if (p != _factories.end()) {
-            return p->second->Create();
-        }
-
-        p = kSystemFactories.find(rpath);
-        if (p != kSystemFactories.end()) {
-            return p->second->Create();
-        }
+    if (strncmp(path, _site_root.data(), _site_root.length())) {
+        free(path);
+        return GetDefaultHandler();
     }
 
+    const char *const rpath = path + _site_root.length() - 1;
+    const std::map<std::string, const Factory<CGI> *>::const_iterator
+            p = kSystemFactories.find(rpath);
+
+    if (p != kSystemFactories.end()) {
+        return p->second->Create();
+    }
+
+    if (qmark) {
+        *qmark = '?';
+    }
+
+    std::string uri = _custom_dispatcher->RequestUriToHandlerPath(rpath);
+    if (uri.empty()) {
+        return GetDefaultHandler();
+    }
+
+    const std::map<std::string, const Factory<CGI> *>::const_iterator
+            q = _factories.find(uri);
+
+    if (q != _factories.end()) {
+        return q->second->Create();
+    }
+
+    return GetDefaultHandler();
+}
+
+CGI *Dispatcher::GetDefaultHandler()
+{
     // It's not known to me!
     DefaultHandler *handler = _default_factory->Create();
     handler->set_status_code(404);

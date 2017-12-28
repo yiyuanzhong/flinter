@@ -227,6 +227,7 @@ endif
 if WITH_FASTCGI
 include_fastcgi_HEADERS = fastcgi/cgi.h \
                           fastcgi/common_filters.h \
+                          fastcgi/custom_dispatcher.h \
                           fastcgi/default_handlers.h \
                           fastcgi/dispatcher.h \
                           fastcgi/filter.h \
