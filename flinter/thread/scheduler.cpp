@@ -62,6 +62,10 @@ bool Scheduler::SetScheduler(const std::string &policy, int priority)
 
 bool Scheduler::SetAffinity(int affinity)
 {
+    if (affinity < 0) {
+        return false;
+    }
+
     std::vector<int> a(1);
     a[0] = affinity;
     return SetAffinity(a);
