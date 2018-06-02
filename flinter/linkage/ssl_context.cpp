@@ -15,12 +15,26 @@
 
 #include "flinter/linkage/ssl_context.h"
 
+#include <vector>
+
+#include "flinter/logger.h"
+
 #include "config.h"
 #if HAVE_OPENSSL_OPENSSLV_H
+#include <openssl/evp.h>
+#include <openssl/rand.h>
 #include <openssl/ssl.h>
 #include <openssl/ssl23.h>
 
 namespace flinter {
+
+int SslContext::_tls_ticket_key_index = -1;
+typedef struct {
+    unsigned char hmac[32];
+    unsigned char ekey[32];
+    unsigned char name[16];
+    size_t bits;
+} key_t;
 
 SslContext::SslContext(bool enhanced_security)
         : _context(NULL)
@@ -31,9 +45,20 @@ SslContext::SslContext(bool enhanced_security)
 
 SslContext::~SslContext()
 {
-    if (_context) {
-        SSL_CTX_free(_context);
+    if (!_context) {
+        return;
     }
+
+    std::vector<key_t> *const keys =
+            reinterpret_cast<std::vector<key_t> *>(
+                    SSL_CTX_get_ex_data(_context, _tls_ticket_key_index));
+
+    if (keys) {
+        delete keys;
+        SSL_CTX_set_ex_data(_context, _tls_ticket_key_index, NULL);
+    }
+
+    SSL_CTX_free(_context);
 }
 
 bool SslContext::Initialize()
@@ -360,6 +385,188 @@ bool SslContext::SetAllowTlsTicket(bool allow)
     }
 
     return true;
+}
+
+ssize_t SslContext::LoadFile(
+        const std::string &filename,
+        void *buffer, size_t length)
+{
+    FILE *fp = fopen(filename.c_str(), "rb");
+    if (!fp) {
+        return -1;
+    }
+
+    if (fseek(fp, 0, SEEK_END)) {
+        fclose(fp);
+        return -1;
+    }
+
+    long size = ftell(fp);
+    if (size < 0 || static_cast<size_t>(size) > length) {
+        fclose(fp);
+        return -1;
+    }
+
+    if (fseek(fp, 0, SEEK_SET)) {
+        fclose(fp);
+        return -1;
+    }
+
+    size_t ret = fread(buffer, 1, static_cast<size_t>(size), fp);
+    if (ret != static_cast<size_t>(size)) {
+        fclose(fp);
+        return -1;
+    }
+
+    fclose(fp);
+    return size;
+}
+
+bool SslContext::LoadTlsTicketKey(const std::string &filename)
+{
+    if (filename.empty()) {
+        return false;
+    } else if (!Initialize()) {
+        return false;
+    }
+
+    char buffer[128];
+    ssize_t ret = LoadFile(filename, buffer, sizeof(buffer));
+    if (ret != 48 && ret != 80) {
+        return false;
+    }
+
+    // Initializing static data, a mutex shall be implemented but it's usually
+    // not necessary and will slow down every session establishing.
+    if (_tls_ticket_key_index < 0) {
+        _tls_ticket_key_index = SSL_CTX_get_ex_new_index(0, NULL, NULL, NULL, NULL);
+        if (_tls_ticket_key_index < 0) {
+            return false;
+        }
+    }
+    // End of initializing static data
+
+    std::vector<key_t> *keys =
+            reinterpret_cast<std::vector<key_t> *>(
+                    SSL_CTX_get_ex_data(_context, _tls_ticket_key_index));
+
+    if (!keys) {
+        keys = new std::vector<key_t>;
+        if (SSL_CTX_set_ex_data(_context, _tls_ticket_key_index, keys) != 1) {
+            delete keys;
+            return false;
+        }
+
+        // keys are kept in context and destroyed in dtor.
+        if (SSL_CTX_set_tlsext_ticket_key_cb(_context, TlsTicketKeyCallback) != 1) {
+            return false;
+        }
+    }
+
+    key_t key;
+    if (ret == 48) {
+        key.bits = 128;
+        memcpy(key.name, buffer +  0, 16);
+        memcpy(key.hmac, buffer + 16, 16);
+        memcpy(key.ekey, buffer + 32, 16);
+    } else {
+        key.bits = 256;
+        memcpy(key.name, buffer +  0, 16);
+        memcpy(key.hmac, buffer + 16, 32);
+        memcpy(key.ekey, buffer + 48, 32);
+    }
+
+    keys->push_back(key);
+    return true;
+}
+
+int SslContext::TlsTicketKeyCallback(
+        SSL *s,
+        unsigned char *key_name,
+        unsigned char *iv,
+        EVP_CIPHER_CTX *ctx,
+        HMAC_CTX *hctx,
+        int enc)
+{
+#ifdef OPENSSL_NO_SHA256
+    const EVP_MD *const digest = EVP_sha1();
+#else
+    const EVP_MD *const digest = EVP_sha256();
+#endif
+
+    SSL_CTX *const context = SSL_get_SSL_CTX(s);
+    const std::vector<key_t> *const keys =
+            reinterpret_cast<std::vector<key_t> *>(
+                    SSL_CTX_get_ex_data(context, _tls_ticket_key_index));
+
+    if (!keys || keys->empty()) {
+        CLOG.Error("SSL: BUG session ticket keys are not set");
+        return -1;
+    }
+
+    if (enc) {
+        const key_t *const key = &keys->at(0);
+        const EVP_CIPHER *cipher;
+        int size;
+
+        if (key->bits == 128) {
+            cipher = EVP_aes_128_cbc();
+            size = 16;
+        } else {
+            cipher = EVP_aes_256_cbc();
+            size = 32;
+        }
+
+        if (RAND_bytes(iv, EVP_CIPHER_iv_length(cipher))         != 1 ||
+            EVP_EncryptInit_ex(ctx, cipher, NULL, key->ekey, iv) != 1 ||
+            HMAC_Init_ex(hctx, key->hmac, size, digest, NULL)    != 1 ){
+
+            return -1;
+        }
+
+        memcpy(key_name, key->name, 16);
+        CLOG.Verbose("SSL: new session ticket generated");
+        return 1;
+
+    } else {
+        const key_t *key;
+        bool found = false;
+        bool renew = false;
+        for (std::vector<key_t>::const_iterator p = keys->begin(); p != keys->end(); ++p) {
+            if (memcmp(key_name, p->name, 16) == 0) {
+                found = true;
+                key = &*p;
+                break;
+            }
+
+            renew = true;
+        }
+
+        if (!found) {
+            CLOG.Verbose("SSL: session ticket key name is not found");
+            return 0;
+        }
+
+        const EVP_CIPHER *cipher;
+        int size;
+
+        if (key->bits == 128) {
+            cipher = EVP_aes_128_cbc();
+            size = 16;
+        } else {
+            cipher = EVP_aes_256_cbc();
+            size = 32;
+        }
+
+        if (HMAC_Init_ex(hctx, key->hmac, size, digest, NULL)    != 1 ||
+            EVP_DecryptInit_ex(ctx, cipher, NULL, key->ekey, iv) != 1 ){
+
+            return -1;
+        }
+
+        CLOG.Verbose("SSL: session ticket %s", renew ? "needs renewal" : "accepted");
+        return renew ? 2 : 1;
+    }
 }
 
 } // namespace flinter

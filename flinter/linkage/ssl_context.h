@@ -18,7 +18,10 @@
 
 #include <string>
 
+struct evp_cipher_ctx_st;
+struct hmac_ctx_st;
 struct ssl_ctx_st;
+struct ssl_st;
 
 namespace flinter {
 
@@ -38,15 +41,36 @@ public:
     bool AddTrustedCACertificate(const std::string &filename);
     bool LoadPrivateKey(const std::string &filename, const std::string &passphrase);
 
+    // Key format and rotation are compatible with nginx: first loaded file
+    // will be used for signing new tickets, while others can be used to
+    // decrypt tickets.
+    //
+    // Must protect with a global mutex since it's using static data.
+    // Usually this method is called at beginning of application so it's fine.
+    //
+    // To generate a key file:
+    // openssl rand 80 > ticket.key
+    bool LoadTlsTicketKey(const std::string &filename);
+
     struct ssl_ctx_st *context()
     {
         return _context;
     }
 
 private:
+    static int TlsTicketKeyCallback(
+            struct ssl_st *s,
+            unsigned char *key_name,
+            unsigned char *iv,
+            evp_cipher_ctx_st *ctx,
+            hmac_ctx_st *hctx,
+            int enc);
+
+    static ssize_t LoadFile(const std::string &filename, void *buffer, size_t length);
     static int PasswordCallback(char *buf, int size, int rwflag, void *userdata);
     bool Initialize();
 
+    static int _tls_ticket_key_index;
     struct ssl_ctx_st *_context;
     bool _enhanced_security;
 

@@ -160,13 +160,16 @@ TEST(sumServer, TestSslListen)
     flinter::OpenSSLInitializer openssl_initializer;
 
     flinter::SslContext *ssl = new flinter::SslContext(false);
-    ASSERT_TRUE(ssl->SetVerifyPeer(true));
+    //ASSERT_TRUE(ssl->SetVerifyPeer(true));
     ASSERT_TRUE(ssl->AddTrustedCACertificate("ssl.pem"));
+    ASSERT_TRUE(ssl->LoadDHParam("dh.pem"));
     ASSERT_TRUE(ssl->LoadCertificate("ssl.pem"));
     ASSERT_TRUE(ssl->LoadPrivateKey("ssl.key","1234"));
     ASSERT_TRUE(ssl->VerifyPrivateKey());
-    ASSERT_TRUE(ssl->SetSessionIdContext("helloWORLD"));
-    ASSERT_TRUE(ssl->SetSessionTimeout(60));
+    //ASSERT_TRUE(ssl->SetSessionIdContext("helloWORLD"));
+    ASSERT_TRUE(ssl->SetSessionTimeout(600));
+    ASSERT_TRUE(ssl->SetAllowTlsTicket(true));
+    ASSERT_TRUE(ssl->LoadTlsTicketKey("ticket.key"));
 
     Factory factory("1");
     Handler handler("2");
