@@ -154,6 +154,10 @@ bool SslContext::Initialize()
         return false;
     }
 
+    // Disable session resumptions by default to provide maximum security.
+    SSL_CTX_set_session_cache_mode(_context, SSL_SESS_CACHE_OFF);
+    SSL_CTX_set_options(_context, SSL_OP_NO_TICKET);
+
     // It's known vulnerable.
     SSL_CTX_set_options(_context, SSL_OP_NO_SSLv2);
     SSL_CTX_set_options(_context, SSL_OP_NO_SSLv3);
@@ -350,6 +354,7 @@ bool SslContext::SetSessionIdContext(const std::string &context)
         return false;
     }
 
+    SSL_CTX_set_session_cache_mode(_context, SSL_SESS_CACHE_SERVER);
     if (SSL_CTX_set_session_id_context(_context,
             reinterpret_cast<const unsigned char *>(context.data()),
             static_cast<unsigned int>(context.length())) != 1) {
