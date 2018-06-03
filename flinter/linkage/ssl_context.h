@@ -41,6 +41,11 @@ public:
     bool AddTrustedCACertificate(const std::string &filename);
     bool LoadPrivateKey(const std::string &filename, const std::string &passphrase);
 
+    // Using this method is strongly OPPOSED, again, DO NOT USE THIS UNLESS
+    // YOU KNOW WHAT YOU'RE DOING. Using static session ticket key invalidates
+    // perfect forward secrecy since all PFS negotiated keys are ultimately
+    // encrypted by static keys.
+    //
     // Key format and rotation are compatible with nginx: first loaded file
     // will be used for signing new tickets, while others can be used to
     // decrypt tickets.
