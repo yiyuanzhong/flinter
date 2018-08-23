@@ -381,7 +381,6 @@ int pclose_timed(struct __popen_t *handle, int timeout)
     pid = handle->pid;
     free(handle);
     if (pid <= 1) {
-        free(handle);
         errno = EINVAL;
         return -1;
     }
