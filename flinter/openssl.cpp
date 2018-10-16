@@ -29,6 +29,7 @@
 
 namespace flinter {
 
+#if HAVE_OPENSSL_OPENSSLV_H
 static Mutex *g_mutex = NULL;
 
 static void Locking(int mode, int n, const char *, int)
@@ -39,6 +40,7 @@ static void Locking(int mode, int n, const char *, int)
         g_mutex[n].Unlock();
     }
 }
+#endif // HAVE_OPENSSL_OPENSSLV_H
 
 OpenSSLInitializer::OpenSSLInitializer() : _initialized(false)
 {
