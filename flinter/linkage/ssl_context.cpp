@@ -94,22 +94,22 @@ bool SslContext::Initialize()
         return true;
     }
 
-    const SSL_METHOD *method;
-    const char *ciphers = NULL;
-    if (_enhanced_security) {
-        method = TLSv1_2_method();
-        ciphers = "ECDH+AESGCM:DH+AESGCM:"
-                  "ECDH+AES:DH+AES:"
-                  "!AES256:!SHA:!MD5:!DSS:!aNULL:!eNULL";
+#if OPENSSL_VERSION_NUMBER >= 0x10100000L
+    const SSL_METHOD *const method = TLS_method();
+#else
+    const SSL_METHOD *const method =
+            _enhanced_security ? TLSv1_2_method() : SSLv23_method();
+#endif
 
-    } else {
-        method = SSLv23_method();
-        ciphers = "ECDH+AESGCM:DH+AESGCM:"
-                  "ECDH+AES:DH+AES:"
-                  "ECDH+3DES:DH+3DES:"
-                  "kRSA+AESGCM:kRSA+AES:kRSA+3DES:"
-                  "!AES256:!MD5:!DSS:!aNULL:!eNULL";
-    }
+    const char *const ciphers = _enhanced_security
+            ? "ECDH+AESGCM:DH+AESGCM:"
+              "ECDH+AES:DH+AES:"
+              "!AES256:!SHA:!MD5:!DSS:!aNULL:!eNULL"
+            : "ECDH+AESGCM:DH+AESGCM:"
+              "ECDH+AES:DH+AES:"
+              "ECDH+3DES:DH+3DES:"
+              "kRSA+AESGCM:kRSA+AES:kRSA+3DES:"
+              "!AES256:!MD5:!DSS:!aNULL:!eNULL";
 
     const unsigned char *dhparam = kDefaultDHParam;
     DH *dh = d2i_DHparams(NULL, &dhparam, sizeof(kDefaultDHParam));
@@ -153,9 +153,20 @@ bool SslContext::Initialize()
     SSL_CTX_set_session_cache_mode(_context, SSL_SESS_CACHE_OFF);
     SSL_CTX_set_options(_context, SSL_OP_NO_TICKET);
 
-    // It's known vulnerable.
+#if OPENSSL_VERSION_NUMBER >= 0x10100000L
+    if (SSL_CTX_set_min_proto_version(_context,
+            _enhanced_security ? TLS1_2_VERSION : TLS1_VERSION) != 1) {
+
+        SSL_CTX_free(_context);
+        _context = NULL;
+        return false;
+    }
+#else
     SSL_CTX_set_options(_context, SSL_OP_NO_SSLv2);
     SSL_CTX_set_options(_context, SSL_OP_NO_SSLv3);
+#endif
+
+    // It's known vulnerable.
     SSL_CTX_set_options(_context, SSL_OP_NO_COMPRESSION);
 
     // Always use ephemeral keys.

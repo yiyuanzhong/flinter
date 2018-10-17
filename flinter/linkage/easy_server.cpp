@@ -42,6 +42,7 @@
 #include "flinter/types/shared_ptr.h"
 
 #include "flinter/explode.h"
+#include "flinter/openssl.h"
 #include "flinter/runnable.h"
 #include "flinter/logger.h"
 #include "flinter/utility.h"
@@ -434,6 +435,8 @@ public:
 
 bool EasyServer::ProxyLinkageWorker::OnInitialize()
 {
+    OpenSSLInitializer::InitializeThread();
+
     if (!Scheduler::SetAffinity(_affinities)) {
         return false;
     }
@@ -451,10 +454,7 @@ void EasyServer::ProxyLinkageWorker::OnShutdown()
         _tuner->OnIoThreadShutdown();
     }
 
-#if HAVE_OPENSSL_OPENSSLV_H
-    // Every thread should call this before terminating.
-    ERR_remove_thread_state(NULL);
-#endif
+    OpenSSLInitializer::ShutdownThread();
 }
 
 EasyServer::JobWorker::Job::Job(const shared_ptr<EasyContext> &context,
@@ -550,6 +550,8 @@ LinkageBase *EasyServer::ProxyListener::CreateLinkage(LinkageWorker *worker,
 
 bool EasyServer::JobWorker::Run()
 {
+    OpenSSLInitializer::InitializeThread();
+
     if (!Scheduler::SetAffinity(_affinities)) {
         LOG(ERROR) << "EasyServer: failed to set thread affinities.";
         throw std::runtime_error("EasyServer: failed to set thread affinities.");
@@ -578,11 +580,7 @@ bool EasyServer::JobWorker::Run()
         _easy_tuner->OnJobThreadShutdown();
     }
 
-#if HAVE_OPENSSL_OPENSSLV_H
-    // Every thread should call this before terminating.
-    ERR_remove_thread_state(NULL);
-#endif
-
+    OpenSSLInitializer::ShutdownThread();
     return true;
 }
 

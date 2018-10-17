@@ -21,15 +21,30 @@
 #include "flinter/utility.h"
 
 #include "config.h"
+
 #if HAVE_OPENSSL_OPENSSLV_H
+#include <openssl/opensslv.h>
+#if OPENSSL_VERSION_NUMBER >= 0x10100000L
+#define OpenSSL_modern 1
+#define OpenSSL_legacy 0
+#else
+#define OpenSSL_modern 0
+#define OpenSSL_legacy 1
+#endif
+#else
+#define OpenSSL_modern 0
+#define OpenSSL_legacy 0
+#endif
+
+#if OpenSSL_modern || OpenSSL_legacy
 #include <openssl/err.h>
 #include <openssl/evp.h>
 #include <openssl/ssl.h>
-#endif // HAVE_OPENSSL_OPENSSLV_H
+#endif
 
 namespace flinter {
 
-#if HAVE_OPENSSL_OPENSSLV_H
+#if OpenSSL_legacy
 static Mutex *g_mutex = NULL;
 
 static void Locking(int mode, int n, const char *, int)
@@ -40,25 +55,12 @@ static void Locking(int mode, int n, const char *, int)
         g_mutex[n].Unlock();
     }
 }
-#endif // HAVE_OPENSSL_OPENSSLV_H
+#endif // OpenSSL_legacy
 
 OpenSSLInitializer::OpenSSLInitializer() : _initialized(false)
 {
-#if HAVE_OPENSSL_OPENSSLV_H
-    OpenSSL_add_all_algorithms();
-    int locks = CRYPTO_num_locks();
-    if (locks > 0) {
-        g_mutex = new Mutex[locks];
-        CRYPTO_set_locking_callback(Locking);
-    }
-
-    if (!SSL_library_init()) {
-        throw std::runtime_error("SSL_library_init()");
-    }
-
-    SSL_load_error_strings();
+    InitializeProcess();
     _initialized = true;
-#endif // HAVE_OPENSSL_OPENSSLV_H
 }
 
 OpenSSLInitializer::~OpenSSLInitializer()
@@ -72,19 +74,60 @@ void OpenSSLInitializer::Shutdown()
         return;
     }
 
-#if HAVE_OPENSSL_OPENSSLV_H
+    ShutdownProcess();
+    _initialized = false;
+}
+
+void OpenSSLInitializer::InitializeProcess()
+{
+#if OpenSSL_modern || OpenSSL_legacy
+    OpenSSL_add_all_algorithms();
+
+#if OpenSSL_legacy
+    int locks = CRYPTO_num_locks();
+    if (locks > 0) {
+        g_mutex = new Mutex[locks];
+        CRYPTO_set_locking_callback(Locking);
+    }
+#endif
+
+    if (!SSL_library_init()) {
+        throw std::runtime_error("SSL_library_init()");
+    }
+
+    SSL_load_error_strings();
+#endif
+}
+
+void OpenSSLInitializer::ShutdownProcess()
+{
+    ShutdownThread();
+
+#if OpenSSL_modern || OpenSSL_legacy
 #if HAVE_SSL_LIBRARY_CLEANUP
     SSL_library_cleanup();
 #endif
+
     EVP_cleanup();
     CRYPTO_cleanup_all_ex_data();
-    ERR_remove_thread_state(NULL);
     ERR_free_strings();
 
+#if OpenSSL_legacy
     delete [] g_mutex;
     g_mutex = NULL;
+#endif
+#endif
+}
 
-    _initialized = false;
+void OpenSSLInitializer::InitializeThread()
+{
+    // Nothing to do
+}
+
+void OpenSSLInitializer::ShutdownThread()
+{
+#if OpenSSL_legacy
+    ERR_remove_thread_state(NULL);
 #endif // HAVE_OPENSSL_OPENSSLV_H
 }
 

@@ -29,6 +29,12 @@ public:
 
     void Shutdown();
 
+    static void InitializeProcess();
+    static void ShutdownProcess();
+
+    static void InitializeThread();
+    static void ShutdownThread();
+
 private:
     bool _initialized;
 
