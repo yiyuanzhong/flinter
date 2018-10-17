@@ -35,7 +35,11 @@
  * Recent enough Linux kernel supports openat() family methods which are
  * preferred when available, use old school method otherwise.
  */
-#define RMDIRS_COMPAT (!(defined(AT_FDCWD) && HAVE_OPENAT && HAVE_FDOPENDIR))
+#if !defined(AT_FDCWD) && HAVE_OPENAT && HAVE_FDOPENDIR
+#define RMDIRS_COMPAT 1
+#else
+#define RMDIRS_COMPAT 0
+#endif
 
 /*
  * On linux, there is a kernel bug that will lead inode numbers in tmpfs
@@ -43,7 +47,11 @@
  * will failed since the directory is not empty. So here I use syscall
  * getdents() to avoid this bug.
  */
-#define RMDIRS_GETDENTS defined(SYS_getdents)
+#if defined(SYS_getdents)
+#define RMDIRS_GETDENTS 1
+#else
+#define RMDIRS_GETDENTS 0
+#endif
 
 #if RMDIRS_GETDENTS
 static volatile sig_atomic_t g_disable_getdents = 0;

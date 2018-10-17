@@ -61,14 +61,14 @@ int main(int argc, char *argv[])
     // Initialize XML.
     if (!flinter::Xml::Initialize()) {
         fprintf(stderr, "Failed to initialize libxml2.\n");
-        return false;
+        return EXIT_FAILURE;
     }
 #endif
 
     // Initialize FastCGI.
     if (FCGX_Init()) {
         fprintf(stderr, "Failed to initialize FastCGI.\n");
-        return false;
+        return EXIT_FAILURE;
     }
 
     // Initialize ClearSilver.

@@ -26,7 +26,6 @@
 #include <openssl/evp.h>
 #include <openssl/rand.h>
 #include <openssl/ssl.h>
-#include <openssl/ssl23.h>
 
 namespace flinter {
 

@@ -64,15 +64,15 @@ static inline void Set(struct sockaddr_in6 *addr, uint16_t port)
 
 class Less {
 public:
-    bool operator()(const struct in_addr &a, const struct in_addr &b)
+    bool operator()(const struct in_addr &a, const struct in_addr &b) const
     {
         return a.s_addr < b.s_addr;
     }
-    bool operator()(const struct in6_addr &a, const struct in6_addr &b)
+    bool operator()(const struct in6_addr &a, const struct in6_addr &b) const
     {
         return memcmp(&a, &b, sizeof(struct in6_addr)) < 0;
     }
-}; // class Less4
+}; // class Less
 
 template <class T, class A>
 void Resolver::Cache<T, A>::Set(struct addrinfo *res)
