@@ -415,6 +415,7 @@ CGI *Dispatcher::GetHandler()
             p = kSystemFactories.find(rpath);
 
     if (p != kSystemFactories.end()) {
+        free(path);
         return p->second->Create();
     }
 
@@ -423,6 +424,8 @@ CGI *Dispatcher::GetHandler()
     }
 
     std::string uri = _custom_dispatcher->RequestUriToHandlerPath(rpath);
+    free(path);
+
     if (uri.empty()) {
         return GetDefaultHandler();
     }
