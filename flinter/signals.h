@@ -41,6 +41,11 @@ extern int signals_ignore_some (int signum, ...);
 extern int signals_default_some(int signum, ...);
 extern int signals_unblock_some(int signum, ...);
 
+extern int signals_block_all_except  (int signum, ...);
+extern int signals_ignore_all_except (int signum, ...);
+extern int signals_default_all_except(int signum, ...);
+extern int signals_unblock_all_except(int signum, ...);
+
 extern int signals_set_handler(int signum, void (*handler)(int));
 extern int signals_set_action(int signum, void (*action)(int, siginfo_t *, void *));
 
