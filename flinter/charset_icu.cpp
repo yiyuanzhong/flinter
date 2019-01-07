@@ -25,10 +25,10 @@ namespace flinter {
 namespace {
 
 template <class F>
-int charset_icu_load(const F &input,
-                     AutoBuffer<UChar> *output,
-                     const char *encoding,
-                     size_t *length)
+static int charset_icu_load(const F &input,
+                            AutoBuffer<UChar> *output,
+                            const char *encoding,
+                            size_t *length)
 {
     UConverter *conv;
     UErrorCode error;
@@ -77,10 +77,10 @@ int charset_icu_load(const F &input,
 }
 
 template <class T>
-int charset_icu_save(const AutoBuffer<UChar> &input,
-                     T *output,
-                     const char *encoding,
-                     size_t length)
+static int charset_icu_save(const AutoBuffer<UChar> &input,
+                            T *output,
+                            const char *encoding,
+                            size_t length)
 {
     UConverter *conv;
     UErrorCode error;
@@ -130,10 +130,10 @@ int charset_icu_save(const AutoBuffer<UChar> &input,
 }
 
 template <class F, class T>
-int charset_icu(const F &input,
-                T *output,
-                const char *from,
-                const char *to)
+static int charset_icu(const F &input,
+                       T *output,
+                       const char *from,
+                       const char *to)
 {
     assert(from && *from);
     assert(to && *to);
