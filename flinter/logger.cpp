@@ -86,7 +86,7 @@ static bool DoProcessAttach(const std::string &filename)
     }
 
     // Create file with permission 0666, umask applies.
-    int fd = open(filename.c_str(),
+    int fd = open(file.c_str(),
                   O_CREAT | O_APPEND | O_WRONLY | O_NOFOLLOW | O_NOCTTY,
                   S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP | S_IROTH | S_IWOTH);
 
