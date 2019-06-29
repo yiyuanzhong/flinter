@@ -154,9 +154,11 @@ static bool Write(time_t now, const void *buffer, size_t length)
     return static_cast<size_t>(sret) == length;
 }
 
-static bool Log(const Logger::Level &level,
-                const char *file, int line,
-                const char *format, va_list va)
+} // anonymous namespace
+
+bool CLogger::VLog(int level,
+                   const char *file, int line,
+                   const char *format, va_list va)
 {
     if (level > g_filter) {
         return true;
@@ -291,18 +293,16 @@ static bool Log(const Logger::Level &level,
     return Write(tv.tv_sec, buffer, ret);
 }
 
-static bool Log(const Logger::Level &level,
-                const char *file, int line,
-                const char *format, ...)
+bool CLogger::Log(int level,
+                  const char *file, int line,
+                  const char *format, ...)
 {
     va_list va;
     va_start(va, format);
-    bool ret = Log(level, file, line, format, va);
+    bool ret = VLog(level, file, line, format, va);
     va_end(va);
     return ret;
 }
-
-} // anonymous namespace
 
 void CLogger::SetWithFilename(bool with_filename)
 {
@@ -365,7 +365,7 @@ void CLogger::ThreadDetach()
 bool CLogger::name(const char *format, ...) { \
     va_list va; \
     va_start(va, format); \
-    bool ret = Log(kLevel##level, _file, _line, format, va); \
+    bool ret = VLog(kLevel##level, _file, _line, format, va); \
     va_end(va); \
     return ret; \
 }

@@ -46,6 +46,14 @@ public:
     bool Warning(const char *format, ...) __attribute__ ((format (printf, 2, 3)));
     bool Verbose(const char *format, ...) __attribute__ ((format (printf, 2, 3)));
 
+    static bool VLog(int level,
+                     const char *file, int line,
+                     const char *format, va_list ap);
+
+    static bool Log(int level,
+                    const char *file, int line,
+                    const char *format, ...);
+
     static bool IsFiltered(int level);
     static void SetFilter(int filter_level);
 
