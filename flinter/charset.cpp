@@ -30,13 +30,13 @@ int charset_utf8_to_json(const std::string &utf, std::string *json)
     }
 
     json->clear();
-    std::basic_string<uint16_t> w;
-    if (charset_utf8_to_utf16(utf, &w)) {
+    std::basic_string<uint32_t> w;
+    if (charset_utf8_to_utf32(utf, &w)) {
         return -1;
     }
 
     char buffer[8];
-    for (std::basic_string<uint16_t>::const_iterator p = w.begin();
+    for (std::basic_string<uint32_t>::const_iterator p = w.begin();
          p != w.end(); ++p) {
 
         switch (*p) {
