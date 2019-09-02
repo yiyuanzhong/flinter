@@ -24,6 +24,7 @@
 #include <unistd.h>
 
 #include <iostream>
+#include <stdexcept>
 
 #include <ClearSilver/ClearSilver.h>
 #include <fcgiapp.h>
