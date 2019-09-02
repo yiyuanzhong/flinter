@@ -24,6 +24,9 @@
 #include <set>
 #include <string>
 
+// TODO(yiyuanzhong): hide this header so the implementation can choose to use
+//                    sync/async underlying APIs.
+#define THREADED
 #include <zookeeper/zookeeper.h>
 
 #include <flinter/thread/mutex.h>

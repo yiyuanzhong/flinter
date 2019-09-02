@@ -22,8 +22,6 @@
 
 #include <vector>
 
-#include <zookeeper/zookeeper.h>
-
 #include "flinter/thread/mutex_locker.h"
 #include "flinter/common.h"
 #include "flinter/logger.h"
