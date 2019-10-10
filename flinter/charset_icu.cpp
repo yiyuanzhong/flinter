@@ -193,6 +193,16 @@ CHARSET(gbk,     utf8,    "GBK",     "UTF-8"  );
 CHARSET(utf8,    gb18030, "UTF-8",   "GB18030");
 CHARSET(gb18030, utf8,    "GB18030", "UTF-8"  );
 
+CHARSET(utf8, utf16be, "UTF-8", "UTF-16BE");
+CHARSET(utf8, utf16le, "UTF-8", "UTF-16LE");
+CHARSET(utf8, utf32be, "UTF-8", "UTF-32BE");
+CHARSET(utf8, utf32le, "UTF-8", "UTF-32LE");
+
+CHARSET(utf16be, utf8, "UTF-16BE", "UTF-8");
+CHARSET(utf16le, utf8, "UTF-16LE", "UTF-8");
+CHARSET(utf32be, utf8, "UTF-32BE", "UTF-8");
+CHARSET(utf32le, utf8, "UTF-32LE", "UTF-8");
+
 CHARSET_O(uint16_t, utf8,  utf16, "UTF-8", "UTF16_PlatformEndian");
 CHARSET_O(uint32_t, utf8,  utf32, "UTF-8", "UTF32_PlatformEndian");
 CHARSET_I(uint16_t, utf16, utf8,  "UTF16_PlatformEndian", "UTF-8");

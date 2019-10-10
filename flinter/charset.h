@@ -42,6 +42,16 @@ extern int charset_gb18030_to_utf8(const std::string &gb, std::string *u8);
 extern int charset_utf8_to_gbk(const std::string &u8, std::string *gb);
 extern int charset_gbk_to_utf8(const std::string &gb, std::string *u8);
 
+extern int charset_utf8_to_utf16be(const std::string &i, std::string *o);
+extern int charset_utf8_to_utf16le(const std::string &i, std::string *o);
+extern int charset_utf8_to_utf32be(const std::string &i, std::string *o);
+extern int charset_utf8_to_utf32le(const std::string &i, std::string *o);
+
+extern int charset_utf16be_to_utf8(const std::string &i, std::string *o);
+extern int charset_utf16le_to_utf8(const std::string &i, std::string *o);
+extern int charset_utf32be_to_utf8(const std::string &i, std::string *o);
+extern int charset_utf32le_to_utf8(const std::string &i, std::string *o);
+
 extern int charset_utf8_to_json(const std::string &u8, std::string *json);
 
 // Internal conversions.
