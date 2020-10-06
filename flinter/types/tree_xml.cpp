@@ -15,6 +15,8 @@
 
 #include "flinter/types/tree.h"
 
+#include <assert.h>
+
 #include "config.h"
 
 // If libxml2 is detected, flinter/xml is built.
@@ -120,6 +122,20 @@ bool Tree::ParseFromXmlInternal(const struct _xmlNode *root)
         }
 
         // Ignore all other element types.
+    }
+
+    for (xmlAttr *p = root->properties; p; p = p->next) {
+        const char *k = reinterpret_cast<const char *>(p->name);
+        char *value = reinterpret_cast<char *>(xmlGetProp(root, p->name));
+        assert(k && *k);
+        if (value && *value) {
+            const std::string key = std::string("@").append(k);
+            const std::string full_path = GetFullPath(key);
+            Tree *child = new Tree(full_path, key, value);
+            _children.insert(std::make_pair(key, child));
+        }
+
+        xmlFree(value);
     }
 
     return true;
