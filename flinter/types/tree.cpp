@@ -15,6 +15,7 @@
 
 #include "flinter/types/tree.h"
 
+#include <assert.h>
 #include <stdio.h>
 #include <string.h>
 
@@ -278,6 +279,20 @@ void Tree::Merge(const Tree &other, bool overwrite_existing_nodes)
         // Don't copy _full_path.
         // _full_path = other._full_path;
     }
+}
+
+std::string Tree::FormatDuplicatedKey(size_t i, size_t total)
+{
+    assert(total > 1);
+
+    int len = 1;
+    while (total /= 10) {
+        ++len;
+    }
+
+    char buffer[32];
+    sprintf(buffer, "[%0*lu]", len, i);
+    return buffer;
 }
 
 } // namespace flinter

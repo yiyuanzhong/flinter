@@ -210,6 +210,8 @@ protected:
     }
 
 private:
+    static std::string FormatDuplicatedKey(size_t i, size_t total); // [003]
+
     std::string GetFullPath(const std::string &child) const;
     bool RenderTemplateInternal(const std::string &tmpl,
                                 bool file_or_string,

@@ -93,9 +93,7 @@ bool Tree::ParseFromXmlInternal(const struct _xmlNode *root)
         if (k) {
             key = k;
             if (counts[k] > 1) {
-                std::ostringstream s;
-                s << '[' << indexes[k]++ << ']';
-                key.append(s.str());
+                key.append(FormatDuplicatedKey(indexes[k]++, counts[k]));
             }
 
             full_path = GetFullPath(key);
