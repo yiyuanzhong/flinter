@@ -60,7 +60,7 @@ static int charset_icu_load(const F &input,
         ucnv_toUnicode(conv,
                        &target, target_limit,
                        &source, source_limit,
-                       NULL, TRUE, &error);
+                       NULL, true, &error);
 
         outpos = target - output->get();
         if (error == U_ZERO_ERROR) {
@@ -113,7 +113,7 @@ static int charset_icu_save(const AutoBuffer<UChar> &input,
         ucnv_fromUnicode(conv,
                          &target, target_limit,
                          &source, source_limit,
-                         NULL, TRUE, &error);
+                         NULL, true, &error);
 
         outpos = target - out;
         if (error == U_ZERO_ERROR) {
