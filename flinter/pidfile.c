@@ -27,6 +27,10 @@
 
 #include "flinter/safeio.h"
 
+#ifndef DEFFILEMODE
+#define DEFFILEMODE 0666
+#endif
+
 #define PIDFILE_LENGTH 11
 
 pid_t pidfile_check(const char *filename)
